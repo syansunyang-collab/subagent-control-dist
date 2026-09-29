@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "agents_dir": "ops/agents",
+  "model_notes": "ops/model-notes.toml"
+}

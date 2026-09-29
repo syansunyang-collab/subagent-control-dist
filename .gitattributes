@@ -1,0 +1,41 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+
+# Frozen exact-byte Pi migration evidence; preserve reviewed donor identities.
+.planning/phases/pi-native-migration-r1/fragments/S-CONTEXT.md -whitespace
+.planning/phases/pi-native-migration-r1/fragments/S-PACKAGE-UI.md -whitespace
+.planning/phases/pi-native-migration-r1/patches/S-FLEET-RUNTIME.patch -whitespace
+.planning/phases/pi-native-migration-r1/patches/S-PI-ASYNC.patch -whitespace
+
+# Historical planning state/manifests retain donor bytes so frozen SHA-256 values
+# remain reproducible; these are exact paths, not a notes/** or .planning/** rule.
+notes/handoffs/pi-native-migration-replan-planning-state.yaml -text -eol -whitespace
+notes/manifests/pi-native-migration-r1-acceptance-join.json -text -eol -whitespace
+notes/manifests/pi-native-migration-r1-interface-contracts.yaml -text -eol -whitespace
+notes/manifests/pi-native-migration-r1-release-rework-r1-dispatch.yaml -text -eol -whitespace
+notes/manifests/pi-native-migration-r1-wave-1-dispatch.yaml -text -eol -whitespace
+notes/manifests/pi-native-migration-r1-wave-2-dispatch.yaml -text -eol -whitespace
+notes/manifests/pi-native-migration-r1-wave-3-dispatch.yaml -text -eol -whitespace
+notes/verify/pi-native-migration-replan-alignment-guard.json -text -eol -whitespace
+
+# Historical summaries retain reviewed EOF bytes.
+.planning/phases/pi-native-migration-r1/pi-native-migration-r1-L-W2-CORE-GATE-REWORK-R1-SUMMARY.md -whitespace
+.planning/phases/pi-native-migration-r1/pi-native-migration-r1-L-W2-CORE-GATE-SUMMARY.md -whitespace
+notes/explorer/pi-native-migration-r1/pi-native-migration-r1-LIVE-FLEET-A-SUMMARY.md -whitespace
+notes/handoffs/pkg-executor-agent-plan-execution-20260808T171722Z-5035b45b.md -whitespace
+notes/verify/pi-native-migration-r1-w2-candidate-gate.md -whitespace
+
+# Archived verification evidence keeps captured bytes so recorded SHA-256 values stay valid after checkout.
+notes/verify/evidence/dispatch-runtime-hardening-20260922/** -text -eol -whitespace
+notes/verify/evidence/local-finish-20260923/** -text -eol -whitespace
+notes/verify/evidence/local-incremental-20260923/** -text -eol -whitespace
+notes/verify/evidence/head-baseline-20260923/** -text -eol -whitespace
+notes/verify/evidence/local-tail-20260923/** -text -eol -whitespace
+notes/verify/evidence/chief-engineer-20260923/** -text -eol -whitespace

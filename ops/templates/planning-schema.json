@@ -1,0 +1,45 @@
+{
+  "contract_kinds": [
+    "api",
+    "cli",
+    "config",
+    "data_shape",
+    "event",
+    "file_path",
+    "other"
+  ],
+  "contract_stability": [
+    "estimated",
+    "locked"
+  ],
+  "dependency_types": [
+    "hard_output",
+    "interface_contract",
+    "review_gate",
+    "runtime_ready",
+    "soft_order"
+  ],
+  "dispatch_modes": [
+    "direct_write",
+    "merge_lane",
+    "patch_proposal",
+    "read_only",
+    "validation"
+  ],
+  "planning_passes": [
+    "aggregate",
+    "slice_detail",
+    "topology"
+  ],
+  "release_gates": [
+    "contract_locked",
+    "execution_done",
+    "validation_passed"
+  ],
+  "serial_reasons": [
+    "final_decision_owner",
+    "hard_dependency",
+    "resource_lock",
+    "same_object_write"
+  ]
+}

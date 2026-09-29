@@ -1,0 +1,120 @@
+{
+  "server_name": "async-subagent",
+  "server_version": "1.0.0",
+  "contract_version": "async-task-service/v1",
+  "dispatch_contract_version": "async-dispatch/v2",
+  "supported_dispatch_contract_versions": [
+    "async-dispatch/v1",
+    "async-dispatch/v2"
+  ],
+  "build_id": "f6857e7e23da5ccb",
+  "built_at": "2026-09-29T09:45:40.568Z",
+  "node_target": ">=18",
+  "public_tools": [
+    "subagent_prepare",
+    "subagent_dispatch",
+    "subagent_submit_prepared",
+    "subagent_wait",
+    "subagent_get",
+    "subagent_result",
+    "subagent_server_info",
+    "subagent_cancel",
+    "subagent_pause",
+    "subagent_resume",
+    "subagent_ack_review",
+    "fleet_start",
+    "fleet_status",
+    "fleet_wait",
+    "fleet_review",
+    "fleet_cancel"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "3.25.76",
+    "esbuild": "0.28.1"
+  },
+  "external_runtime_extensions": {
+    "configured_worker_resources": {
+      "source": "Pi user configuration",
+      "selection": "role × capability whitelist",
+      "import_scope": "templates/worker-resources.json"
+    }
+  },
+  "artifacts": {
+    "server_bundle": {
+      "file": "subagent_service.bundle.mjs"
+    },
+    "pi_runner_bundle": {
+      "file": "run-pi-task.bundle.mjs"
+    },
+    "review_result_extension_bundle": {
+      "file": "pi_review_result_extension.bundle.mjs"
+    },
+    "task_result_extension_bundle": {
+      "file": "pi_task_result_extension.bundle.mjs"
+    },
+    "write_domain_extension_bundle": {
+      "file": "pi_write_domain_extension.bundle.mjs"
+    },
+    "worker_tools_extension_bundle": {
+      "file": "pi_worker_tools_extension.bundle.mjs"
+    },
+    "search_extension_bundle": {
+      "file": "pi_search_extension.bundle.mjs"
+    },
+    "command_jobs_bundle": {
+      "file": "pi_child_command_jobs.bundle.mjs"
+    },
+    "handoff_check_bundle": {
+      "file": "subagent_handoff_check.bundle.mjs"
+    },
+    "licenses": {
+      "file": "subagent_service.licenses.json"
+    },
+    "third_party_licenses": {
+      "file": "THIRD_PARTY_LICENSES.txt"
+    },
+    "dispatch_prepare_bundle": {
+      "file": "dispatch_prepare.bundle.mjs"
+    },
+    "delegate_work_selection_bundle": {
+      "file": "delegate_work_selection.bundle.mjs"
+    },
+    "transient_retry_extension_bundle": {
+      "file": "pi_transient_retry.bundle.mjs"
+    },
+    "agent_panel_launcher_bundle": {
+      "file": "agent_panel_launcher.bundle.mjs"
+    },
+    "fleet_scheduler_bundle": {
+      "file": "fleet_scheduler.bundle.mjs"
+    },
+    "fleet_manifest_check_bundle": {
+      "file": "fleet_manifest_check.bundle.mjs"
+    },
+    "task_package_build_bundle": {
+      "file": "task_package_build.bundle.mjs"
+    },
+    "task_package_lint_bundle": {
+      "file": "task_package_lint.bundle.mjs"
+    },
+    "subagent_preload_bundle": {
+      "file": "subagent_preload.bundle.mjs"
+    },
+    "review_evidence_bundle": {
+      "file": "review_evidence.bundle.mjs"
+    },
+    "runtime_retention_bundle": {
+      "file": "runtime_retention.bundle.mjs"
+    },
+    "agent_panel_server_bundle": {
+      "file": "agent_panel_server.bundle.mjs"
+    },
+    "agent_panel_aggregation_worker_bundle": {
+      "file": "agent_panel_aggregation_worker.bundle.mjs"
+    },
+    "agent_panel_config_worker_bundle": {
+      "file": "agent_panel_config_worker.bundle.mjs"
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "status": {
+    "surface": "control-plane-bootstrap",
+    "milestone": "M0-blank-control-plane",
+    "state": "active",
+    "restore_entry": "等待首个真实目标；收到目标后判断进入 alignment、planning、自做、子代理或混合路线",
+    "blocker": "无",
+    "confirmed": [
+      "本仓已安装通用 Codex 控制面模板",
+      "`ops/` 提供 workflow、policy、protocol、route、hook、skills 和维护工具",
+      "`ops/map/` 初始为空，运行 `python -B ops/tools/cockpit_map.py` 生成本机地图",
+      "`notes/` 仅含空目录骨架，真实任务产生的 handoff、验证和调研记录再按需落盘"
+    ],
+    "verification": [
+      "待执行：`python -B ops/tools/cockpit_map.py` 与 `python -B ops/tools/cockpit_map.py --lint`",
+      "待执行：`node ops/tools/dispatch_prepare.mjs --self-test --format json`",
+      "待执行：`git status --short` 确认控制面文件落点符合预期"
+    ],
+    "next": [
+      "补齐 `PROJECT.md` 的项目名称、目标、受众和外部依赖",
+      "运行初始化检查",
+      "接收首个真实目标后，形成入口判断并推进"
+    ]
+  },
+  "roadmap": {
+    "milestone": "M0-blank-control-plane",
+    "state": "active",
+    "goal": "目标仓具备可运行的 Codex 控制面，并等待真实项目目标进入对齐或执行",
+    "surfaces": [
+      {
+        "id": "control-plane-bootstrap",
+        "state": "active",
+        "note": "空白控制面启用与初始化检查"
+      }
+    ],
+    "exit_criteria": [
+      "`PROJECT.md` 已补齐目标仓项目身份和工程边界",
+      "`ops/tools/cockpit_map.py` 已在目标仓生成地图并通过 lint",
+      "`ops/tools/dispatch_prepare.mjs --self-test --format json` 已通过",
+      "`git status --short` 已确认控制面文件落点符合预期"
+    ],
+    "next": [
+      "M1-first-real-goal：用户给出项目目标后进入对齐，退出条件为目标、完成证据、关键未知、切片和路线判断明确",
+      "M2-first-planning-run：对齐产物进入执行计划，退出条件为可执行计划、冲突消解和派发边界",
+      "M3-first-execution-closeout：计划进入实现、验证或交付，退出条件为产物、验证、状态和提交边界闭环"
+    ],
+    "deferred": [
+      "目标仓专属 hook 文案和技能，首个真实任务后按实际反馈调整",
+      "目标仓专属 agent role、route 和 prompt，空白模板阶段不预设"
+    ]
+  }
+}

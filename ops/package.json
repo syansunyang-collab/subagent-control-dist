@@ -1,0 +1,18 @@
+{
+  "name": "subagent-control-runtime",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:subagent": "node tools/build_subagent_bundle.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@tian.zuo/pi-find": "0.6.0",
+    "koffi": "3.2.1",
+    "smol-toml": "1.4.2",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
+  }
+}

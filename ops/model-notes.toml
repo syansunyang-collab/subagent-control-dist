@@ -1,0 +1,63 @@
+# 模型笔记：dispatch_prepare 与 Agent Panel 读取此文件；用户在 Agent Panel「模型档位」页维护。
+# tag、supports_vision、description 面向模型；effort_note 面向人。
+# efforts 是该模型可选的档位，按 off < minimal < low < medium < high < xhigh < max 排列；推荐行与派发档位只能取其中的值。
+# 没有笔记的模型七档全部可选。Pi 模型清单里出现的模型都视为可用。
+
+version = 1
+
+[notes."openai-codex/gpt-6-sol"]
+tag = "工程实现/视觉/审查"
+supports_vision = true
+efforts = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+description = "用于常规工程实现、前端视觉与交互、调查、验证和边界核对，也承担可复用工程发现。具体任务分工与推荐档位按角色选型说明；推荐档位不替代用户已保存的硬范围。"
+
+[notes."openai-codex/gpt-6-astra"]
+tag = "思考/规划"
+supports_vision = true
+efforts = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+effort_note = "off、minimal 实际按 low 运行"
+description = "深入思考、极高难度实现，以及已确认的拓扑规划、汇总编排和规格颗粒度与跨面审查；用户反馈速度快、没有过度防御。"
+
+[notes."openai-codex/gpt-6-luna"]
+tag = "力工/打杂"
+supports_vision = true
+efforts = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+description = "力工处理规则和做法已定、执行难度低的正式交付；打杂处理查路径、列清单、收集日志和整理材料等辅助工作。承担已确认的批量、文档和资料研究任务；执行、验收和语义审查岗仅用于编排探针。"
+
+[notes."openai-codex/gpt-5.3-codex-spark"]
+tag = "已退役"
+supports_vision = false
+efforts = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+description = "退出本仓扫描角色默认与候选；历史任务保留原模型身份。"
+
+[notes."antigravity/gemini-3.8-flash"]
+tag = "重多模态取证"
+supports_vision = false
+efforts = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+description = "通过Antigravity订阅入口，按材料形态用于长视频、多截图、图表和PDF的信息定位与关系还原；交付页码、时间戳和画面依据。容易继续扩展调查，材料外线索交回主代理。探查岗默认档位待定；当前直接图像输入声明保持原状。"
+
+[notes."kimi-coding/k3"]
+tag = "已退役"
+supports_vision = true
+efforts = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+description = "2026-09-15（UTC+8）订阅已退订，退出本仓现役岗位和候选池；保留历史任务身份与能力记录。"
+
+[notes."xai/grok-4.6"]
+tag = "已退役"
+supports_vision = true
+efforts = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+effort_note = "off、minimal 实际按 low 运行；max 实际按 xhigh 运行"
+description = "UI设计与视觉实现、疑难排查、竞争解释和约束冲突分析；已确认的具体分工按角色选型说明。"
+
+[notes."xai/grok-4.7"]
+tag = "工程实现/调查验证"
+supports_vision = true
+efforts = ["low", "medium", "high", "xhigh"]
+description = "承担常规工程实现、调查验证、UI设计与视觉实现、疑难排查、竞争解释和约束冲突分析；长程编码、终端任务和工程推理的公开评测较4.6提升，官方对比多为4.7 xhigh对4.6 high。默认high；AA综合指数high与xhigh均为46，不据此提升跨模型岗位优先级。具体分工按角色选型说明。来源：https://x.ai/news/grok-4-7；https://artificialanalysis.ai/models/grok-4-7。"
+
+[notes."opencode-go/deepseek-v4.1-flash"]
+tag = "摘要/压缩"
+supports_vision = true
+efforts = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+effort_note = "minimal 实际按 low 运行；medium 实际按 high 运行；xhigh 实际按 max 运行"
+description = "通过OpenCode Go订阅调用，保留摘要与会话压缩用途；已退出子代理岗位默认及候选，压缩写手配置独立维护。支持文本与图片输入，当前Pi目录已声明视觉能力。"

@@ -1,0 +1,315 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+  <style>
+    :root {
+      --text: #F0F4FF; --muted: #93A0C8;
+      --surface: rgba(16,23,48,0.30); --surface2: rgba(26,35,68,0.26);
+      --line: rgba(165,192,255,0.17);
+      --teal: #35E0C8; --peri: #97A0FF; --amber: #FFC66E; --err: #F08CA0; --info: #7FB4FF;
+      --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+      --disp: "Space Grotesk", "Segoe UI", sans-serif;
+      --sans: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    body { margin: 0; font-family: var(--sans); color: var(--text); font-size: 13px; line-height: 1.5; }
+    .stage { position: relative; width: 1440px; height: 900px; overflow: hidden;
+      background:
+        radial-gradient(1000px 620px at 8% 92%, rgba(151,160,255,0.22), transparent 62%),
+        radial-gradient(900px 560px at 92% -6%, rgba(53,224,200,0.16), transparent 64%),
+        radial-gradient(700px 500px at 50% 30%, rgba(99,102,241,0.12), transparent 70%),
+        linear-gradient(163deg, #1A1148 0%, #121A38 34%, #0A1C2C 66%, #05081A 100%); }
+    .stars { position: absolute; inset: 0; pointer-events: none; animation: twinkle 6.5s ease-in-out infinite; background-image:
+      radial-gradient(1.7px 1.7px at 7% 11%, rgba(255,255,255,0.9), transparent 100%),
+      radial-gradient(1.2px 1.2px at 21% 27%, rgba(190,200,255,0.7), transparent 100%),
+      radial-gradient(1.6px 1.6px at 38% 8%, rgba(255,255,255,0.6), transparent 100%),
+      radial-gradient(1.3px 1.3px at 55% 19%, rgba(170,220,255,0.65), transparent 100%),
+      radial-gradient(1.7px 1.7px at 72% 6%, rgba(255,255,255,0.75), transparent 100%),
+      radial-gradient(1.2px 1.2px at 88% 30%, rgba(200,190,255,0.6), transparent 100%),
+      radial-gradient(1.4px 1.4px at 14% 50%, rgba(255,255,255,0.45), transparent 100%),
+      radial-gradient(1.2px 1.2px at 47% 42%, rgba(190,210,255,0.5), transparent 100%),
+      radial-gradient(1.4px 1.4px at 66% 52%, rgba(255,255,255,0.4), transparent 100%),
+      radial-gradient(1.3px 1.3px at 93% 62%, rgba(200,220,255,0.45), transparent 100%); }
+    @keyframes twinkle { 0%,100% { opacity: 1; } 50% { opacity: 0.75; } }
+
+    /* ── 月亮：银辉 + 环形晕 + 缓慢浮动 ── */
+    .moon { position: absolute; top: 84px; right: 120px; width: 92px; height: 92px; pointer-events: none;
+      animation: moonfloat 16s ease-in-out infinite; }
+    .moon .halo { position: absolute; inset: -46px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(226,236,255,0.32) 0%, rgba(151,160,255,0.10) 46%, transparent 70%);
+      animation: halopulse 7s ease-in-out infinite; }
+    .moon .body { position: absolute; inset: 0; border-radius: 50%;
+      background: radial-gradient(circle at 36% 32%, #FFFDF4 0%, #E8ECFF 52%, #B9C4EE 100%);
+      box-shadow: 0 0 46px rgba(214,226,255,0.55); }
+    .moon .crater { position: absolute; border-radius: 50%; background: rgba(150,164,214,0.4); }
+    @keyframes moonfloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+    @keyframes halopulse { 0%,100% { opacity: 1; } 50% { opacity: 0.65; } }
+
+    /* ── 流星：斜向掠过，长停顿循环 ── */
+    .meteor { position: absolute; top: 130px; left: 46%; width: 130px; height: 2px; pointer-events: none;
+      background: linear-gradient(90deg, rgba(255,255,255,0.95), transparent);
+      border-radius: 999px; transform: rotate(-24deg); opacity: 0;
+      animation: meteor 11s linear infinite; }
+    .meteor::before { content: ""; position: absolute; left: -2px; top: -1.5px; width: 5px; height: 5px; border-radius: 50%;
+      background: #FFFFFF; box-shadow: 0 0 12px rgba(255,255,255,0.9); }
+    @keyframes meteor {
+      0%, 55% { opacity: 0; transform: translate(0,0) rotate(-24deg); }
+      58% { opacity: 1; }
+      66% { opacity: 0; transform: translate(-340px, 150px) rotate(-24deg); }
+      100% { opacity: 0; } }
+
+    .city { position: absolute; left: 0; right: 0; bottom: 0; height: 130px; pointer-events: none; opacity: 0.92;
+      background: linear-gradient(to top, rgba(5,7,20,0.9), transparent),
+        repeating-linear-gradient(90deg, #0A0F22 0 64px, transparent 64px 84px, #0C1228 84px 132px, transparent 132px 150px, #091026 150px 210px, transparent 210px 228px);
+      mask-image: linear-gradient(to top, rgba(0,0,0,0.95) 45%, transparent 100%); }
+    .windows { position: absolute; left: 0; right: 0; bottom: 0; height: 130px; pointer-events: none; opacity: 0.8;
+      animation: twinkle 9s ease-in-out infinite; background-image:
+      radial-gradient(1.6px 2.4px at 3% 66%, #F5C36E, transparent 100%),
+      radial-gradient(1.6px 2.4px at 7% 78%, #97A0FF, transparent 100%),
+      radial-gradient(1.6px 2.4px at 12% 60%, #F5C36E, transparent 100%),
+      radial-gradient(1.6px 2.4px at 24% 72%, #7FB4FF, transparent 100%),
+      radial-gradient(1.6px 2.4px at 33% 64%, #F5C36E, transparent 100%),
+      radial-gradient(1.6px 2.4px at 45% 80%, #97A0FF, transparent 100%),
+      radial-gradient(1.6px 2.4px at 58% 68%, #F5C36E, transparent 100%),
+      radial-gradient(1.6px 2.4px at 71% 76%, #7FB4FF, transparent 100%),
+      radial-gradient(1.6px 2.4px at 84% 62%, #F5C36E, transparent 100%),
+      radial-gradient(1.6px 2.4px at 94% 74%, #97A0FF, transparent 100%); }
+
+    .topbar { position: relative; z-index: 2; display: flex; align-items: center; gap: 16px; height: 56px; padding: 0 24px;
+      background: rgba(12,17,38,0.35); backdrop-filter: blur(22px) saturate(1.25); border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-name { font-family: var(--disp); font-weight: 700; font-size: 15px; letter-spacing: 0.05em; }
+    .brand-sub { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.28em; }
+    .pill { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 14px; border-radius: 999px;
+      border: 1px solid var(--line); background: rgba(16,23,48,0.35); }
+    .pill b { font-family: var(--mono); font-weight: 600; font-size: 13px; }
+    .pill span { font-size: 11.5px; color: var(--muted); }
+    .pill.attn b { color: var(--amber); text-shadow: 0 0 14px rgba(255,198,110,0.5); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; }
+    .iconbtn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px;
+      border: 1px solid var(--line); background: rgba(16,23,48,0.35); color: var(--muted); }
+
+    .tabs { position: relative; z-index: 2; display: flex; gap: 4px; height: 44px; align-items: stretch; padding: 0 24px;
+      border-bottom: 1px solid var(--line); background: rgba(10,15,32,0.25); backdrop-filter: blur(14px); }
+    .tab { display: inline-flex; align-items: center; gap: 7px; padding: 0 16px; color: var(--muted); font-size: 13px; border-bottom: 2px solid transparent; }
+    .tab.on { color: var(--text); border-bottom-color: var(--teal); text-shadow: 0 0 18px rgba(53,224,200,0.55); }
+    .tab .n { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+
+    .shell { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0,1fr) 360px; gap: 16px; padding: 16px 24px; align-items: start; }
+    .card { background: var(--surface); backdrop-filter: blur(20px) saturate(1.3); border: 1px solid var(--line); border-radius: 14px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 16px 44px rgba(4,8,24,0.35); }
+    .card-h { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+    .card-h h3 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.02em; }
+    .spacer { flex: 1; }
+
+    /* ── 徽章：22px 一把尺 + 天象图形（夜=星象） ── */
+    .badge { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 22px; padding: 0 10px; border-radius: 999px;
+      border: 1px solid var(--line); background: rgba(16,23,48,0.4); font-size: 11.5px; white-space: nowrap; }
+    .badge svg { width: 11px; height: 11px; flex: none; }
+    .b-ok { color: #B5F4E3; } .b-ok svg { filter: drop-shadow(0 0 5px rgba(53,224,200,0.9)); }
+    .b-warn { color: #FFE0AC; } .b-warn svg { filter: drop-shadow(0 0 4px rgba(255,198,110,0.7)); }
+    .b-err { color: var(--err); border-color: rgba(240,140,160,0.35); background: rgba(240,140,160,0.09); }
+    .b-mute { color: var(--muted); }
+    .b-run { color: #BCD8FF; } .b-run svg { filter: drop-shadow(0 0 6px rgba(127,180,255,0.9)); animation: twinkle 1.8s ease-in-out infinite; }
+
+    .filters { display: flex; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+    .input, .select { height: 32px; border-radius: 999px; border: 1px solid var(--line); background: rgba(8,12,28,0.35);
+      color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; }
+    .input { flex: 1; }
+    .runchips { display: flex; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+    .runchip { width: 200px; height: 56px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface2);
+      padding: 8px 14px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+    .runchip.on { border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal) inset, 0 0 22px rgba(53,224,200,0.3); }
+    .runchip .id { font-family: var(--mono); font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .runchip .meta { font-size: 11px; color: var(--muted); }
+
+    .grouphead { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 16px; background: var(--surface2); border-top: 1px solid var(--line); }
+    .grouphead .gt { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+    .grouphead .gs { font-size: 11.5px; color: var(--muted); }
+    .grouphead .gm { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+    .chev { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+    .batchhead { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 16px; border-top: 1px solid var(--line); color: var(--muted); }
+    .batchhead b { font-family: var(--mono); font-size: 11.5px; color: var(--text); }
+
+    /* ── 任务行：表格化三列网格——标题弹性 + 两个定宽徽章槽。
+         任何嵌套层级左内距一致，层级用左侧色轨表达 → 所有行右缘、徽章列全局一条线 ── */
+    .rows { padding: 8px 16px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .row { height: 60px; border-radius: 10px; background: rgba(16,23,48,0.34);
+      padding: 9px 14px; display: flex; flex-direction: column; justify-content: center; gap: 4px; border-left: 2px solid transparent; }
+    .row .l1 { display: grid; grid-template-columns: minmax(0,1fr) 92px 118px; gap: 10px; align-items: center; }
+    .row .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
+    .row .slot { display: flex; justify-content: flex-end; }
+    .row .l2 { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
+    .row .hl { color: var(--teal); }
+    .sep { opacity: 0.5; }
+
+    .rail { display: flex; flex-direction: column; gap: 16px; }
+    .tools { display: flex; align-items: center; gap: 8px; padding: 10px 12px 0; }
+    .ghostbtn { height: 24px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 11.5px;
+      display: inline-flex; align-items: center; background: transparent; }
+    .ritems { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .ritem { border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); padding: 10px 12px;
+      display: grid; grid-template-columns: 14px 1fr 64px; gap: 10px; align-items: start; }
+    .rglyph { width: 14px; height: 14px; margin-top: 3px; }
+    .rid { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+    .rwhy { font-size: 12px; margin: 2px 0; }
+    .rsub { font-size: 11px; color: var(--muted); }
+    .rbtn { display: flex; justify-content: flex-end; }
+  </style>
+</helmet>
+<div class="stage">
+  <div class="stars"></div>
+  <div class="moon">
+    <div class="halo"></div>
+    <div class="body"></div>
+    <div class="crater" style="left: 22%; top: 30%; width: 14px; height: 14px;"></div>
+    <div class="crater" style="left: 55%; top: 52%; width: 9px; height: 9px;"></div>
+    <div class="crater" style="left: 38%; top: 66%; width: 6px; height: 6px;"></div>
+  </div>
+  <div class="meteor"></div>
+  <div class="city"></div>
+  <div class="windows"></div>
+
+  <div class="topbar">
+    <div class="brand">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="1" y="1" width="16" height="16" rx="5" stroke="#35E0C8" stroke-width="1.6"/><circle cx="9" cy="9" r="3" fill="#97A0FF"/></svg>
+      <div>
+        <div class="brand-name">异步运行台</div>
+        <div class="brand-sub">ASYNC CONSOLE</div>
+      </div>
+    </div>
+    <div class="pill"><b>0</b><span>运行中</span></div>
+    <div class="pill attn"><b>89</b><span>待复核</span></div>
+    <div class="pill"><b>146.4M</b><span>token</span></div>
+    <div class="pill"><b>80</b><span>任务总数</span></div>
+    <div class="spacer"></div>
+    <span style="font-family: var(--mono); font-size: 11.5px; color: var(--muted);">本仓 · 同步于 01:45:30</span>
+    <div class="pill"><span class="dot" style="background:#35E0C8; box-shadow:0 0 10px rgba(53,224,200,0.8)"></span><span style="color:var(--text)">已连接</span></div>
+    <div class="iconbtn" title="切到白天"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" stroke="currentColor" stroke-width="1.4"/><g stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M7 1v1.6M7 11.4V13M1 7h1.6M11.4 7H13M2.8 2.8l1.1 1.1M10.1 10.1l1.1 1.1M11.2 2.8l-1.1 1.1M3.9 10.1 2.8 11.2"/></g></svg></div>
+    <div class="iconbtn"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab on">活动 <span class="n">45</span></div>
+    <div class="tab">Fleet DAG</div>
+    <div class="tab">历史 <span class="n">80</span></div>
+    <div class="tab">配置</div>
+  </div>
+
+  <div class="shell">
+    <div class="card">
+      <div class="card-h">
+        <h3>活动任务</h3>
+        <div class="spacer"></div>
+        <span class="badge b-ok"><svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 0 7.3 4.7 12 6 7.3 7.3 6 12 4.7 7.3 0 6 4.7 4.7Z"/></svg>已同步</span>
+        <span style="font-family: var(--mono); font-size: 12px; color: var(--muted);">45 / 80 条</span>
+      </div>
+      <div class="filters">
+        <div class="input"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="5" cy="5" r="3.4" stroke="currentColor" stroke-width="1.3"/><path d="M8 8l2.6 2.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>搜索任务、运行组或批次</div>
+        <div class="select">全部状态</div>
+        <div class="select">全部角色</div>
+        <div class="select">全部模型</div>
+      </div>
+      <div class="runchips">
+        <div class="runchip on"><span class="id">p1-acceptance-r1-fix1</span><span class="meta">0 活动 / 1 任务</span></div>
+        <div class="runchip"><span class="id">未归组</span><span class="meta">0 活动 / 44 任务</span></div>
+      </div>
+
+      <div class="grouphead"><span class="chev"><svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1.5 1.5 4.5 5 7.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span><span class="gt">未归组任务</span><span class="gs">6 个批次</span><span class="gm">44 任务 · 0 活动</span></div>
+      <div class="batchhead"><span class="chev"><svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1.5 1.5 4.5 5 7.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span><b>批次 1</b><span style="font-family: var(--mono); font-size: 11px;">…66de51f9</span><span>· 4 个任务</span></div>
+      <div class="rows">
+        <div class="row" style="border-left-color: #35E0C8;">
+          <div class="l1">
+            <span class="title">定向修复 lane L-S5 的验收失败项 AC-06, AC-07；不扩大原 lane 写域。</span>
+            <span class="slot"><span class="badge b-ok"><svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 0 7.3 4.7 12 6 7.3 7.3 6 12 4.7 7.3 0 6 4.7 4.7Z"/></svg>完成</span></span>
+            <span class="slot"><span class="badge b-warn"><svg viewBox="0 0 12 12" fill="currentColor" opacity="0.85"><path d="M6 0 7.3 4.7 12 6 7.3 7.3 6 12 4.7 7.3 0 6 4.7 4.7Z"/></svg>部分完成</span></span>
+          </div>
+          <div class="l2"><span>…8af5046a</span><span class="sep">·</span><span>executor-agent</span><span class="sep">·</span><span>gpt-5.6-luna · max</span><span class="sep">·</span><span class="hl">2.9m</span><span class="sep">·</span><span class="hl">184k</span></div>
+        </div>
+        <div class="row" style="border-left-color: #35E0C8;">
+          <div class="l1">
+            <span class="title">定向修复 lane L-S3 的验收失败项 AC-07, AC-09, AC-10；不扩大原 lane 写域。</span>
+            <span class="slot"><span class="badge b-ok"><svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 0 7.3 4.7 12 6 7.3 7.3 6 12 4.7 7.3 0 6 4.7 4.7Z"/></svg>完成</span></span>
+            <span class="slot"><span class="badge b-warn"><svg viewBox="0 0 12 12" fill="currentColor" opacity="0.85"><path d="M6 0 7.3 4.7 12 6 7.3 7.3 6 12 4.7 7.3 0 6 4.7 4.7Z"/></svg>完成（存疑）</span></span>
+          </div>
+          <div class="l2"><span>…c06a59e5</span><span class="sep">·</span><span>executor-agent</span><span class="sep">·</span><span>gpt-5.6-luna · max</span><span class="sep">·</span><span class="hl">3.5m</span><span class="sep">·</span><span class="hl">201k</span></div>
+        </div>
+        <div class="row" style="border-left-color: #7FB4FF;">
+          <div class="l1">
+            <span class="title">执行 p1 wave 1 lane L-S3: 实现 .NET 10 WinForms/WebView2 桌面壳，固定派生端口</span>
+            <span class="slot"><span class="badge b-run"><svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 0 7.3 4.7 12 6 7.3 7.3 6 12 4.7 7.3 0 6 4.7 4.7Z"/></svg>运行中</span></span>
+            <span class="slot"></span>
+          </div>
+          <div class="l2"><span>…051396d5</span><span class="sep">·</span><span>executor-agent</span><span class="sep">·</span><span>gpt-5.6-luna · max</span><span class="sep">·</span><span class="hl">7.5m</span><span class="sep">·</span><span class="hl">311k</span></div>
+        </div>
+        <div class="row" style="border-left-color: #F08CA0;">
+          <div class="l1">
+            <span class="title">子代理任务包 scope.write 能否合法写控制仓外绝对路径（目标探针）</span>
+            <span class="slot"><span class="badge b-err"><svg viewBox="0 0 12 12" fill="none"><path d="M10.5 1.5 4 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="3.2" cy="8.8" r="2" fill="currentColor"/></svg>失败</span></span>
+            <span class="slot"><span class="badge b-mute"><svg viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.2" stroke="currentColor" stroke-width="1.4" opacity="0.7"/></svg>未知</span></span>
+          </div>
+          <div class="l2"><span>…e30ee804</span><span class="sep">·</span><span>explorer-agent</span><span class="sep">·</span><span>gpt-5.3-codex-spark · medium</span><span class="sep">·</span><span class="hl">1.6m</span><span class="sep">·</span><span class="hl">31k</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rail">
+      <div class="card">
+        <div class="card-h"><h3>待复核</h3><div class="spacer"></div><span class="badge b-warn"><svg viewBox="0 0 12 12" fill="currentColor" opacity="0.85"><path d="M6 0 7.3 4.7 12 6 7.3 7.3 6 12 4.7 7.3 0 6 4.7 4.7Z"/></svg>89</span></div>
+        <div class="tools"><div class="ghostbtn">全部标记已核对</div></div>
+        <div class="ritems">
+          <div class="ritem">
+            <svg class="rglyph" viewBox="0 0 14 14" fill="#FFC66E" style="filter: drop-shadow(0 0 5px rgba(255,198,110,0.8));"><path d="M7 0 8.5 5.5 14 7 8.5 8.5 7 14 5.5 8.5 0 7 5.5 5.5Z"/></svg>
+            <div><div class="rid">…bf6d80cf</div><div class="rwhy">等待主代理裁决</div><div class="rsub">任务 · 未归组 · 等待 13h 01m</div></div>
+            <div class="rbtn"><div class="ghostbtn">已核对</div></div>
+          </div>
+          <div class="ritem">
+            <svg class="rglyph" viewBox="0 0 14 14" fill="#FFC66E" style="filter: drop-shadow(0 0 5px rgba(255,198,110,0.8));"><path d="M7 0 8.5 5.5 14 7 8.5 8.5 7 14 5.5 8.5 0 7 5.5 5.5Z"/></svg>
+            <div><div class="rid">…8af5046a</div><div class="rwhy">等待主代理裁决</div><div class="rsub">任务 · 未归组 · 等待 19h 36m</div></div>
+            <div class="rbtn"><div class="ghostbtn">已核对</div></div>
+          </div>
+          <div class="ritem">
+            <svg class="rglyph" viewBox="0 0 14 14" fill="#FFC66E" style="filter: drop-shadow(0 0 5px rgba(255,198,110,0.8));"><path d="M7 0 8.5 5.5 14 7 8.5 8.5 7 14 5.5 8.5 0 7 5.5 5.5Z"/></svg>
+            <div><div class="rid">…c06a59e5</div><div class="rwhy">等待主代理裁决</div><div class="rsub">任务 · 未归组 · 等待 19h 36m</div></div>
+            <div class="rbtn"><div class="ghostbtn">已核对</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3>最近完成</h3><div class="spacer"></div><span class="badge b-mute">200</span></div>
+        <div class="tools"><div class="ghostbtn">全部已读</div></div>
+        <div class="ritems">
+          <div class="ritem">
+            <svg class="rglyph" viewBox="0 0 14 14" fill="none"><path d="M12 2 5.5 8.5" stroke="#F08CA0" stroke-width="1.8" stroke-linecap="round"/><circle cx="4.2" cy="9.8" r="2.4" fill="#F08CA0"/></svg>
+            <div><div class="rid">…44318190</div><div class="rwhy">任务失败</div><div class="rsub">失败 / 未知 · 07/12 09:57</div></div>
+            <div></div>
+          </div>
+          <div class="ritem">
+            <svg class="rglyph" viewBox="0 0 14 14" fill="#35E0C8" style="filter: drop-shadow(0 0 6px rgba(53,224,200,0.9));"><path d="M7 0 8.5 5.5 14 7 8.5 8.5 7 14 5.5 8.5 0 7 5.5 5.5Z"/></svg>
+            <div><div class="rid">…0788e850</div><div class="rwhy">任务完成</div><div class="rsub">完成 / 已完成 · 07/12 09:56</div></div>
+            <div></div>
+          </div>
+          <div class="ritem">
+            <svg class="rglyph" viewBox="0 0 14 14" fill="#35E0C8" style="filter: drop-shadow(0 0 6px rgba(53,224,200,0.9));"><path d="M7 0 8.5 5.5 14 7 8.5 8.5 7 14 5.5 8.5 0 7 5.5 5.5Z"/></svg>
+            <div><div class="rid">…e0bbb9b4</div><div class="rwhy">任务完成</div><div class="rsub">完成 / 已完成 · 07/12 09:54</div></div>
+            <div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

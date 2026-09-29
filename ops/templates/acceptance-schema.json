@@ -1,0 +1,51 @@
+{
+  "case_kinds": [
+    "boundary",
+    "negative",
+    "positive",
+    "regression",
+    "state"
+  ],
+  "dispositions": [
+    "needs_owner",
+    "pass",
+    "rework"
+  ],
+  "entry_routes": [
+    "verify-agent__functional-inspection",
+    "verify-agent__ui-interaction-inspection"
+  ],
+  "macros": [
+    "$acceptance_contract_ref",
+    "$dispatch_manifest_ref",
+    "$implementation_refs",
+    "$source_refs",
+    "$trusted_spec_ref",
+    "$verification_work_dir"
+  ],
+  "max_review_rounds": 5,
+  "schema_version": 1,
+  "severity_values": [
+    "blocking",
+    "non_blocking"
+  ],
+  "techniques": [
+    "boundary_value",
+    "decision_table",
+    "equivalence_partition",
+    "example",
+    "exploratory",
+    "state_transition",
+    "visual_inspection",
+    "white_box"
+  ],
+  "validation_routes": [
+    "semantic-review-agent__contract-drift-inspection",
+    "semantic-review-agent__rule-quality-inspection",
+    "verify-agent__anti-defensive-inspection",
+    "verify-agent__code-verification",
+    "verify-agent__functional-inspection",
+    "verify-agent__prompt-bloat-inspection",
+    "verify-agent__ui-interaction-inspection"
+  ]
+}

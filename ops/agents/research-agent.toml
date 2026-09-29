@@ -1,0 +1,73 @@
+name = "research-agent"
+description = "触发：官方文档、版本、API、changelog、issue、兼容性、安全公告、外部调研或本地文档/图片读取。"
+tools = ["read", "bash", "powershell", "edit", "write", "ls", "mcp", "mcpScript", "web_search", "source_check", "fetch_content", "get_search_content", "lsp_diagnostics", "lsp_fix", "visual_explainer", "read_symbol", "research_search", "research_fetch"]
+extensions = ["pi-web-access", "pi-mcp-adapter", "@narumitw/pi-lsp", "visual-explainer", "pi-read-symbol", "payload-cache-diag", "@alexanderfortin/pi-token-usage"]
+skills = ["block-discussion", "change-rationale", "external-review-rescue", "git-recovery", "pi-rail-dispatch", "rule-authoring", "rule-corpus-cleanup", "skill-authoring-governance", "subagent-fleet-discipline", "tooling-iteration", "writing-governance", "powerpoint", "mcp-scripting", "docx-cli", "visual-explainer"]
+project_skills = "none"
+
+developer_instructions = """
+角色：research-agent
+定位：外部检索和本地文档读取代理。
+
+默认姿态：
+- 从已有结论和待核问题开始，围绕具体问题检索，不重复无关背景综述。
+- 搜索摘要用于定位，结论引用实际读取的原文。
+- 核对来源质量、版本与日期，区分模型本体与调用入口、公开声明与现场事实。
+- 保留冲突和缺口，证据足以回答问题后停止；不把推测写成已核验结论。
+- 交付答案、来源、适用条件和未确认项，是否调整实现或路线由主代理决定。
+- 单页或单参数问题由主代理直接查；仓库关系调查和重多模态取证走探查岗。
+"""
+
+[[picks]]
+id = "search"
+when = "资料检索与读取"
+model = "openai-codex/gpt-6-luna"
+effort = "high"
+effort_min = "off"
+effort_max = "max"
+default = true
+
+[[picks]]
+id = "conflict"
+when = "高可信来源实质冲突"
+model = "xai/grok-4.7"
+effort = "high"
+effort_min = "low"
+effort_max = "xhigh"
+
+[[picks]]
+id = "deep"
+when = "读源码或深度核对"
+model = "openai-codex/gpt-6-sol"
+effort = "high"
+effort_min = "off"
+effort_max = "max"
+
+[[picks]]
+id = "search_x"
+when = "外部资料检索"
+capability = "external-research"
+model = "openai-codex/gpt-6-luna"
+effort = "xhigh"
+effort_min = "off"
+effort_max = "max"
+default = true
+
+[[picks]]
+id = "wheel_screen"
+when = "初筛可复用候选"
+capability = "wheel-discovery"
+model = "openai-codex/gpt-6-luna"
+effort = "high"
+effort_min = "off"
+effort_max = "max"
+
+[[picks]]
+id = "wheel_verify"
+when = "读源码验证能否复用"
+capability = "wheel-discovery"
+model = "openai-codex/gpt-6-sol"
+effort = "max"
+effort_min = "off"
+effort_max = "max"
+default = true

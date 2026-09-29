@@ -1,0 +1,18 @@
+{
+  "name": "agent-panel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "控制面模板仓内的项目级异步子代理管理面板模块",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "@decimalturn/toml-patch": "3.3.0"
+  },
+  "scripts": {
+    "start": "dotnet run --project shell/ -- --service-entry src/server/index.mjs",
+    "start:browser": "node src/server/index.mjs --browser",
+    "start:server": "node src/server/index.mjs"
+  }
+}

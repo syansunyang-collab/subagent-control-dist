@@ -1,0 +1,15 @@
+# 消费者项目忽略规则（模板真源）。只使用相对路径：模板不得跟踪绝对 marker、链接目标或开发仓路径。
+
+# 控制面接入状态：marker、安装回执、快照/staging 都是本机生成态。
+.pi/control-plane-consumer.json
+.pi/control-plane-consumer.receipt.json
+.pi/control-plane-runtime
+.pi/control-plane-backups/
+.pi/.control-plane-*/
+
+# 本地生成态与运行目录
+ops/map/
+.runtime/
+__pycache__/
+*.pyc
+.pytest_cache/

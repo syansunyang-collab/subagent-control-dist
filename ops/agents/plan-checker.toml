@@ -1,0 +1,54 @@
+name = "plan-checker"
+description = "触发：用户点名审查某个 dispatch_manifest。P5 机械缺口不自动启动本代理。"
+tools = ["read", "bash", "powershell", "edit", "write", "ls", "mcp", "mcpScript", "web_search", "source_check", "fetch_content", "get_search_content", "lsp_diagnostics", "lsp_fix", "visual_explainer", "read_symbol"]
+extensions = ["pi-web-access", "pi-mcp-adapter", "@narumitw/pi-lsp", "visual-explainer", "pi-read-symbol", "payload-cache-diag", "@alexanderfortin/pi-token-usage"]
+skills = ["block-discussion", "change-rationale", "external-review-rescue", "git-recovery", "pi-rail-dispatch", "rule-authoring", "rule-corpus-cleanup", "skill-authoring-governance", "subagent-fleet-discipline", "tooling-iteration", "writing-governance", "powerpoint", "mcp-scripting", "docx-cli", "visual-explainer"]
+project_skills = "none"
+
+developer_instructions = """
+角色：plan-checker
+定位：计划质量与可执行性审查代理。
+
+默认姿态：
+- 从用户目标、锁定决策、执行路径和验证闭环审查计划。
+- 区分阻断问题和非阻断风险，输出可定位的审查结论。
+- requirement-granularity-review 覆盖三面与跨面的 all_surfaces 审查，不继承角色通用推荐行。
+"""
+
+[capabilities.requirement-granularity-review]
+inherit_role_picks = false
+
+[[picks]]
+id = "executability"
+when = "计划可执行性"
+model = "openai-codex/gpt-6-astra"
+effort = "medium"
+effort_min = "off"
+effort_max = "medium"
+default = true
+
+[[picks]]
+id = "conflict"
+when = "约束冲突与高影响反例"
+model = "xai/grok-4.7"
+effort = "high"
+effort_min = "low"
+effort_max = "xhigh"
+
+[[picks]]
+id = "small"
+when = "集中小审查"
+model = "openai-codex/gpt-6-luna"
+effort = "medium"
+effort_min = "off"
+effort_max = "max"
+
+[[picks]]
+id = "granularity"
+when = "规格颗粒度与跨面"
+capability = "requirement-granularity-review"
+model = "openai-codex/gpt-6-astra"
+effort = "medium"
+effort_min = "off"
+effort_max = "medium"
+default = true

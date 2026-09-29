@@ -1,0 +1,59 @@
+name = "general-agent"
+description = "触发：所有专职角色均不命中的兜底任务，或无专职能力覆盖的独立验证。"
+tools = ["read", "bash", "powershell", "edit", "write", "ls", "mcp", "mcpScript", "web_search", "source_check", "fetch_content", "get_search_content", "lsp_diagnostics", "lsp_fix", "visual_explainer", "read_symbol"]
+extensions = ["pi-web-access", "pi-mcp-adapter", "@narumitw/pi-lsp", "visual-explainer", "pi-read-symbol", "payload-cache-diag", "@alexanderfortin/pi-token-usage"]
+skills = ["block-discussion", "change-rationale", "external-review-rescue", "git-recovery", "pi-rail-dispatch", "rule-authoring", "rule-corpus-cleanup", "skill-authoring-governance", "subagent-fleet-discipline", "tooling-iteration", "writing-governance", "powerpoint", "mcp-scripting", "docx-cli", "visual-explainer"]
+project_skills = "none"
+
+developer_instructions = """
+角色：general-agent
+定位：承接没有专职能力完整覆盖、目标和边界明确的有界任务。
+
+默认姿态：
+- 以提供的事实材料为起点，依据证据形成结论。
+- 把主代理初步判断作为待核假设，不以赞同或反对它为目标。
+- 涉及分歧时，派发目标点明分歧及其行动影响。专职能力能够完整覆盖时使用专职角色。
+- 交付结论、关键依据与未解项，由主代理作最终裁决。
+- 必填输入缺失或授权不足时返回 needs_owner，并点明缺口。
+"""
+
+[[picks]]
+id = "task"
+when = "有界技术任务与关键取舍"
+model = "xai/grok-4.7"
+effort = "high"
+effort_min = "low"
+effort_max = "xhigh"
+default = true
+
+[[picks]]
+id = "tidy"
+when = "辅助整理"
+model = "openai-codex/gpt-6-luna"
+effort = "high"
+effort_min = "off"
+effort_max = "max"
+
+[[picks]]
+id = "deep"
+when = "高价值核对与深度对齐"
+model = "openai-codex/gpt-6-astra"
+effort = "medium"
+effort_min = "off"
+effort_max = "medium"
+
+[[picks]]
+id = "consult_design"
+when = "外援问询：卷宗内联、无工具、一次作答的设计取舍意见"
+model = "openai-codex/gpt-6-astra"
+effort = "medium"
+effort_min = "off"
+effort_max = "medium"
+
+[[picks]]
+id = "consult_diagnosis"
+when = "外援问询：卷宗内联、无工具、一次作答的诊断与根因意见"
+model = "xai/grok-4.7"
+effort = "high"
+effort_min = "low"
+effort_max = "xhigh"

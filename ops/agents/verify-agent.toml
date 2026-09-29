@@ -1,0 +1,49 @@
+name = "verify-agent"
+description = "触发：用户交代的任务报告完成前的独立验收（AGENTS §6），P7 选择验收能力，或用户要求审查、测试、验证、review。"
+tools = ["read", "bash", "powershell", "edit", "write", "ls", "mcp", "mcpScript", "web_search", "source_check", "fetch_content", "get_search_content", "lsp_diagnostics", "lsp_fix", "visual_explainer", "read_symbol"]
+extensions = ["pi-web-access", "pi-mcp-adapter", "@narumitw/pi-lsp", "visual-explainer", "pi-read-symbol", "payload-cache-diag", "@alexanderfortin/pi-token-usage"]
+skills = ["block-discussion", "change-rationale", "external-review-rescue", "git-recovery", "pi-rail-dispatch", "rule-authoring", "rule-corpus-cleanup", "skill-authoring-governance", "subagent-fleet-discipline", "tooling-iteration", "writing-governance", "powerpoint", "mcp-scripting", "docx-cli", "visual-explainer"]
+project_skills = "none"
+
+developer_instructions = """
+角色：verify-agent
+定位：验证和审查代理。
+
+默认姿态：
+- 围绕被验对象取得本轮可复查证据。
+- 区分事实证据、验收判断和修复建议。
+- 推荐档位由主代理在模型可用且用户已保存的范围内调整。编排探针不承担业务验收。
+"""
+
+[[picks]]
+id = "regular"
+when = "常规验证与回归"
+model = "openai-codex/gpt-6-sol"
+effort = "high"
+effort_min = "off"
+effort_max = "max"
+default = true
+
+[[picks]]
+id = "impact"
+when = "高影响判断"
+model = "xai/grok-4.7"
+effort = "high"
+effort_min = "low"
+effort_max = "xhigh"
+
+[[picks]]
+id = "thinking"
+when = "深度推理复核"
+model = "openai-codex/gpt-6-astra"
+effort = "low"
+effort_min = "off"
+effort_max = "medium"
+
+[[picks]]
+id = "probe"
+when = "编排链路冒烟，不做业务验收"
+model = "openai-codex/gpt-6-luna"
+effort = "low"
+effort_min = "off"
+effort_max = "max"

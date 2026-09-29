@@ -1,0 +1,268 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+  <style>
+    :root {
+      --text: #292317; --muted: #776E58;
+      --surface: rgba(255,253,247,0.52); --surface2: rgba(255,251,240,0.42);
+      --line: rgba(70,58,34,0.15);
+      --accent: #E0714A; --teal: #12A38C; --gold: #F2A93D; --err: #C25F52; --info: #3E79B8;
+      --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+      --disp: "Space Grotesk", "Segoe UI", sans-serif;
+      --sans: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    body { margin: 0; font-family: var(--sans); color: var(--text); font-size: 13px; line-height: 1.5; }
+    .stage { position: relative; width: 1440px; height: 900px; overflow: hidden;
+      background:
+        radial-gradient(980px 520px at 84% -10%, rgba(255,203,120,0.55), transparent 60%),
+        radial-gradient(760px 500px at 4% 106%, rgba(124,150,214,0.16), transparent 64%),
+        linear-gradient(168deg, #FFF6E4 0%, #FBF2DF 36%, #EDF3F6 74%, #E7F0F5 100%); }
+
+    /* ── 太阳：金盘 + 旋转光芒 + 呼吸光晕 ── */
+    .sun { position: absolute; top: 70px; right: 118px; width: 96px; height: 96px; pointer-events: none; }
+    .sun .halo { position: absolute; inset: -52px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,196,96,0.5) 0%, rgba(255,214,140,0.18) 48%, transparent 72%);
+      animation: sunpulse 6s ease-in-out infinite; }
+    .sun .rays { position: absolute; inset: -20px; animation: rayspin 46s linear infinite; }
+    .sun .rays svg { width: 100%; height: 100%; }
+    .sun .body { position: absolute; inset: 8px; border-radius: 50%;
+      background: radial-gradient(circle at 38% 34%, #FFF3D0 0%, #FFD879 48%, #F4A93F 100%);
+      box-shadow: 0 0 52px rgba(255,186,84,0.75); }
+    @keyframes rayspin { to { transform: rotate(360deg); } }
+    @keyframes sunpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+    /* ── 云：柔白团块，两朵异速漂移 ── */
+    .cloud { position: absolute; pointer-events: none; filter: blur(1.5px); opacity: 0.92; }
+    .cloud i { position: absolute; background: #FFFDF8; border-radius: 999px; box-shadow: 0 6px 18px rgba(180,160,120,0.18); }
+    .cloud-a { top: 120px; left: 220px; width: 190px; height: 54px; animation: drift 38s ease-in-out infinite alternate; }
+    .cloud-b { top: 210px; left: 760px; width: 150px; height: 44px; animation: drift 47s ease-in-out infinite alternate-reverse; opacity: 0.8; }
+    @keyframes drift { from { transform: translateX(0); } to { transform: translateX(64px); } }
+
+    .city { position: absolute; left: 0; right: 0; bottom: 0; height: 120px; pointer-events: none; opacity: 0.8;
+      background: repeating-linear-gradient(90deg, #E7DDC6 0 64px, transparent 64px 84px, #DED2B8 84px 132px, transparent 132px 150px, #ECE3CF 150px 210px, transparent 210px 228px);
+      mask-image: linear-gradient(to top, rgba(0,0,0,0.92) 50%, transparent 100%); }
+    .birds { position: absolute; top: 190px; left: 46%; pointer-events: none; color: #8A7C5E; animation: drift 52s ease-in-out infinite alternate; }
+
+    .topbar { position: relative; z-index: 2; display: flex; align-items: center; gap: 16px; height: 56px; padding: 0 24px;
+      background: rgba(255,253,246,0.45); backdrop-filter: blur(22px) saturate(1.15); border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-name { font-family: var(--disp); font-weight: 700; font-size: 15px; letter-spacing: 0.05em; }
+    .brand-sub { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.28em; }
+    .pill { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 14px; border-radius: 999px;
+      border: 1px solid var(--line); background: rgba(255,253,246,0.5); }
+    .pill b { font-family: var(--mono); font-weight: 600; font-size: 13px; }
+    .pill span { font-size: 11.5px; color: var(--muted); }
+    .pill.attn b { color: #B07A10; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; }
+    .iconbtn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px;
+      border: 1px solid var(--line); background: rgba(255,253,246,0.5); color: var(--muted); }
+
+    .tabs { position: relative; z-index: 2; display: flex; gap: 4px; height: 44px; align-items: stretch; padding: 0 24px;
+      border-bottom: 1px solid var(--line); background: rgba(255,252,243,0.35); backdrop-filter: blur(14px); }
+    .tab { display: inline-flex; align-items: center; gap: 7px; padding: 0 16px; color: var(--muted); font-size: 13px; border-bottom: 2px solid transparent; }
+    .tab.on { color: var(--text); border-bottom-color: var(--accent); }
+    .tab .n { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+
+    .shell { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0,1fr) 360px; gap: 16px; padding: 16px 24px; align-items: start; }
+    .card { background: var(--surface); backdrop-filter: blur(20px) saturate(1.15); border: 1px solid var(--line); border-radius: 14px;
+      box-shadow: 0 1px 3px rgba(140,115,60,0.14), 0 14px 38px rgba(140,115,60,0.12); }
+    .card-h { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+    .card-h h3 { margin: 0; font-size: 14px; font-weight: 600; }
+    .spacer { flex: 1; }
+
+    /* ── 徽章：22px 一把尺 + 天象图形（昼=天气） ── */
+    .badge { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 22px; padding: 0 10px; border-radius: 999px;
+      border: 1px solid var(--line); background: rgba(255,253,246,0.55); font-size: 11.5px; white-space: nowrap; }
+    .badge svg { width: 12px; height: 12px; flex: none; }
+    .b-ok { color: #1E7A54; }
+    .b-warn { color: #96690E; }
+    .b-err { color: var(--err); border-color: rgba(194,95,82,0.3); background: rgba(194,95,82,0.07); }
+    .b-mute { color: var(--muted); }
+    .b-run { color: var(--info); }
+
+    .filters { display: flex; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+    .input, .select { height: 32px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,253,246,0.55);
+      color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; }
+    .input { flex: 1; }
+    .runchips { display: flex; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+    .runchip { width: 200px; height: 56px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface2);
+      padding: 8px 14px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+    .runchip.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset, 0 4px 18px rgba(224,113,74,0.2); }
+    .runchip .id { font-family: var(--mono); font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .runchip .meta { font-size: 11px; color: var(--muted); }
+
+    .grouphead { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 16px; background: var(--surface2); border-top: 1px solid var(--line); }
+    .grouphead .gt { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+    .grouphead .gs { font-size: 11.5px; color: var(--muted); }
+    .grouphead .gm { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+    .chev { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+    .batchhead { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 16px; border-top: 1px solid var(--line); color: var(--muted); }
+    .batchhead b { font-family: var(--mono); font-size: 11.5px; color: var(--text); }
+
+    /* ── 任务行：与夜板同构的三列网格，右缘与徽章列全局一条线 ── */
+    .rows { padding: 8px 16px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .row { height: 60px; border-radius: 10px; background: rgba(255,253,247,0.5); box-shadow: 0 1px 3px rgba(140,115,60,0.12);
+      padding: 9px 14px; display: flex; flex-direction: column; justify-content: center; gap: 4px; border-left: 2px solid transparent; }
+    .row .l1 { display: grid; grid-template-columns: minmax(0,1fr) 92px 118px; gap: 10px; align-items: center; }
+    .row .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
+    .row .slot { display: flex; justify-content: flex-end; }
+    .row .l2 { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
+    .row .hl { color: var(--teal); }
+    .sep { opacity: 0.5; }
+
+    .rail { display: flex; flex-direction: column; gap: 16px; }
+    .tools { display: flex; align-items: center; gap: 8px; padding: 10px 12px 0; }
+    .ghostbtn { height: 24px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 11.5px;
+      display: inline-flex; align-items: center; background: transparent; }
+    .ritems { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .ritem { border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); padding: 10px 12px;
+      display: grid; grid-template-columns: 16px 1fr 64px; gap: 10px; align-items: start; }
+    .rglyph { width: 16px; height: 16px; margin-top: 2px; }
+    .rid { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+    .rwhy { font-size: 12px; margin: 2px 0; }
+    .rsub { font-size: 11px; color: var(--muted); }
+    .rbtn { display: flex; justify-content: flex-end; }
+  </style>
+</helmet>
+<div class="stage">
+  <div class="sun">
+    <div class="halo"></div>
+    <div class="rays">
+      <svg viewBox="0 0 136 136" fill="none"><g stroke="#F4B653" stroke-width="3" stroke-linecap="round" opacity="0.85">
+        <path d="M68 2v16"/><path d="M68 118v16"/><path d="M2 68h16"/><path d="M118 68h16"/>
+        <path d="M21 21l11 11"/><path d="M104 104l11 11"/><path d="M115 21l-11 11"/><path d="M32 104 21 115"/>
+      </g></svg>
+    </div>
+    <div class="body"></div>
+  </div>
+  <div class="cloud cloud-a"><i style="left:0;top:18px;width:110px;height:34px"></i><i style="left:44px;top:0;width:84px;height:44px"></i><i style="left:104px;top:14px;width:86px;height:32px"></i></div>
+  <div class="cloud cloud-b"><i style="left:0;top:14px;width:86px;height:28px"></i><i style="left:36px;top:0;width:66px;height:36px"></i><i style="left:82px;top:12px;width:66px;height:26px"></i></div>
+  <div class="birds"><svg width="66" height="20" viewBox="0 0 66 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 10c4-5 8-5 12 0M14 10c4-5 8-5 12 0"/><path d="M36 6c3-4 6-4 9 0M45 6c3-4 6-4 9 0" opacity="0.7"/></svg></div>
+  <div class="city"></div>
+
+  <div class="topbar">
+    <div class="brand">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="1" y="1" width="16" height="16" rx="5" stroke="#E0714A" stroke-width="1.6"/><circle cx="9" cy="9" r="3" fill="#12A38C"/></svg>
+      <div>
+        <div class="brand-name">异步运行台</div>
+        <div class="brand-sub">ASYNC CONSOLE</div>
+      </div>
+    </div>
+    <div class="pill"><b>0</b><span>运行中</span></div>
+    <div class="pill attn"><b>89</b><span>待复核</span></div>
+    <div class="pill"><b>146.4M</b><span>token</span></div>
+    <div class="pill"><b>80</b><span>任务总数</span></div>
+    <div class="spacer"></div>
+    <span style="font-family: var(--mono); font-size: 11.5px; color: var(--muted);">本仓 · 同步于 09:12:04</span>
+    <div class="pill"><span class="dot" style="background:#12A38C"></span><span style="color:var(--text)">已连接</span></div>
+    <div class="iconbtn"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5a5.5 5.5 0 1 0 5.5 5.5A4.3 4.3 0 0 1 7 1.5Z" stroke="currentColor" stroke-width="1.4"/></svg></div>
+    <div class="iconbtn"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab on">活动 <span class="n">45</span></div>
+    <div class="tab">Fleet DAG</div>
+    <div class="tab">历史 <span class="n">80</span></div>
+    <div class="tab">配置</div>
+  </div>
+
+  <div class="shell">
+    <div class="card">
+      <div class="card-h">
+        <h3>活动任务</h3>
+        <div class="spacer"></div>
+        <span class="badge b-ok"><svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" fill="#F2A93D"/><g stroke="#F2A93D" stroke-width="1.3" stroke-linecap="round"><path d="M7 1v1.4M7 11.6V13M1 7h1.4M11.6 7H13M2.9 2.9l1 1M10.1 10.1l1 1M11.1 2.9l-1 1M3.9 10.1l-1 1"/></g></svg>已同步</span>
+        <span style="font-family: var(--mono); font-size: 12px; color: var(--muted);">45 / 80 条</span>
+      </div>
+      <div class="filters">
+        <div class="input"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="5" cy="5" r="3.4" stroke="currentColor" stroke-width="1.3"/><path d="M8 8l2.6 2.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>搜索任务、运行组或批次</div>
+        <div class="select">全部状态</div>
+        <div class="select">全部角色</div>
+        <div class="select">全部模型</div>
+      </div>
+      <div class="runchips">
+        <div class="runchip on"><span class="id">p1-acceptance-r1-fix1</span><span class="meta">0 活动 / 1 任务</span></div>
+        <div class="runchip"><span class="id">未归组</span><span class="meta">0 活动 / 44 任务</span></div>
+      </div>
+
+      <div class="grouphead"><span class="chev"><svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1.5 1.5 4.5 5 7.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span><span class="gt">未归组任务</span><span class="gs">6 个批次</span><span class="gm">44 任务 · 0 活动</span></div>
+      <div class="batchhead"><span class="chev"><svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1.5 1.5 4.5 5 7.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span><b>批次 3</b><span style="font-family: var(--mono); font-size: 11px;">…cfdaeb30</span><span>· 3 个任务</span></div>
+      <div class="rows">
+        <div class="row" style="border-left-color: #12A38C;">
+          <div class="l1">
+            <span class="title">执行 p1 wave 1 lane L-S5: 基于已锁 IC-02、IC-03、IC-04 实施 package.json 契约</span>
+            <span class="slot"><span class="badge b-ok"><svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" fill="#F2A93D"/><g stroke="#F2A93D" stroke-width="1.3" stroke-linecap="round"><path d="M7 1v1.4M7 11.6V13M1 7h1.4M11.6 7H13M2.9 2.9l1 1M10.1 10.1l1 1M11.1 2.9l-1 1M3.9 10.1l-1 1"/></g></svg>完成</span></span>
+            <span class="slot"><span class="badge b-warn"><svg viewBox="0 0 14 14" fill="none"><circle cx="5.2" cy="5.4" r="2.6" fill="#F2A93D"/><path d="M4.4 11.4h5.8a2.3 2.3 0 0 0 .4-4.57 3.2 3.2 0 0 0-6.2-.63 2.6 2.6 0 0 0 0 5.2Z" fill="#FFFDF8" stroke="#B99B55" stroke-width="0.9"/></svg>部分完成</span></span>
+          </div>
+          <div class="l2"><span>…4c9f8bc0</span><span class="sep">·</span><span>executor-agent</span><span class="sep">·</span><span>gpt-5.6-luna · max</span><span class="sep">·</span><span class="hl">2.7m</span><span class="sep">·</span><span class="hl">156k</span></div>
+        </div>
+        <div class="row" style="border-left-color: #12A38C;">
+          <div class="l1">
+            <span class="title">执行 p1 wave 1 lane L-S3: 实现 .NET 10 WinForms/WebView2 桌面壳，固定派生端口</span>
+            <span class="slot"><span class="badge b-ok"><svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" fill="#F2A93D"/><g stroke="#F2A93D" stroke-width="1.3" stroke-linecap="round"><path d="M7 1v1.4M7 11.6V13M1 7h1.4M11.6 7H13M2.9 2.9l1 1M10.1 10.1l1 1M11.1 2.9l-1 1M3.9 10.1l-1 1"/></g></svg>完成</span></span>
+            <span class="slot"><span class="badge b-warn"><svg viewBox="0 0 14 14" fill="none"><circle cx="5.2" cy="5.4" r="2.6" fill="#F2A93D"/><path d="M4.4 11.4h5.8a2.3 2.3 0 0 0 .4-4.57 3.2 3.2 0 0 0-6.2-.63 2.6 2.6 0 0 0 0 5.2Z" fill="#FFFDF8" stroke="#B99B55" stroke-width="0.9"/></svg>完成（存疑）</span></span>
+          </div>
+          <div class="l2"><span>…051396d5</span><span class="sep">·</span><span>executor-agent</span><span class="sep">·</span><span>gpt-5.6-luna · max</span><span class="sep">·</span><span class="hl">7.5m</span><span class="sep">·</span><span class="hl">311k</span></div>
+        </div>
+        <div class="row" style="border-left-color: #C25F52;">
+          <div class="l1">
+            <span class="title">P7-R1 定向返工 L-S3（shell 域）：端口派生与 server 对齐</span>
+            <span class="slot"><span class="badge b-err"><svg viewBox="0 0 14 14" fill="none"><path d="M3.4 8.4h6.8a2.2 2.2 0 0 0 .4-4.36 3.4 3.4 0 0 0-6.6-.67 2.5 2.5 0 0 0-.6 5.03Z" fill="#D9CDBA" stroke="#A98F78" stroke-width="0.9"/><path d="M4.6 10.2 3.9 12M7.2 10.2l-0.7 1.8M9.8 10.2l-0.7 1.8" stroke="#C25F52" stroke-width="1.3" stroke-linecap="round"/></svg>失败</span></span>
+            <span class="slot"><span class="badge b-mute"><svg viewBox="0 0 14 14" fill="none"><path d="M2 6h10M3.4 9h7.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity="0.7"/></svg>未知</span></span>
+          </div>
+          <div class="l2"><span>…5c8fa0d8</span><span class="sep">·</span><span>executor-agent</span><span class="sep">·</span><span>gpt-5.6-luna · max</span><span class="sep">·</span><span class="hl">2.5m</span><span class="sep">·</span><span class="hl">98k</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rail">
+      <div class="card">
+        <div class="card-h"><h3>待复核</h3><div class="spacer"></div><span class="badge b-warn"><svg viewBox="0 0 14 14" fill="none"><circle cx="5.2" cy="5.4" r="2.6" fill="#F2A93D"/><path d="M4.4 11.4h5.8a2.3 2.3 0 0 0 .4-4.57 3.2 3.2 0 0 0-6.2-.63 2.6 2.6 0 0 0 0 5.2Z" fill="#FFFDF8" stroke="#B99B55" stroke-width="0.9"/></svg>89</span></div>
+        <div class="tools"><div class="ghostbtn">全部标记已核对</div></div>
+        <div class="ritems">
+          <div class="ritem">
+            <svg class="rglyph" viewBox="0 0 16 16" fill="none"><circle cx="6" cy="6.2" r="3" fill="#F2A93D"/><path d="M5 13h6.6a2.6 2.6 0 0 0 .5-5.16 3.6 3.6 0 0 0-7-.7A2.9 2.9 0 0 0 5 13Z" fill="#FFFDF8" stroke="#B99B55" stroke-width="1"/></svg>
+            <div><div class="rid">…bf6d80cf</div><div class="rwhy">等待主代理裁决</div><div class="rsub">任务 · 未归组 · 等待 13h 01m</div></div>
+            <div class="rbtn"><div class="ghostbtn">已核对</div></div>
+          </div>
+          <div class="ritem">
+            <svg class="rglyph" viewBox="0 0 16 16" fill="none"><circle cx="6" cy="6.2" r="3" fill="#F2A93D"/><path d="M5 13h6.6a2.6 2.6 0 0 0 .5-5.16 3.6 3.6 0 0 0-7-.7A2.9 2.9 0 0 0 5 13Z" fill="#FFFDF8" stroke="#B99B55" stroke-width="1"/></svg>
+            <div><div class="rid">…8af5046a</div><div class="rwhy">等待主代理裁决</div><div class="rsub">任务 · 未归组 · 等待 19h 36m</div></div>
+            <div class="rbtn"><div class="ghostbtn">已核对</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3>最近完成</h3><div class="spacer"></div><span class="badge b-mute">200</span></div>
+        <div class="tools"><div class="ghostbtn">全部已读</div></div>
+        <div class="ritems">
+          <div class="ritem">
+            <svg class="rglyph" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3.4" fill="#F2A93D"/><g stroke="#F2A93D" stroke-width="1.4" stroke-linecap="round"><path d="M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1"/></g></svg>
+            <div><div class="rid">…0788e850</div><div class="rwhy">任务完成</div><div class="rsub">完成 / 已完成 · 07/12 09:56</div></div>
+            <div></div>
+          </div>
+          <div class="ritem">
+            <svg class="rglyph" viewBox="0 0 16 16" fill="none"><path d="M3.6 9.6h8a2.5 2.5 0 0 0 .5-4.95 3.9 3.9 0 0 0-7.6-.76 2.9 2.9 0 0 0-.9 5.71Z" fill="#D9CDBA" stroke="#A98F78" stroke-width="1"/><path d="M5.2 11.6l-0.8 2M8.2 11.6l-0.8 2M11.2 11.6l-0.8 2" stroke="#C25F52" stroke-width="1.4" stroke-linecap="round"/></svg>
+            <div><div class="rid">…44318190</div><div class="rwhy">任务失败</div><div class="rsub">失败 / 未知 · 07/12 09:57</div></div>
+            <div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,504 @@
+{
+  "schema_version": 1,
+  "package_id": "subagent-control",
+  "build_id": "consumer-release/v1",
+  "comment": "CR-PACKAGE-v1 的正向清单真源：只列消费者运行所需资产；测试、自测、benchmark、开发 build/deploy 工具、notes 历史与整棵 ops/tools 一律不在表内。构建时展开为逐文件 inventory（ops/tools/consumer_release_package.py）。",
+  "files": [
+    {
+      "source": "ops/tools/async_watch.mjs",
+      "target": "ops/consumer-tools/async_watch.mjs",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/_tool_common.py",
+      "target": "ops/consumer-tools/_tool_common.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_guard.py",
+      "target": "ops/consumer-tools/alignment_guard.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_recorder.py",
+      "target": "ops/consumer-tools/alignment_recorder.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/acceptance_contract_check.py",
+      "target": "ops/consumer-tools/acceptance_contract_check.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/planning_manifest_check.py",
+      "target": "ops/consumer-tools/planning_manifest_check.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/planning_contract_promote.py",
+      "target": "ops/consumer-tools/planning_contract_promote.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/state_checkpoint.py",
+      "target": "ops/consumer-tools/state_checkpoint.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/cockpit_map.py",
+      "target": "ops/consumer-tools/cockpit_map.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/cockpit_health.py",
+      "target": "ops/consumer-tools/cockpit_health.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/ledger_check.py",
+      "target": "ops/consumer-tools/ledger_check.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/reference_resolution_check.py",
+      "target": "ops/consumer-tools/reference_resolution_check.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/scope_slice_prepare.py",
+      "target": "ops/consumer-tools/scope_slice_prepare.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/evidence_index.py",
+      "target": "ops/consumer-tools/evidence_index.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/config_snapshot.py",
+      "target": "ops/consumer-tools/config_snapshot.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/git_checkpoint.py",
+      "target": "ops/consumer-tools/git_checkpoint.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/consumer_install.py",
+      "target": "ops/consumer-tools/consumer_install.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/_dispatch-prepare-argv.mjs",
+      "target": "ops/tools/_dispatch-prepare-argv.mjs",
+      "role": "consumer-tool",
+      "comment": "Pi 适配器用 ops/tools 相对路径 import 的运行模块闭包；不是开发 tools 树。"
+    },
+    {
+      "source": "ops/tools/_fs-utils.mjs",
+      "target": "ops/tools/_fs-utils.mjs",
+      "role": "consumer-tool",
+      "comment": "Pi 适配器用 ops/tools 相对路径 import 的运行模块闭包；不是开发 tools 树。"
+    },
+    {
+      "source": "ops/tools/fleet-tools-core.mjs",
+      "target": "ops/tools/fleet-tools-core.mjs",
+      "role": "consumer-tool",
+      "comment": "Pi 适配器用 ops/tools 相对路径 import 的运行模块闭包；不是开发 tools 树。"
+    },
+    {
+      "source": "ops/tools/model_config.mjs",
+      "target": "ops/tools/model_config.mjs",
+      "role": "consumer-tool",
+      "comment": "全局默认角色/模型配置与项目显式覆盖的统一来源解析；Pi 适配器用 ops/tools 相对路径 import。"
+    },
+    {
+      "source": "ops/tools/subagent_runtime.mjs",
+      "target": "ops/tools/subagent_runtime.mjs",
+      "role": "consumer-tool",
+      "comment": "Pi 适配器用 ops/tools 相对路径 import 的运行模块闭包；不是开发 tools 树。"
+    },
+    {
+      "source": "ops/tools/pi_child_bash_process_tree.mjs",
+      "target": "ops/tools/pi_child_bash_process_tree.mjs",
+      "role": "consumer-tool",
+      "comment": "Pi 适配器用 ops/tools 相对路径 import 的运行模块闭包；不是开发 tools 树。"
+    },
+    {
+      "source": "ops/tools/pi_write_domain_extension.mjs",
+      "target": "ops/tools/pi_write_domain_extension.mjs",
+      "role": "consumer-tool",
+      "comment": "Pi 适配器用 ops/tools 相对路径 import 的运行模块闭包；不是开发 tools 树。"
+    },
+    {
+      "source": "ops/tools/pause-surface.mjs",
+      "target": "ops/tools/pause-surface.mjs",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/task-outcome.mjs",
+      "target": "ops/tools/task-outcome.mjs",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/pi_transient_retry.mjs",
+      "target": "ops/tools/pi_transient_retry.mjs",
+      "role": "consumer-tool",
+      "comment": "child runner 加载的临时服务错误分类；只追加原生重试提示，不自带重试循环。"
+    },
+    {
+      "source": "ops/tools/async-core",
+      "target": "ops/tools/async-core",
+      "role": "consumer-tool",
+      "kind": "dir",
+      "exclude": [
+        "selftest.mjs",
+        "*.selftest.*",
+        "*.test.*"
+      ],
+      "comment": "Pi 适配器用 ops/tools 相对路径 import 的运行模块闭包；不是开发 tools 树。"
+    },
+    {
+      "source": "ops/dist",
+      "target": "ops/dist",
+      "role": "bundle",
+      "kind": "dir",
+      "include": [
+        "*.bundle.mjs",
+        "subagent_service.manifest.json",
+        "subagent_service.licenses.json",
+        "THIRD_PARTY_LICENSES.txt"
+      ],
+      "exclude": [
+        "*.tmp.mjs"
+      ]
+    },
+    {
+      "source": "ops/policies",
+      "target": "ops/policies",
+      "role": "rule",
+      "kind": "dir"
+    },
+    {
+      "source": "ops/protocols",
+      "target": "ops/protocols",
+      "role": "rule",
+      "kind": "dir"
+    },
+    {
+      "source": "ops/workflows",
+      "target": "ops/workflows",
+      "role": "rule",
+      "kind": "dir"
+    },
+    {
+      "source": "ops/agent-prompts",
+      "target": "ops/agent-prompts",
+      "role": "rule",
+      "kind": "dir"
+    },
+    {
+      "source": "ops/agents",
+      "target": "ops/agents",
+      "role": "agent-config",
+      "kind": "dir"
+    },
+    {
+      "source": "ops/skills",
+      "target": "ops/skills",
+      "role": "skill",
+      "kind": "dir"
+    },
+    {
+      "source": "ops/templates",
+      "target": "ops/templates",
+      "role": "template",
+      "kind": "dir",
+      "exclude": [
+        "consumer-template/**"
+      ]
+    },
+    {
+      "source": "ops/model-notes.toml",
+      "target": "ops/model-notes.toml",
+      "role": "agent-config"
+    },
+    {
+      "source": "AGENTS.md",
+      "target": "AGENTS.md",
+      "role": "template"
+    },
+    {
+      "source": "COPY-INSTALL.ps1",
+      "target": "COPY-INSTALL.ps1",
+      "role": "template"
+    },
+    {
+      "source": "ops/templates/consumer-template/.gitignore",
+      "target": "ops/templates/consumer-template/.gitignore",
+      "role": "template"
+    },
+    {
+      "source": "ops/templates/consumer-template/.pi/settings.json",
+      "target": "ops/templates/consumer-template/.pi/settings.json",
+      "role": "template"
+    },
+    {
+      "source": "adapters/pi/package.json",
+      "target": "adapters/pi/package.json",
+      "role": "adapter"
+    },
+    {
+      "source": "adapters/pi/package-lock.json",
+      "target": "adapters/pi/package-lock.json",
+      "role": "adapter"
+    },
+    {
+      "source": "adapters/pi/README.md",
+      "target": "adapters/pi/README.md",
+      "role": "adapter"
+    },
+    {
+      "source": "src/agent-panel/package.json",
+      "target": "src/agent-panel/package.json",
+      "role": "dependency"
+    },
+    {
+      "source": "src/agent-panel/shell",
+      "target": "src/agent-panel/shell",
+      "role": "dependency",
+      "kind": "dir",
+      "include": ["*.cs", "*.csproj"],
+      "exclude": ["bin/**", "obj/**"]
+    },
+    {
+      "source": "src/agent-panel/src/web",
+      "target": "src/agent-panel/src/web",
+      "role": "dependency",
+      "kind": "dir",
+      "include": ["*.js", "*.mjs", "*.html", "*.css"]
+    },
+    {
+      "source": "adapters/pi/src",
+      "target": "adapters/pi/src",
+      "role": "adapter",
+      "kind": "dir",
+      "exclude": [
+        "*.selftest.*",
+        "*.test.*"
+      ]
+    },
+    {
+      "source": "ops/node_modules/@koromix",
+      "target": "node_modules/@koromix",
+      "role": "dependency",
+      "kind": "dir",
+      "include": [
+        "**/package.json",
+        "**/index.js",
+        "**/README.md",
+        "**/*.node"
+      ]
+    }
+  ],
+  "entrypoints": {
+    "agent_panel_launcher": "ops/dist/agent_panel_launcher.bundle.mjs",
+    "consumer_install": "ops/consumer-tools/consumer_install.py",
+    "delegate_work_selection": "ops/dist/delegate_work_selection.bundle.mjs",
+    "dispatch_prepare": "ops/dist/dispatch_prepare.bundle.mjs",
+    "fleet_manifest_check": "ops/dist/fleet_manifest_check.bundle.mjs",
+    "fleet_scheduler": "ops/dist/fleet_scheduler.bundle.mjs",
+    "pi_child_command_jobs": "ops/dist/pi_child_command_jobs.bundle.mjs",
+    "pi_review_result_extension": "ops/dist/pi_review_result_extension.bundle.mjs",
+    "pi_search_extension": "ops/dist/pi_search_extension.bundle.mjs",
+    "pi_task_result_extension": "ops/dist/pi_task_result_extension.bundle.mjs",
+    "pi_transient_retry": "ops/dist/pi_transient_retry.bundle.mjs",
+    "pi_worker_tools_extension": "ops/dist/pi_worker_tools_extension.bundle.mjs",
+    "pi_write_domain_extension": "ops/dist/pi_write_domain_extension.bundle.mjs",
+    "review_evidence": "ops/dist/review_evidence.bundle.mjs",
+    "run_pi_task": "ops/dist/run-pi-task.bundle.mjs",
+    "runtime_retention": "ops/dist/runtime_retention.bundle.mjs",
+    "subagent_handoff_check": "ops/dist/subagent_handoff_check.bundle.mjs",
+    "subagent_preload": "ops/dist/subagent_preload.bundle.mjs",
+    "subagent_service": "ops/dist/subagent_service.bundle.mjs",
+    "task_package_build": "ops/dist/task_package_build.bundle.mjs",
+    "task_package_lint": "ops/dist/task_package_lint.bundle.mjs"
+  },
+  "cli_launchers": [
+    "agent_panel_launcher",
+    "delegate_work_selection",
+    "dispatch_prepare",
+    "fleet_manifest_check",
+    "fleet_scheduler",
+    "review_evidence",
+    "runtime_retention",
+    "subagent_handoff_check",
+    "subagent_preload",
+    "task_package_build",
+    "task_package_lint"
+  ],
+  "resource_mounts": [
+    {
+      "project_path": "ops/policies",
+      "runtime_path": "ops/policies",
+      "kind": "dir"
+    },
+    {
+      "project_path": "ops/protocols",
+      "runtime_path": "ops/protocols",
+      "kind": "dir"
+    },
+    {
+      "project_path": "ops/workflows",
+      "runtime_path": "ops/workflows",
+      "kind": "dir"
+    },
+    {
+      "project_path": "ops/agent-prompts",
+      "runtime_path": "ops/agent-prompts",
+      "kind": "dir"
+    },
+    {
+      "project_path": "ops/agents",
+      "runtime_path": "ops/agents",
+      "kind": "dir"
+    },
+    {
+      "project_path": "ops/templates",
+      "runtime_path": "ops/templates",
+      "kind": "dir"
+    },
+    {
+      "project_path": "ops/tools",
+      "runtime_path": "ops/consumer-tools",
+      "kind": "dir"
+    },
+    {
+      "project_path": "ops/skills",
+      "runtime_path": "ops/skills",
+      "kind": "dir",
+      "optional_if_local": true
+    }
+  ],
+  "skills": [
+    "ops/skills"
+  ],
+  "template_files": [
+    {
+      "source": "AGENTS.md",
+      "target": "AGENTS.md",
+      "policy": "same_source"
+    },
+    {
+      "source": "COPY-INSTALL.ps1",
+      "target": "COPY-INSTALL.ps1",
+      "policy": "same_source"
+    },
+    {
+      "source": "ops/templates/consumer-template/.gitignore",
+      "target": ".gitignore",
+      "policy": "create_if_missing"
+    },
+    {
+      "source": "ops/templates/consumer-template/.pi/settings.json",
+      "target": ".pi/settings.json",
+      "policy": "create_if_missing"
+    }
+  ],
+  "generated_template_files": [
+    {
+      "source": "ops/templates/factory-project.md",
+      "target": "PROJECT.md",
+      "policy": "create_if_missing"
+    },
+    {
+      "source": "ops/templates/factory-state-delta.json",
+      "target": "STATUS.md,ROADMAP.md",
+      "policy": "create_if_missing"
+    },
+    {
+      "source": "ops/templates/factory-ledger.toml",
+      "target": "notes/ledger/DEBT.toml",
+      "policy": "create_if_missing"
+    }
+  ],
+  "python_closure": {
+    "seeds": [
+      "_tool_common.py",
+      "alignment_guard.py",
+      "alignment_recorder.py",
+      "acceptance_contract_check.py",
+      "planning_manifest_check.py",
+      "planning_contract_promote.py",
+      "state_checkpoint.py",
+      "cockpit_map.py",
+      "cockpit_health.py",
+      "ledger_check.py",
+      "reference_resolution_check.py",
+      "scope_slice_prepare.py",
+      "evidence_index.py",
+      "config_snapshot.py",
+      "git_checkpoint.py",
+      "consumer_install.py"
+    ],
+    "approved_extra_modules": [],
+    "maintenance_only_patterns": [
+      "*_selftest.py",
+      "*benchmark*.py"
+    ]
+  },
+  "dependencies": {
+    "node": {
+      "requires": ">=18",
+      "bundled": [
+        "@modelcontextprotocol/sdk",
+        "smol-toml",
+        "zod",
+        "zod-to-json-schema",
+        "ajv",
+        "ajv-formats",
+        "fast-deep-equal",
+        "fast-uri",
+        "json-schema-traverse"
+      ],
+      "external_native": [
+        "@koromix/koffi-<platform>"
+      ]
+    },
+    "python": {
+      "requires": ">=3.12",
+      "stdlib_only": true
+    },
+    "native": {
+      "packages": [
+        "@koromix/koffi-<platform>"
+      ],
+      "note": "Koffi 是外部原生依赖，必须随包携带目标平台包；消费者不运行 npm ci --prefix ops。"
+    }
+  },
+  "excluded": [
+    "tests/**",
+    "**/fixtures/**",
+    "**/*.selftest.*",
+    "**/selftest.mjs",
+    "**/*_selftest.py",
+    "**/*benchmark*",
+    "ops/tools/**",
+    "ops/hooks/**",
+    "ops/map/**",
+    "ops/fixtures/**",
+    "src/agent-panel/tests/**",
+    "src/agent-panel/docs/**",
+    "src/agent-panel/tools/**",
+    "src/agent-panel/src/server/**",
+    "src/agent-panel/shell/bin/**",
+    "src/agent-panel/shell/obj/**",
+    "notes/**",
+    "docs/**",
+    ".runtime/**",
+    "**/__pycache__/**",
+    "**/.pytest_cache/**",
+    "**/*.pyc"
+  ]
+}

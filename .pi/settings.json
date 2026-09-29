@@ -1,0 +1,11 @@
+{
+  "packages": [
+    {
+      "source": "../adapters/pi",
+      "extensions": []
+    }
+  ],
+  "extensions": [
+    "./extensions/control-delegate.ts"
+  ]
+}

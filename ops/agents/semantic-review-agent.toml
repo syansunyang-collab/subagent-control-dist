@@ -1,0 +1,41 @@
+name = "semantic-review-agent"
+description = "触发：规则质量、控制面语义、调度边界或提示词职责审查。"
+tools = ["read", "bash", "powershell", "edit", "write", "ls", "mcp", "mcpScript", "web_search", "source_check", "fetch_content", "get_search_content", "lsp_diagnostics", "lsp_fix", "visual_explainer", "read_symbol"]
+extensions = ["pi-web-access", "pi-mcp-adapter", "@narumitw/pi-lsp", "visual-explainer", "pi-read-symbol", "payload-cache-diag", "@alexanderfortin/pi-token-usage"]
+skills = ["block-discussion", "change-rationale", "external-review-rescue", "git-recovery", "pi-rail-dispatch", "rule-authoring", "rule-corpus-cleanup", "skill-authoring-governance", "subagent-fleet-discipline", "tooling-iteration", "writing-governance", "powerpoint", "mcp-scripting", "docx-cli", "visual-explainer"]
+project_skills = "none"
+
+developer_instructions = """
+角色：semantic-review-agent
+定位：控制面语义审查代理。
+
+默认姿态：
+- 判断规则、提示词或材料是否能支撑正确执行。
+- 推荐档位由主代理在模型可用且用户已保存的范围内调整。编排探针不承担语义审查。普通代码回归走 verify。
+- 区分机械证据、语义结论和修复建议。
+"""
+
+[[picks]]
+id = "regular"
+when = "规则与职责核对"
+model = "openai-codex/gpt-6-sol"
+effort = "high"
+effort_min = "off"
+effort_max = "max"
+default = true
+
+[[picks]]
+id = "impact"
+when = "跨规则冲突与高影响契约"
+model = "xai/grok-4.7"
+effort = "high"
+effort_min = "low"
+effort_max = "xhigh"
+
+[[picks]]
+id = "probe"
+when = "编排链路冒烟，不做语义审查"
+model = "openai-codex/gpt-6-luna"
+effort = "low"
+effort_min = "off"
+effort_max = "max"

@@ -1,0 +1,103 @@
+# 面板显示名。只由 agent 面板读取，运行时不读取；面向模型的文字在角色卡与路由卡中维护。
+
+group_order = ["取证与调研", "规划与审查", "实施", "验收", "通用与分身"]
+tool_group_order = ["读取与检索", "文件修改", "命令执行", "联网", "外部服务", "代码诊断", "产出", "运行必需", "主代理"]
+
+[roles."explorer-agent"]
+name = "本地取证"
+summary = "调查本机代码、运行环境与网络，提供证据"
+group = "取证与调研"
+
+[roles."explorer-agent".capabilities]
+codebase-scan = "代码结构与根因调查"
+network-readiness-scan = "网络与端口调查"
+runtime-env-scan = "本机软件与工具链调查"
+
+[roles."research-agent"]
+name = "调研"
+summary = "检索外部资料、阅读文档与图片、寻找可复用方案"
+group = "取证与调研"
+
+[roles."research-agent".capabilities]
+document-scan = "文档与图片阅读"
+external-research = "外部资料检索"
+wheel-discovery = "可复用方案发现"
+
+[roles."planner-agent"]
+name = "计划编排"
+summary = "将已审规格拆解为执行计划，用于跨会话交接"
+group = "规划与审查"
+
+[roles."planner-agent".capabilities]
+acceptance-authoring = "验收合同编写"
+plan-authoring = "执行计划编写"
+
+[roles."plan-checker"]
+name = "方案审查"
+summary = "审查计划与方案的可行性和风险"
+group = "规划与审查"
+
+[roles."plan-checker".capabilities]
+plan-review = "计划审查"
+proposal-challenge-review = "方案质疑"
+requirement-granularity-review = "规格颗粒度审查"
+
+[roles."executor-agent"]
+name = "执行"
+summary = "在明确范围内修改代码并自测"
+group = "实施"
+
+[roles."executor-agent".capabilities]
+plan-execution = "计划条目执行"
+scoped-execution = "限定范围执行"
+
+[roles."batch-agent"]
+name = "批量处理"
+summary = "按既定规则批量处理同类对象"
+group = "实施"
+
+[roles."batch-agent".capabilities]
+mechanical-batch = "批量同类处理"
+
+[roles."docs-agent"]
+name = "文档撰写"
+summary = "将已确认材料整理为正式文档"
+group = "实施"
+
+[roles."docs-agent".capabilities]
+documentation-authoring = "正式文档撰写"
+
+[roles."verify-agent"]
+name = "验收"
+summary = "验证代码、功能与界面"
+group = "验收"
+
+[roles."verify-agent".capabilities]
+acceptance-synthesis = "验收结论汇总"
+anti-defensive-inspection = "过度防御检查"
+code-verification = "代码验证"
+functional-inspection = "功能与产物检查"
+prompt-bloat-inspection = "提示词冗余检查"
+ui-interaction-inspection = "界面交互检查"
+
+[roles."semantic-review-agent"]
+name = "规则审查"
+summary = "审查规则质量与各处表述一致性"
+group = "验收"
+
+[roles."semantic-review-agent".capabilities]
+contract-drift-inspection = "表述一致性检查"
+rule-quality-inspection = "规则质量审查"
+
+[roles."general-agent"]
+name = "通用"
+summary = "处理其他角色不覆盖的任务，提供外部咨询"
+group = "通用与分身"
+
+[roles."general-agent".capabilities]
+general-default = "通用任务"
+
+[roles."delegate-work"]
+name = "分身"
+summary = "携带当前对话上下文在后台执行任务"
+group = "通用与分身"

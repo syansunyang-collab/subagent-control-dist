@@ -1,0 +1,852 @@
+/* 异步运行台 · v6 视觉系统「昼夜天象」
+   宗旨：取悦自己——好看、整齐、舒服、快乐；氛围拉满，网格纪律不丢。
+   硬基准：8px 间距网格；徽章 22px / 小钮 24px / 胶囊 30px / 控件 32px / 任务行 60px 一把尺；
+   任务行三列网格（标题弹性 + 92px + 118px 徽章槽），任何层级右缘一条线；
+   hover 永不位移；数据一律 mono。
+   双主题是两套完整视觉语言：夜=星象（月亮/流星/星徽），昼=天气（太阳/云/雨徽）。
+   零外部资源；渲染幂等由 app.js 签名缓存保证。 */
+
+:root {
+  /* 昼 · 晨光天气 */
+  color-scheme: light; /* 原生 UI（滚动条/下拉弹层/焦点环）跟主题走，不跟系统偏好（三堂会审 opus F-16） */
+  --bg: #F8F3E6;
+  --text: #292317;
+  --muted: #776E58;
+  --surface-solid: #FFFDF8;
+  --surface: var(--surface-solid);
+  --surface-2: #F8F5ED;
+  --line: rgba(70, 58, 34, 0.15);
+  --accent: #E0714A;
+  --accent-2: #12A38C;
+  --gold: #F2A93D;
+  --ok: #1E7A54;
+  --warn: #96690E;
+  --err: #C25F52;
+  --err-text: #A8443A;
+  --info: #3E79B8;
+  --glow: rgba(224, 113, 74, 0.22);
+  --backdrop: rgba(60, 50, 35, 0.32);
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --disp: "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --sans: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --radius: 14px;
+  --shadow: 0 1px 3px rgba(140, 115, 60, 0.13), 0 12px 34px rgba(140, 115, 60, 0.10);
+  --shadow-lift: 0 4px 10px rgba(140, 115, 60, 0.16), 0 18px 46px rgba(140, 115, 60, 0.14);
+}
+
+[data-theme="dark"] {
+  /* 夜 · 深空星象 */
+  color-scheme: dark;
+  --bg: #05081A;
+  --text: #F0F4FF;
+  --muted: #93A0C8;
+  --surface-solid: #131A34;
+  --surface: var(--surface-solid);
+  --surface-2: #171F38;
+  --line: rgba(165, 192, 255, 0.17);
+  --accent: #35E0C8;
+  --accent-2: #97A0FF;
+  --gold: #FFC66E;
+  --ok: #35E0C8;
+  --warn: #C89440;
+  --err: #F08CA0;
+  --err-text: #F0A8B6;
+  --info: #7FB4FF;
+  --glow: rgba(53, 224, 200, 0.30);
+  --backdrop: rgba(4, 6, 16, 0.6);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 14px 40px rgba(3, 6, 20, 0.4);
+  --shadow-lift: 0 5px 14px rgba(0, 0, 0, 0.4), 0 22px 56px rgba(3, 6, 20, 0.5);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+body { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+
+/* ═══ 天空层：背景大气 + 天体（DOM 在 index.html 的 .sky 内，按主题切换显隐） ═══ */
+
+[data-theme="dark"] body {
+  background:
+    radial-gradient(1000px 620px at 8% 92%, rgba(151, 160, 255, 0.22), transparent 62%),
+    radial-gradient(900px 560px at 92% -6%, rgba(53, 224, 200, 0.16), transparent 64%),
+    radial-gradient(700px 500px at 50% 30%, rgba(99, 102, 241, 0.12), transparent 70%),
+    linear-gradient(163deg, #1A1148 0%, #121A38 34%, #0A1C2C 66%, #05081A 100%);
+  background-attachment: fixed;
+}
+[data-theme="light"] body {
+  background:
+    radial-gradient(980px 520px at 84% -10%, rgba(255, 203, 120, 0.5), transparent 60%),
+    radial-gradient(760px 500px at 4% 106%, rgba(124, 150, 214, 0.15), transparent 64%),
+    linear-gradient(168deg, #FFF6E4 0%, #FBF2DF 36%, #EDF3F6 74%, #E7F0F5 100%);
+  background-attachment: fixed;
+}
+
+.sky {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  transform: translateZ(0);
+}
+body.sky-paused .sky, body.sky-paused .sky * { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) { .sky, .sky * { animation: none !important; } }
+
+/* 星点（夜） */
+.sky-stars { position: absolute; inset: 0; animation: twinkle 6.5s ease-in-out infinite; background-image:
+  radial-gradient(1.7px 1.7px at 7% 11%, rgba(255,255,255,0.9), transparent 100%),
+  radial-gradient(1.2px 1.2px at 21% 27%, rgba(190,200,255,0.7), transparent 100%),
+  radial-gradient(1.6px 1.6px at 38% 8%, rgba(255,255,255,0.6), transparent 100%),
+  radial-gradient(1.3px 1.3px at 55% 19%, rgba(170,220,255,0.65), transparent 100%),
+  radial-gradient(1.7px 1.7px at 72% 6%, rgba(255,255,255,0.75), transparent 100%),
+  radial-gradient(1.2px 1.2px at 88% 30%, rgba(200,190,255,0.6), transparent 100%),
+  radial-gradient(1.4px 1.4px at 14% 50%, rgba(255,255,255,0.45), transparent 100%),
+  radial-gradient(1.2px 1.2px at 47% 42%, rgba(190,210,255,0.5), transparent 100%),
+  radial-gradient(1.4px 1.4px at 66% 52%, rgba(255,255,255,0.4), transparent 100%),
+  radial-gradient(1.3px 1.3px at 93% 62%, rgba(200,220,255,0.45), transparent 100%),
+  radial-gradient(1.3px 1.3px at 30% 68%, rgba(255,255,255,0.35), transparent 100%),
+  radial-gradient(1.2px 1.2px at 79% 74%, rgba(190,200,255,0.35), transparent 100%); }
+
+/* 月亮（夜）：银辉 + 环晕呼吸 + 缓浮 */
+/* 天象集中在底部楼群上空：页面上部留给信息区，城市天空带常年可见 */
+.sky-moon { position: absolute; bottom: 248px; left: 5vw; width: 88px; height: 88px; animation: float-y 16s ease-in-out infinite; }
+.sky-moon .halo { position: absolute; inset: -46px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(226,236,255,0.32) 0%, rgba(151,160,255,0.10) 46%, transparent 70%);
+  animation: pulse-soft 7s ease-in-out infinite; }
+.sky-moon .body { position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle at 36% 32%, #FFFDF4 0%, #E8ECFF 52%, #B9C4EE 100%);
+  box-shadow: 0 0 46px rgba(214, 226, 255, 0.55); }
+.sky-moon .crater { position: absolute; border-radius: 50%; background: rgba(150, 164, 214, 0.4); }
+
+/* 流星（夜）：长停顿斜掠 */
+.sky-meteor { position: absolute; bottom: 330px; left: 40%; width: 130px; height: 2px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.95), transparent);
+  border-radius: 999px; transform: rotate(-24deg); opacity: 0; animation: meteor 11s linear infinite; }
+.sky-meteor::before { content: ""; position: absolute; left: -2px; top: -1.5px; width: 5px; height: 5px; border-radius: 50%;
+  background: #FFF; box-shadow: 0 0 12px rgba(255,255,255,0.9); }
+
+/* 太阳（昼）：金盘 + 旋转光芒 + 呼吸晕 */
+.sky-sun { position: absolute; bottom: 244px; right: 6vw; width: 92px; height: 92px; }
+.sky-sun .halo { position: absolute; inset: -52px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,196,96,0.5) 0%, rgba(255,214,140,0.18) 48%, transparent 72%);
+  animation: pulse-soft 6s ease-in-out infinite; }
+.sky-sun .rays { position: absolute; inset: -20px; animation: spin-slow 46s linear infinite; }
+.sky-sun .rays svg { width: 100%; height: 100%; display: block; }
+.sky-sun .body { position: absolute; inset: 8px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 34%, #FFF3D0 0%, #FFD879 48%, #F4A93F 100%);
+  box-shadow: 0 0 52px rgba(255, 186, 84, 0.7); }
+
+/* 云（昼）：柔白团块异速漂移 */
+.sky-cloud { position: absolute; filter: blur(1.5px); opacity: 0.9; }
+.sky-cloud i { position: absolute; background: #FFFDF8; border-radius: 999px; box-shadow: 0 6px 18px rgba(180,160,120,0.16); }
+.sky-cloud.a { bottom: 236px; left: 18vw; width: 190px; height: 54px; animation: drift-x 38s ease-in-out infinite alternate; }
+.sky-cloud.b { bottom: 286px; left: 56vw; width: 150px; height: 44px; animation: drift-x 47s ease-in-out infinite alternate-reverse; opacity: 0.78; }
+
+/* 城市天际线：真·楼宇剪影（前后两层错落楼体 + 稀疏亮窗 + 天线/水箱细节），
+   昼夜同一套 SVG 换令牌上色——夜是深空剪影配暖金/长春花亮窗闪烁，昼是暖沙色楼影配微暗窗洞 */
+.sky-skyline { position: absolute; left: 0; right: 0; bottom: 0; height: 200px; pointer-events: none; }
+.sky-skyline svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.sky-skyline .b-back { fill: var(--sky-city-back); }
+.sky-skyline .b-front { fill: var(--sky-city-front); }
+.sky-skyline .day-lit rect { fill: var(--sky-day-lit); }
+.sky-skyline .day-glass rect { fill: var(--sky-day-glass); }
+.sky-skyline .win rect { fill: var(--sky-window-warm); }
+.sky-skyline .win.cool rect { fill: var(--sky-window-cool); }
+/* 昼：晨雾青灰远景 + 暖沙前景，左缘受光面与玻璃幕墙竖条撑起体积感 */
+:root { --sky-city-back: #D8E1E7; --sky-city-front: #E5D7B9; --sky-day-lit: rgba(255, 251, 238, 0.85); --sky-day-glass: rgba(122, 158, 182, 0.30); --sky-window-warm: rgba(83, 70, 48, 0.20); --sky-window-cool: rgba(83, 70, 48, 0.14); }
+[data-theme="dark"] { --sky-city-back: #0D142E; --sky-city-front: #070C1E; --sky-window-warm: #F5C36E; --sky-window-cool: #97A0FF; }
+/* drop-shadow 只挂静态主 svg：窗层若同处 filter 子树，闪烁会迫使整幅天际线
+   每帧重跑 drop-shadow（iGPU 大头）；拆开后主 svg 一次成层缓存，窗层纯合成。 */
+[data-theme="light"] .sky-skyline > svg:first-child { filter: drop-shadow(0 -8px 26px rgba(216, 190, 138, 0.35)); }
+[data-theme="dark"] .sky-skyline > svg:first-child { filter: drop-shadow(0 -6px 24px rgba(10, 16, 40, 0.55)); }
+[data-theme="dark"] .sky-skyline .day-lit, [data-theme="dark"] .sky-skyline .day-glass { display: none; }
+[data-theme="dark"] .sky-skyline .win-layer.tw1 { animation: twinkle 7s ease-in-out infinite; will-change: opacity; }
+[data-theme="dark"] .sky-skyline .win-layer.tw2 { animation: twinkle 9s 2.4s ease-in-out infinite; will-change: opacity; }
+
+/* 主题显隐：夜见月与流星；昼见日与云 */
+[data-theme="light"] .sky-stars, [data-theme="light"] .sky-moon, [data-theme="light"] .sky-meteor { display: none; }
+[data-theme="dark"] .sky-sun, [data-theme="dark"] .sky-cloud { display: none; }
+
+:where(body > *:not(.sky)) { position: relative; z-index: 1; }
+
+.mono { font-family: var(--mono); }
+.muted { color: var(--muted); }
+.is-hidden { display: none !important; }
+::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* ═══ 顶栏：56px；胶囊 30px 一把尺 ═══ */
+
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 12px;
+  height: 56px; padding: 0 24px;
+  background: color-mix(in srgb, var(--surface-solid) 58%, transparent);
+  border-bottom: 1px solid var(--line);
+}
+.topbar::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), transparent 72%); opacity: 0.9; }
+
+.brand { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.brand strong { font-family: var(--disp); font-size: 15px; letter-spacing: 0.05em; color: var(--text); display: block; line-height: 1.2; }
+.brand .brand-sub { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.28em; display: block; line-height: 1; }
+.brand-mark { width: 16px; height: 16px; border-radius: 6px; flex: none;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 0 14px var(--glow); }
+
+.summary-chips { display: flex; gap: 8px; margin-left: 8px; }
+.summary-item { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 14px; border-radius: 999px;
+  border: 1px solid var(--line); background: color-mix(in srgb, var(--surface-solid) 40%, transparent);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+.summary-item:hover { border-color: var(--accent); box-shadow: 0 0 14px var(--glow); }
+.summary-value { font-family: var(--mono); font-weight: 600; font-size: 13px; line-height: 1; }
+.summary-label { font-size: 11.5px; color: var(--muted); line-height: 1; }
+
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.project-switch { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.project-switch select { height: 30px; max-width: 220px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-solid); color: var(--text); padding: 0 10px; font: inherit; }
+.topbar-meta { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-family: var(--mono); font-size: 11.5px; }
+.topbar-meta .meta-divider { opacity: 0.4; }
+
+.connection-chip { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 13px; border-radius: 999px;
+  border: 1px solid var(--line); background: color-mix(in srgb, var(--surface-solid) 40%, transparent); }
+.connection-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.connection-chip[data-state="success"] .connection-dot { background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: pulse-soft 2.2s ease-in-out infinite; }
+.connection-chip[data-state="error"] .connection-dot { background: var(--err); box-shadow: 0 0 10px var(--err); }
+.connection-chip[data-state="loading"] .connection-dot { background: var(--gold); animation: blink 0.9s linear infinite; }
+.connection-label { font-size: 12px; }
+
+.icon-button, .text-button, .secondary-button, .danger-button {
+  font: inherit; font-size: 12.5px; cursor: pointer;
+  height: 30px; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-solid) 40%, transparent);
+  color: var(--text);
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.icon-button:hover, .text-button:hover, .secondary-button:hover { border-color: var(--accent); box-shadow: 0 0 12px var(--glow); }
+.danger-button { background: var(--err); border-color: transparent; color: #FFF; }
+.danger-button:hover { box-shadow: 0 0 14px color-mix(in srgb, var(--err) 55%, transparent); }
+.danger-button:disabled { opacity: 0.6; cursor: wait; }
+.text-button { border-radius: 999px; height: 24px; font-size: 11.5px; color: var(--muted); background: transparent; }
+.text-button:hover { color: var(--text); }
+.text-button:disabled, .primary-button:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
+.text-button.danger { color: var(--err-text); }
+.primary-button { font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; height: 30px; padding: 0 18px;
+  border: none; border-radius: 999px; background: var(--accent);
+  color: color-mix(in srgb, var(--accent) 12%, #FFFFFF);
+  display: inline-flex; align-items: center;
+  transition: filter 0.15s ease, box-shadow 0.15s ease; }
+[data-theme="dark"] .primary-button { color: #052A26; }
+.primary-button:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 0 16px var(--glow); }
+
+/* ═══ 全局阻断条 ═══ */
+
+.global-blocker { display: flex; align-items: center; gap: 14px; padding: 12px 24px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--err) 85%, #000), color-mix(in srgb, var(--err) 60%, #000));
+  color: #FFF; }
+.global-blocker span { font-size: 13px; }
+.global-blocker .secondary-button { margin-left: auto; background: transparent; color: #FFF; border-color: rgba(255,255,255,0.6); }
+
+/* ═══ 页签：44px ═══ */
+
+.view-tabs { display: flex; gap: 4px; height: 44px; align-items: stretch; padding: 0 24px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-solid) 50%, transparent); }
+.inline-dag, .pending-fleet { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+.inline-dag.is-hidden, .pending-fleet.is-hidden { display: none; }
+.pending-fleet-note { margin: 0; color: var(--muted); font-size: 12.5px; }
+.inline-dag-run { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.inline-dag-run { overflow-x: auto; scrollbar-width: thin; }
+.dag-status { font-size: 12px; color: var(--muted); }
+.dag-problem { margin: -6px 0 12px; color: var(--err); font-size: 12.5px; }
+.dag-end-run { margin-left: auto; }
+/* 拓扑抽屉：下拉选中才出现，纵向不限高（完整显示一个 run），宽图只在图区内横滚 */
+.history-dag-drawer { margin: 0 16px 14px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+  overflow-x: auto; scrollbar-width: thin; }
+.history-dag-drawer.is-hidden { display: none; }
+.history-dag-drawer .dag-header { display: flex; align-items: center; gap: 12px; }
+/* 拓扑查看是独占模式：检索与列表退场，收起后回归 */
+.history-surface.is-dag-mode .filter-bar,
+.history-surface.is-dag-mode .history-list,
+.history-surface.is-dag-mode #history-range { display: none; }
+.tab-button { font: inherit; border: none; background: none; padding: 0 16px; cursor: pointer;
+  color: var(--muted); font-size: 13.5px; border-bottom: 2px solid transparent;
+  display: inline-flex; align-items: center; gap: 7px;
+  transition: color 0.18s ease, border-color 0.18s ease; }
+.tab-button:hover { color: var(--text); }
+.tab-button.is-active { color: var(--text); border-bottom-color: var(--accent);
+  text-shadow: 0 0 18px var(--glow); }
+.tab-button span { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+
+/* ═══ 主区布局：16px 栅格 ═══ */
+
+.page-shell { flex: 1; padding: 16px 24px 72px; min-height: 0; }
+.layout-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; max-width: 1560px; margin: 0 auto; }
+.view-panel { max-width: 1560px; margin: 0 auto; }
+
+.surface { background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease; }
+.surface:hover { border-color: color-mix(in srgb, var(--accent) 32%, var(--line)); box-shadow: var(--shadow-lift); }
+
+.surface-heading { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.surface-heading h3 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.02em; }
+.surface-heading-meta { display: flex; align-items: center; gap: 10px; }
+
+.rail-column { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+/* ═══ 徽章体系：22px 一把尺；天象图形由 app.js 双生成、主题切换显隐 ═══ */
+
+.transport-badge, .business-badge, .tag, .state-badge, .review-kind {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  box-sizing: border-box; height: 22px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-solid) 42%, transparent);
+  font-size: 11.5px; line-height: 1; white-space: nowrap; font-weight: 500;
+}
+.badge-glyph { width: 12px; height: 12px; flex: none; display: inline-flex; }
+.badge-glyph svg { width: 100%; height: 100%; display: block; }
+/* 昼夜图形显隐总规则：覆盖徽章/待复核/通知全部 .g-* 图形（只此一份） */
+[data-theme="dark"] .g-day { display: none; }
+[data-theme="light"] .g-night { display: none; }
+
+/* 状态配色（昼夜共用变量，图形各表其义） */
+.transport-badge, .business-badge, .tag { color: var(--muted); }
+.b-state-ok { color: color-mix(in srgb, var(--ok) 80%, var(--text)); }
+[data-theme="dark"] .b-state-ok .g-night svg { filter: drop-shadow(0 0 5px color-mix(in srgb, var(--ok) 90%, transparent)); }
+.b-state-warn { color: color-mix(in srgb, var(--gold) 55%, var(--text)); }
+[data-theme="dark"] .b-state-warn { color: #FFE0AC; }
+[data-theme="dark"] .b-state-warn .g-night svg { filter: drop-shadow(0 0 4px rgba(255,198,110,0.7)); }
+.b-state-err { color: var(--err-text); border-color: color-mix(in srgb, var(--err) 32%, var(--line));
+  background: color-mix(in srgb, var(--err) 8%, transparent); }
+.b-state-run { color: var(--info); }
+[data-theme="dark"] .b-state-run { color: #BCD8FF; }
+[data-theme="dark"] .b-state-run .g-night svg { filter: drop-shadow(0 0 6px rgba(127,180,255,0.9)); }
+.b-state-run .badge-glyph { animation: twinkle 1.8s ease-in-out infinite; }
+.b-state-mute { color: var(--muted); }
+
+.state-success { color: color-mix(in srgb, var(--ok) 80%, var(--text)); border-color: color-mix(in srgb, var(--ok) 42%, var(--line)); }
+.state-error { color: var(--err-text); border-color: color-mix(in srgb, var(--err) 32%, var(--line)); background: color-mix(in srgb, var(--err) 8%, transparent); }
+.state-loading { color: var(--warn); border-color: color-mix(in srgb, var(--gold) 48%, var(--line)); }
+.state-empty, .state-disabled { color: var(--muted); }
+
+/* ═══ 筛选 ═══ */
+
+.filter-bar { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.filter-bar select {
+  font: inherit; font-size: 12.5px; height: 32px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-solid) 42%, transparent);
+  color: var(--text);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+.filter-bar select:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--glow); }
+.filter-bar select option { background: var(--surface-solid); color: var(--text); }
+
+/* ═══ 任务列表 ═══ */
+
+.task-list { max-height: 62vh; overflow: auto; padding: 12px 16px;
+  display: flex; flex-direction: column; gap: 8px;
+  scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.task-list > * { flex: none; }
+
+/* 任务行：三列网格——标题弹性 + 92px + 118px 定宽徽章槽（整齐的心脏） */
+.task-row { min-height: 60px; border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-solid) 30%, transparent);
+  padding: 9px 14px; display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  border-left: 2px solid transparent; box-shadow: var(--shadow);
+  transition: box-shadow 0.18s ease; }
+.task-row:hover { box-shadow: var(--shadow-lift), 0 0 14px var(--glow); }
+.task-row[data-transport-state="running"], .task-row[data-business-state="running"] { border-left-color: var(--info); }
+.task-row[data-transport-state="done"] { border-left-color: color-mix(in srgb, var(--ok) 70%, transparent); }
+.task-row[data-transport-state="failed"], .task-row[data-business-state="failed"] { border-left-color: color-mix(in srgb, var(--err) 70%, transparent); }
+.task-row.is-invalid { border-left-color: var(--err); background: color-mix(in srgb, var(--err) 7%, transparent); }
+
+.task-line1 { display: grid; grid-template-columns: minmax(0, 1fr) 92px 118px auto; gap: 10px; align-items: center; }
+.task-title-button { font: inherit; font-size: 13px; font-weight: 500; text-align: left; cursor: pointer;
+  border: none; background: none; color: var(--text); padding: 0; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: color 0.15s ease; }
+.task-title-button:hover { color: var(--accent); }
+/* 徽标槽定宽（任务行 92/118px 列、历史 118px 列），徽标撑满槽位：
+   图标槽与文字居中、宽高恒定，右侧不再随字数参差 */
+.badge-slot .transport-badge, .badge-slot .business-badge { width: 100%; }
+.badge-slot { display: flex; justify-content: flex-end; min-width: 0; }
+.task-row-action { font: inherit; font-size: 11.5px; cursor: pointer; flex: none;
+  height: 22px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--err) 45%, var(--line)); background: none; color: var(--err-text);
+  transition: background 0.15s ease, color 0.15s ease; }
+.task-row-action:hover { background: color-mix(in srgb, var(--err) 80%, var(--text)); color: #FFF; border-color: transparent; }
+/* 动作槽恒占 52px：空槽塌 0 会让 92/118px 徽章列随行平移，混排列表错位 52px（三堂会审三庭同判） */
+.task-line1 .action-slot { display: flex; justify-content: flex-end; width: 52px; }
+
+/* 元数据单行不折行：折行让行高在 61/86 间跳（三堂会审 opus F-4 实测），溢出优先牺牲 meta-tail；
+   white-space 连裸文本节点一起钉住——flex nowrap 管不住匿名项的内部换行 */
+.task-line2 { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; overflow: hidden;
+  white-space: nowrap; font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
+.task-line2 > * { flex: none; }
+.task-line2 .meta-sep { opacity: 0.5; }
+.task-line2 .meta-error { color: var(--err-text); font-family: var(--sans);
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-line2 .meta-hl { color: var(--accent); font-weight: 600; }
+.task-line2 .meta-tool, .task-line2 .meta-count {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  padding: 0 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.task-line2 .meta-tool {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--muted);
+}
+.task-line2 .meta-count {
+  background: color-mix(in srgb, var(--surface-solid) 55%, transparent);
+  color: var(--muted);
+}
+/* tool-live-pulse 是生成器同步块（tools/gen-stepped-keyframes.mjs，测试锁定逐字一致），
+   当前无「正在使用」语义调用方；保留块本身以维持与生成器的同步契约。 */
+@keyframes tool-live-pulse {
+  0%{opacity:1;animation-timing-function:step-end} 4.17%{opacity:0.99;animation-timing-function:step-end} 6.25%{opacity:0.985;animation-timing-function:step-end} 8.33%{opacity:0.97;animation-timing-function:step-end} 10.42%{opacity:0.955;animation-timing-function:step-end} 12.5%{opacity:0.935;animation-timing-function:step-end}
+  14.58%{opacity:0.91;animation-timing-function:step-end} 16.67%{opacity:0.89;animation-timing-function:step-end} 18.75%{opacity:0.86;animation-timing-function:step-end} 20.83%{opacity:0.835;animation-timing-function:step-end} 22.92%{opacity:0.805;animation-timing-function:step-end} 25%{opacity:0.775;animation-timing-function:step-end}
+  27.08%{opacity:0.745;animation-timing-function:step-end} 29.17%{opacity:0.715;animation-timing-function:step-end} 31.25%{opacity:0.69;animation-timing-function:step-end} 33.33%{opacity:0.665;animation-timing-function:step-end} 35.42%{opacity:0.64;animation-timing-function:step-end} 37.5%{opacity:0.615;animation-timing-function:step-end}
+  39.58%{opacity:0.595;animation-timing-function:step-end} 41.67%{opacity:0.58;animation-timing-function:step-end} 43.75%{opacity:0.565;animation-timing-function:step-end} 45.83%{opacity:0.56;animation-timing-function:step-end} 47.92%{opacity:0.55;animation-timing-function:step-end} 54.17%{opacity:0.56;animation-timing-function:step-end}
+  56.25%{opacity:0.565;animation-timing-function:step-end} 58.33%{opacity:0.58;animation-timing-function:step-end} 60.42%{opacity:0.595;animation-timing-function:step-end} 62.5%{opacity:0.615;animation-timing-function:step-end} 64.58%{opacity:0.64;animation-timing-function:step-end} 66.67%{opacity:0.665;animation-timing-function:step-end}
+  68.75%{opacity:0.69;animation-timing-function:step-end} 70.83%{opacity:0.715;animation-timing-function:step-end} 72.92%{opacity:0.745;animation-timing-function:step-end} 75%{opacity:0.775;animation-timing-function:step-end} 77.08%{opacity:0.805;animation-timing-function:step-end} 79.17%{opacity:0.835;animation-timing-function:step-end}
+  81.25%{opacity:0.86;animation-timing-function:step-end} 83.33%{opacity:0.89;animation-timing-function:step-end} 85.42%{opacity:0.91;animation-timing-function:step-end} 87.5%{opacity:0.935;animation-timing-function:step-end} 89.58%{opacity:0.955;animation-timing-function:step-end} 91.67%{opacity:0.97;animation-timing-function:step-end}
+  93.75%{opacity:0.985;animation-timing-function:step-end} 95.83%{opacity:0.99;animation-timing-function:step-end} 97.92%{opacity:1;animation-timing-function:step-end} 100%{opacity:1}
+}
+.task-line2 .meta-tail { font-size: 11px; opacity: 0.85;
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ═══ 区域状态块 ═══ */
+
+.loading-state, .empty-state, .error-state, .disabled-state { padding: 22px 18px; font-size: 13px; color: var(--muted); text-align: center; }
+.empty-rich { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 30px 18px; }
+.empty-rich .empty-icon { font-size: 20px; color: var(--accent); opacity: 0.8; }
+.empty-rich p { margin: 0; font-size: 14px; color: var(--text); }
+.loading-state::after { content: "…"; animation: blink 1s linear infinite; }
+.error-state { color: var(--err-text); text-align: left; border-left: 3px solid var(--err); }
+.disabled-state { color: var(--warn); }
+
+/* ═══ 待复核 ═══ */
+
+/* .notifications-surface 半选择器被 tests/web/web.test.mjs 锚定为滚动契约断言；
+   通知流 DOM 已退役，但该选择器不可从本规则中移除 */
+.review-surface .region-content,
+.notifications-surface .region-content {
+  max-height: 300px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.region-content { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.region-tools, .history-tools { display: flex; align-items: center; gap: 10px; padding: 10px 12px 0; font-size: 12px; }
+.history-tools .tool-spacer, .region-tools .tool-spacer { flex: 1; }
+
+.review-item { display: grid; grid-template-columns: 16px 1fr auto; gap: 10px; align-items: start;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+.review-item:hover { border-color: var(--accent); box-shadow: 0 0 12px var(--glow); }
+.review-glyph { width: 16px; height: 16px; margin-top: 2px; }
+.review-glyph svg { width: 100%; height: 100%; display: block; }
+.review-item.is-stale { border-color: color-mix(in srgb, var(--err) 24%, var(--line)); }
+.review-copy { min-width: 0; }
+.review-copy .task-title-button { display: block; width: 100%; white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
+.review-group .review-item + .review-item { margin-top: 8px; }
+.review-copy strong { font-family: var(--mono); font-size: 12px;
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-copy p { margin: 2px 0; font-size: 12px; }
+.review-copy small { color: var(--muted); font-size: 11px; }
+.review-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.review-action { font: inherit; font-size: 11.5px; cursor: pointer;
+  height: 24px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--err) 45%, var(--line)); background: none; color: var(--err-text);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
+button.review-action:hover { background: color-mix(in srgb, var(--err) 80%, var(--text)); border-color: transparent; color: #FFF; }
+.review-group + .review-group { margin-top: 16px; }
+.review-group > h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+
+/* ═══ Fleet DAG：分层带自动排布 ═══ */
+
+.dag-header { display: flex; gap: 14px; align-items: baseline; margin-bottom: 18px; flex-wrap: wrap; }
+.dag-header > strong { font-family: var(--mono); font-size: 14px; }
+.dag-run-progress { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.dag-run-progress b { color: var(--accent); }
+
+.dag-stage { position: relative; min-height: 160px; display: flex; justify-content: safe center; }
+.dag-graph { position: relative; display: flex; gap: 88px; align-items: center; justify-content: center;
+  width: max-content; max-width: none; margin: 0 auto; }
+.dag-edges-svg { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 2; }
+
+.dag-band { position: relative; z-index: 1; border: 1px dashed color-mix(in srgb, var(--line) 130%, transparent);
+  border-radius: 16px; padding: 34px 12px 12px; background: color-mix(in srgb, var(--surface-solid) 14%, transparent); }
+.dag-band-tag { position: absolute; top: 10px; left: 14px; font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.12em; }
+.dag-band-grid { display: grid; gap: 10px; }
+
+.dag-node { position: relative; width: 232px; min-height: 64px; border-radius: 10px;
+  border: 1px solid var(--line); background: color-mix(in srgb, var(--surface-solid) 58%, transparent);
+  padding: 9px 12px; display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+.dag-node:hover { box-shadow: var(--shadow-lift), 0 0 16px var(--glow); }
+.dag-node .node-line1 { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.dag-node .node-mark { width: 10px; height: 10px; flex: none; }
+.dag-node .node-id { font-family: var(--mono); font-size: 11.5px; font-weight: 600; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dag-node .node-title { font-size: 11px; color: var(--muted); line-height: 1.35;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dag-node .node-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dag-node .node-err { font-family: var(--mono); font-size: 10.5px; color: var(--err-text); }
+.dag-node .node-stats { display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.dag-node .node-stats .stat-tool { color: var(--accent-2); }
+
+/* 星形节点标（夜=星象；昼=圆点回退） */
+.node-mark { border-radius: 50%; background: var(--muted); }
+[data-theme="dark"] .node-mark { border-radius: 0;
+  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%); }
+.dag-node[data-state="done"] { border-color: color-mix(in srgb, var(--ok) 48%, transparent); }
+.dag-node[data-state="done"] .node-mark { background: var(--ok); box-shadow: 0 0 9px color-mix(in srgb, var(--ok) 80%, transparent); }
+.dag-node[data-state="running"] { border-color: color-mix(in srgb, var(--info) 58%, transparent);
+  box-shadow: var(--shadow), 0 0 18px color-mix(in srgb, var(--info) 26%, transparent); }
+.dag-node[data-state="running"] .node-mark { background: var(--info); box-shadow: 0 0 10px var(--info); animation: pulse-soft 2s ease-in-out infinite; }
+.dag-node[data-state="failed"], .dag-node[data-state="error"] { border-color: color-mix(in srgb, var(--err) 52%, transparent); }
+.dag-node[data-state="failed"] .node-mark, .dag-node[data-state="error"] .node-mark { background: var(--err); }
+.dag-node[data-state="needs_parent_review"], .dag-node[data-state="blocked"], .dag-node[data-state="waiting"] { border-color: color-mix(in srgb, var(--gold) 52%, transparent); }
+.dag-node[data-state="needs_parent_review"] .node-mark, .dag-node[data-state="blocked"] .node-mark, .dag-node[data-state="waiting"] .node-mark {
+  background: var(--gold); animation: pulse-soft 2.4s ease-in-out infinite; }
+
+.dag-edge-line { fill: none; stroke: var(--accent-2); stroke-width: 2; opacity: 0.75;
+  filter: drop-shadow(0 0 5px var(--glow)); }
+.dag-edge-line.edge-running { stroke: var(--info); stroke-dasharray: 7 7; animation: wire-flow 1.8s linear infinite; opacity: 1; }
+.dag-edge-line.edge-done { stroke: var(--accent); opacity: 0.65; }
+.dag-edge-line.edge-idle { stroke: var(--muted); stroke-width: 1.5; opacity: 0.45; filter: none; }
+
+/* ═══ 历史 ═══ */
+
+.history-surface { display: flex; flex-direction: column; height: calc(100dvh - 150px); min-height: 300px; }
+.history-surface > .surface-heading, .history-surface > .filter-bar { flex-shrink: 0; }
+.history-list { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto;
+  padding: 12px 16px; gap: 8px; scrollbar-width: thin; }
+.history-list > * { flex-shrink: 0; }
+.history-pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 12px; flex-shrink: 0; flex-wrap: wrap; }
+.history-pagination > div { display: flex; align-items: center; gap: 12px; }
+.history-pagination button { margin: 0; }
+.history-surface.is-dag-mode .history-pagination { display: none; }
+.history-item { display: grid; grid-template-columns: minmax(0, 1fr) 118px; gap: 12px; align-items: center;
+  padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2);
+  transition: border-color 0.15s ease; }
+.history-item:hover { border-color: var(--accent); }
+.history-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.history-title-button { font: inherit; font-size: 13px; font-weight: 500; text-align: left; cursor: pointer;
+  border: none; background: none; color: var(--text); padding: 0; min-width: 0; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  transition: color 0.15s ease; }
+.history-title-button:hover { color: var(--accent); }
+.history-copy p { display: inline; margin: 0 10px 0 0; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.history-copy small { color: var(--muted); font-size: 12px; }
+.history-metadata { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 8px; color: var(--muted); font: 12px/1.5 var(--sans); }
+.history-metadata span { overflow-wrap: anywhere; }
+.history-item .badge-slot { justify-content: flex-end; }
+
+/* ═══ 详情抽屉 ═══ */
+
+.detail-drawer { position: fixed; inset: 0; z-index: 40; }
+.drawer-backdrop { position: absolute; inset: 0; background: var(--backdrop); }
+.drawer-panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(560px, 92vw);
+  background: var(--surface-solid);
+  border-left: 1px solid var(--line); box-shadow: -18px 0 48px rgba(0, 0, 0, 0.3);
+  display: flex; flex-direction: column; animation: slide-in 0.24s ease both; }
+.drawer-heading { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.drawer-heading h2 { margin: 0; font-size: 15px; }
+.close-button { font-size: 20px; border: none; background: none; color: var(--muted); cursor: pointer; }
+.close-button:hover { color: var(--err); }
+.drawer-content { flex: 1; min-height: 0; padding: 16px 18px; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
+.drawer-heading { flex-shrink: 0; }
+.detail-grid { min-width: 0; }
+.detail-field { min-width: 0; overflow-wrap: anywhere; }
+.detail-id-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.detail-id { font-family: var(--mono); font-size: 11px; color: var(--muted); word-break: break-all; }
+.detail-copy { flex: none; }
+.detail-hero h3 { margin: 6px 0 10px; font-size: 16px; font-weight: 600; line-height: 1.4; }
+.detail-badges { display: flex; gap: 6px; }
+.detail-error { border: 1px solid color-mix(in srgb, var(--err) 45%, var(--line)); border-radius: 10px;
+  padding: 10px 12px; font-size: 12px; color: var(--err-text);
+  background: color-mix(in srgb, var(--err) 7%, transparent); word-break: break-all; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0; }
+.detail-field dt { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.detail-field dd { margin: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+.detail-section h4 { margin: 0 0 6px; font-size: 12px; color: var(--muted); font-weight: 500; }
+.detail-path { display: block; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere;
+  padding: 6px 9px; margin: 2px 0; background: var(--surface-2); border-radius: 8px; }
+.event-line { display: block; font-family: var(--mono); font-size: 11px; padding: 3px 0; color: var(--muted); }
+.event-line strong { color: var(--text); margin-right: 8px; }
+.detail-actions { display: flex; gap: 10px; }
+.detail-events summary { cursor: pointer; font-size: 12px; color: var(--accent); padding: 2px 0; }
+.detail-events summary .muted { margin-left: 6px; }
+.detail-events[open] summary { margin-bottom: 6px; }
+
+/* ═══ 取消确认弹窗 ═══ */
+
+.modal-layer { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; }
+.modal-backdrop { position: absolute; inset: 0; background: var(--backdrop); }
+.confirm-modal { position: relative; width: min(440px, 90vw);
+  background: color-mix(in srgb, var(--surface-solid) 96%, transparent);
+  border: 1px solid var(--line); border-radius: 14px; padding: 22px;
+  box-shadow: 0 28px 68px rgba(0, 0, 0, 0.4); animation: pop 0.2s ease both; }
+.confirm-modal h2 { margin: 0 0 8px; font-size: 15px; }
+.confirm-modal p { margin: 0 0 16px; font-size: 13px; color: var(--muted); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+/* ═══ Toast ═══ */
+
+.toast-stack { position: fixed; right: 20px; bottom: 20px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
+.toast { padding: 10px 15px; background: color-mix(in srgb, var(--surface-solid) 96%, transparent);
+  color: var(--text); border: 1px solid var(--line); border-left: 3px solid var(--ok);
+  border-radius: 10px; font-size: 13px; max-width: 380px; box-shadow: var(--shadow-lift);
+  animation: rise 0.22s ease both; }
+.toast.error { border-left-color: var(--err); }
+
+/* ═══ 配置页：角色与模型 · 角色资源 · 导入范围 · 模型档位 ═══ */
+
+.cfg { --c-row: color-mix(in srgb, var(--line) 55%, transparent); --c-soft: color-mix(in srgb, var(--muted) 72%, transparent);
+  --c-accent-soft: color-mix(in srgb, var(--accent) 16%, transparent); --c-field: color-mix(in srgb, var(--surface-solid) 72%, var(--bg));
+  max-width: 1280px; display: grid; gap: 16px; align-content: start; }
+.cfg.is-busy { pointer-events: none; }
+.cfg.is-busy .group, .cfg.is-busy .imp-grid, .cfg.is-busy > .role { opacity: 0.6; }
+.cfg .mono { font-family: var(--mono); font-size: 12.5px; }
+.cfg .soft { color: var(--c-soft); }
+.cfg .grow { flex: 1; }
+.cfg h1 { font-size: 18px; margin: 0; white-space: nowrap; }
+.cfg h2 { font-size: 14px; margin: 4px 0 0; color: var(--muted); font-weight: 600; }
+.cfg h3 { font-size: 13px; margin: 8px 0 2px; color: var(--muted); font-weight: 600; }
+.cfg .note { color: var(--muted); font-size: 13px; }
+.cfg .label-line { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.cfg .label-line button { align-self: center; }
+.cfg-msg { margin: 0; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
+  color: var(--muted); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.cfg-msg li { margin-left: 16px; }
+.cfg-msg button { align-self: flex-start; }
+.cfg-msg.is-error { color: var(--err-text); border-color: color-mix(in srgb, var(--err) 45%, var(--line)); }
+.cfg-msg.is-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 16px; font-size: 13px; color: var(--muted); }
+.legend b { color: var(--text); font-weight: 600; margin-right: 8px; }
+.cfg .group { display: grid; gap: 10px; }
+.cfg .role { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.cfg .role-head { display: grid; grid-template-columns: 230px 1fr auto; gap: 16px; align-items: baseline; padding: 12px 18px; cursor: pointer; }
+.cfg .role-head.simple { cursor: default; grid-template-columns: auto 1fr; }
+.cfg .role-name { font-size: 15px; font-weight: 600; }
+.cfg .role-id { color: var(--c-soft); font-size: 12px; margin-left: 8px; font-weight: 400; font-family: var(--mono); }
+.cfg .role-does { color: var(--muted); }
+.cfg .role-default { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.cfg .role-default b { font-family: var(--mono); font-weight: 500; color: var(--text); }
+.cfg .role-default b.warn { color: var(--err-text); }
+.cfg .role.collapsed .role-body { display: none; }
+.cfg .role-body { border-top: 1px solid var(--line); padding: 12px 18px 14px; display: grid; gap: 10px; min-width: 0; }
+.cfg .table-scroll { overflow-x: auto; }
+.cfg .caps { display: flex; flex-wrap: wrap; gap: 8px; }
+.cfg .cap { border: 1px solid var(--line); border-radius: 999px; padding: 2px 12px; font-size: 13px; background: var(--c-field); white-space: nowrap; }
+.cfg .cap .arrow { color: var(--c-soft); margin: 0 6px; }
+.cfg .cap .m { font-family: var(--mono); font-size: 12px; }
+.cfg .cap .inh { color: var(--c-soft); font-size: 12px; margin-left: 6px; }
+.cfg .cap .own { color: var(--warn); font-size: 12px; margin-left: 6px; }
+.cfg .cap.is-miss { border-color: color-mix(in srgb, var(--err) 50%, var(--line)); background: color-mix(in srgb, var(--err) 10%, transparent); }
+.cfg .cap .miss { color: var(--err-text); font-size: 12px; }
+.cfg table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+/* 固定列之和 1010px，适用场景列至少留 170px；卡片放不下时表格在卡片内横向滚动。 */
+.cfg table.picks { min-width: 1236px; }
+.cfg table.picks.compact { min-width: 906px; }
+.cfg th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 4px 8px; border-bottom: 1px solid var(--line); vertical-align: bottom; }
+.cfg th.grp { text-align: center; }
+.cfg th.c, .cfg td.c { text-align: center; }
+.cfg td { padding: 6px; border-bottom: 1px solid var(--c-row); vertical-align: middle; }
+.cfg tbody tr:last-child td { border-bottom: 0; }
+.cfg select, .cfg input[type=text] { font: inherit; border: 1px solid var(--line); background: var(--c-field); border-radius: 6px;
+  padding: 3px 8px; width: 100%; height: 30px; color: var(--text); min-width: 0; }
+.cfg select.mono, .cfg input.mono { font-family: var(--mono); font-size: 12.5px; }
+.cfg input.pid { color: var(--muted); }
+.cfg select:focus-visible, .cfg input:focus-visible, .cfg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cfg .is-invalid { border-color: var(--err) !important; box-shadow: 0 0 0 1px var(--err); }
+.cfg select.is-warn { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); color: var(--warn); }
+.cfg .order { white-space: nowrap; }
+.cfg .grip { color: var(--c-soft); cursor: grab; margin-right: 4px; letter-spacing: -3px; user-select: none; }
+.cfg .ic, .cfg .dot, .cfg .add, .cfg .link, .cfg .seg button, .cfg .lv button { font: inherit; cursor: pointer; }
+.cfg .ic { padding: 0; width: 22px; height: 22px; line-height: 20px; font-size: 12px; color: var(--muted); border: 1px solid var(--line);
+  border-radius: 6px; background: var(--c-field); }
+.cfg .ic:disabled { opacity: 0.35; cursor: default; }
+.cfg .ic.del { font-size: 14px; }
+.cfg .ic.del:hover:not(:disabled) { color: var(--err-text); border-color: color-mix(in srgb, var(--err) 50%, var(--line)); }
+.cfg .dot { width: 16px; height: 16px; padding: 0; border-radius: 50%; border: 1.5px solid var(--c-soft); background: var(--c-field); vertical-align: middle; }
+.cfg .dot.on { background: var(--accent); border-color: var(--accent); }
+.cfg .add, .cfg .link { justify-self: start; border: 0; background: none; color: var(--muted); padding: 2px 0; font-size: 13px; }
+.cfg .add:hover, .cfg .link:hover { color: var(--text); }
+.cfg .defon { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding-bottom: 10px; border-bottom: 1px dashed var(--line); }
+.cfg .defon-t { font-size: 13px; font-weight: 600; color: var(--muted); margin-right: 4px; }
+.cfg .chip { display: inline-flex; gap: 4px; align-items: center; font-size: 13px; }
+.cfg .chip input, .cfg .item input, .cfg .radio input { accent-color: var(--accent); margin: 0; }
+.cfg .chip.is-off { color: var(--c-soft); }
+.cfg .chip .why { font-size: 12px; color: var(--warn); margin-left: 2px; }
+.cfg .res-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.cfg .res { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.cfg .res h3:first-child { margin-top: 0; }
+.cfg .item { display: grid; grid-template-columns: 18px 1fr; gap: 6px; align-items: start; font-size: 13px; }
+.cfg .item input { margin-top: 3px; }
+.cfg .item .d { color: var(--c-soft); font-size: 12px; overflow-wrap: anywhere; }
+.cfg .sub { font-size: 12px; color: var(--c-soft); }
+.cfg .cap-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.cfg .cap-toggle { font: inherit; font-size: 13px; color: var(--text); cursor: pointer; }
+.cfg .cap-toggle.on { border-color: var(--accent); background: var(--c-accent-soft); color: var(--accent); font-weight: 600; }
+.cfg .scope-note { color: var(--accent); }
+.cfg .res-cols.is-narrowing { border-left: 2px solid var(--accent); padding-left: 12px; }
+.cfg .tag { height: 18px; padding: 0 6px; font-size: 11px; font-family: var(--sans); vertical-align: 1px; }
+.cfg .radio { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; }
+.cfg .imp-grid { display: grid; gap: 16px; }
+.cfg .raw { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cfg .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.cfg .seg button { border: 0; border-radius: 0; padding: 3px 10px; font-size: 13px; color: var(--muted); background: var(--c-field); }
+.cfg .seg button + button { border-left: 1px solid var(--line); }
+.cfg .seg button.on { background: var(--c-accent-soft); color: var(--accent); font-weight: 600; }
+.cfg .seg.locked button { cursor: default; }
+.cfg .seg.locked button.on { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--muted); }
+.cfg .fold-row td { color: var(--muted); }
+.cfg .lv { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.cfg .lv button { padding: 1px 8px; font-size: 12px; font-family: var(--mono); color: var(--c-soft); background: var(--c-field);
+  border: 1px solid var(--line); border-radius: 6px; }
+.cfg .lv button.on { background: var(--c-accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent); }
+.cfg tr.is-invalid td { background: color-mix(in srgb, var(--err) 8%, transparent); }
+.cfg tr.prov td { font-weight: 600; color: var(--muted); font-size: 12px; padding-top: 12px; }
+
+.sync-status { max-width: 1560px; margin: 12px auto 0; width: calc(100% - 48px); padding: 8px 14px; border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); color: var(--warn); }
+.sync-line { display: flex; align-items: center; gap: 10px; }
+.sync-line .txt { flex: 1; }
+.sync-details { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+
+@media (max-width: 900px) {
+  .cfg .role-head { grid-template-columns: 1fr; gap: 2px; }
+  .cfg .res-cols, .legend { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) { .sync-status { width: calc(100% - 24px); } }
+
+/* ═══ 动效 ═══ */
+
+/* 动效关闭时按钮灰显：状态一眼可辨 */
+.icon-button[data-action="sky-motion"][aria-pressed="false"] {
+  opacity: 0.45; filter: grayscale(1); }
+
+/* 无限循环动画一律阶梯化：连续插值会逼合成器以显示器刷新率（165Hz 屏即 165fps）持续出帧，
+   哪怕动画目标只是个 8px 圆点——帧生产本身就是集显大头（实测动效全关仍烧 10+ 个点）。
+   改为逐段保持(step-end)的余弦包络采样后，值不变的帧合成器直接跳过，帧生产降到
+   ~3-27fps（步数按各 keyframes 的最快使用点反推，更新率 ≤27 次/秒）。
+   采样公式 v(t)=lo+(1-lo)(0.5+0.5cos 2πt)，opacity 量化 0.005 / 位移量化 0.25px，
+   单步差恒在感知阈下；多停靠点块由 tools/gen-stepped-keyframes.mjs 生成并有测试锁同步，
+   改包络请改生成器重出，勿手调中间停靠点。
+   一次性动画（rise/slide-in/pop/meteor 掠段）保持连续插值：短促且要顺滑。 */
+@keyframes pulse-soft {
+  0%{opacity:1;animation-timing-function:step-end} 4.17%{opacity:0.99;animation-timing-function:step-end} 6.25%{opacity:0.985;animation-timing-function:step-end} 8.33%{opacity:0.97;animation-timing-function:step-end} 10.42%{opacity:0.955;animation-timing-function:step-end} 12.5%{opacity:0.935;animation-timing-function:step-end}
+  14.58%{opacity:0.91;animation-timing-function:step-end} 16.67%{opacity:0.89;animation-timing-function:step-end} 18.75%{opacity:0.86;animation-timing-function:step-end} 20.83%{opacity:0.835;animation-timing-function:step-end} 22.92%{opacity:0.805;animation-timing-function:step-end} 25%{opacity:0.775;animation-timing-function:step-end}
+  27.08%{opacity:0.745;animation-timing-function:step-end} 29.17%{opacity:0.715;animation-timing-function:step-end} 31.25%{opacity:0.69;animation-timing-function:step-end} 33.33%{opacity:0.665;animation-timing-function:step-end} 35.42%{opacity:0.64;animation-timing-function:step-end} 37.5%{opacity:0.615;animation-timing-function:step-end}
+  39.58%{opacity:0.595;animation-timing-function:step-end} 41.67%{opacity:0.58;animation-timing-function:step-end} 43.75%{opacity:0.565;animation-timing-function:step-end} 45.83%{opacity:0.56;animation-timing-function:step-end} 47.92%{opacity:0.55;animation-timing-function:step-end} 54.17%{opacity:0.56;animation-timing-function:step-end}
+  56.25%{opacity:0.565;animation-timing-function:step-end} 58.33%{opacity:0.58;animation-timing-function:step-end} 60.42%{opacity:0.595;animation-timing-function:step-end} 62.5%{opacity:0.615;animation-timing-function:step-end} 64.58%{opacity:0.64;animation-timing-function:step-end} 66.67%{opacity:0.665;animation-timing-function:step-end}
+  68.75%{opacity:0.69;animation-timing-function:step-end} 70.83%{opacity:0.715;animation-timing-function:step-end} 72.92%{opacity:0.745;animation-timing-function:step-end} 75%{opacity:0.775;animation-timing-function:step-end} 77.08%{opacity:0.805;animation-timing-function:step-end} 79.17%{opacity:0.835;animation-timing-function:step-end}
+  81.25%{opacity:0.86;animation-timing-function:step-end} 83.33%{opacity:0.89;animation-timing-function:step-end} 85.42%{opacity:0.91;animation-timing-function:step-end} 87.5%{opacity:0.935;animation-timing-function:step-end} 89.58%{opacity:0.955;animation-timing-function:step-end} 91.67%{opacity:0.97;animation-timing-function:step-end}
+  93.75%{opacity:0.985;animation-timing-function:step-end} 95.83%{opacity:0.99;animation-timing-function:step-end} 97.92%{opacity:1;animation-timing-function:step-end} 100%{opacity:1}
+}
+@keyframes blink {
+  0%{opacity:1;animation-timing-function:step-end} 4.17%{opacity:0.985;animation-timing-function:step-end} 8.33%{opacity:0.95;animation-timing-function:step-end} 12.5%{opacity:0.89;animation-timing-function:step-end} 16.67%{opacity:0.815;animation-timing-function:step-end} 20.83%{opacity:0.72;animation-timing-function:step-end}
+  25%{opacity:0.625;animation-timing-function:step-end} 29.17%{opacity:0.53;animation-timing-function:step-end} 33.33%{opacity:0.44;animation-timing-function:step-end} 37.5%{opacity:0.36;animation-timing-function:step-end} 41.67%{opacity:0.3;animation-timing-function:step-end} 45.83%{opacity:0.265;animation-timing-function:step-end}
+  50%{opacity:0.25;animation-timing-function:step-end} 54.17%{opacity:0.265;animation-timing-function:step-end} 58.33%{opacity:0.3;animation-timing-function:step-end} 62.5%{opacity:0.36;animation-timing-function:step-end} 66.67%{opacity:0.44;animation-timing-function:step-end} 70.83%{opacity:0.53;animation-timing-function:step-end}
+  75%{opacity:0.625;animation-timing-function:step-end} 79.17%{opacity:0.72;animation-timing-function:step-end} 83.33%{opacity:0.815;animation-timing-function:step-end} 87.5%{opacity:0.89;animation-timing-function:step-end} 91.67%{opacity:0.95;animation-timing-function:step-end} 95.83%{opacity:0.985;animation-timing-function:step-end}
+  100%{opacity:1}
+}
+@keyframes twinkle {
+  0%{opacity:1;animation-timing-function:step-end} 4.17%{opacity:0.995;animation-timing-function:step-end} 6.25%{opacity:0.99;animation-timing-function:step-end} 8.33%{opacity:0.98;animation-timing-function:step-end} 10.42%{opacity:0.97;animation-timing-function:step-end} 12.5%{opacity:0.96;animation-timing-function:step-end}
+  14.58%{opacity:0.945;animation-timing-function:step-end} 16.67%{opacity:0.93;animation-timing-function:step-end} 18.75%{opacity:0.915;animation-timing-function:step-end} 20.83%{opacity:0.895;animation-timing-function:step-end} 22.92%{opacity:0.88;animation-timing-function:step-end} 25%{opacity:0.86;animation-timing-function:step-end}
+  27.08%{opacity:0.84;animation-timing-function:step-end} 29.17%{opacity:0.825;animation-timing-function:step-end} 31.25%{opacity:0.805;animation-timing-function:step-end} 33.33%{opacity:0.79;animation-timing-function:step-end} 35.42%{opacity:0.775;animation-timing-function:step-end} 37.5%{opacity:0.76;animation-timing-function:step-end}
+  39.58%{opacity:0.75;animation-timing-function:step-end} 41.67%{opacity:0.74;animation-timing-function:step-end} 43.75%{opacity:0.73;animation-timing-function:step-end} 45.83%{opacity:0.725;animation-timing-function:step-end} 47.92%{opacity:0.72;animation-timing-function:step-end} 54.17%{opacity:0.725;animation-timing-function:step-end}
+  56.25%{opacity:0.73;animation-timing-function:step-end} 58.33%{opacity:0.74;animation-timing-function:step-end} 60.42%{opacity:0.75;animation-timing-function:step-end} 62.5%{opacity:0.76;animation-timing-function:step-end} 64.58%{opacity:0.775;animation-timing-function:step-end} 66.67%{opacity:0.79;animation-timing-function:step-end}
+  68.75%{opacity:0.805;animation-timing-function:step-end} 70.83%{opacity:0.825;animation-timing-function:step-end} 72.92%{opacity:0.84;animation-timing-function:step-end} 75%{opacity:0.86;animation-timing-function:step-end} 77.08%{opacity:0.88;animation-timing-function:step-end} 79.17%{opacity:0.895;animation-timing-function:step-end}
+  81.25%{opacity:0.915;animation-timing-function:step-end} 83.33%{opacity:0.93;animation-timing-function:step-end} 85.42%{opacity:0.945;animation-timing-function:step-end} 87.5%{opacity:0.96;animation-timing-function:step-end} 89.58%{opacity:0.97;animation-timing-function:step-end} 91.67%{opacity:0.98;animation-timing-function:step-end}
+  93.75%{opacity:0.99;animation-timing-function:step-end} 95.83%{opacity:0.995;animation-timing-function:step-end} 97.92%{opacity:1;animation-timing-function:step-end} 100%{opacity:1}
+}
+@keyframes rise { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slide-in { from { transform: translateX(28px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes pop { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+/* 1px/步的蚂蚁线，重绘频率 7.8Hz；连续插值版本是每帧重绘 DAG SVG 的大户 */
+@keyframes wire-flow { from { stroke-dashoffset: 0; animation-timing-function: steps(14); } to { stroke-dashoffset: -14; } }
+@keyframes float-y {
+  0%{transform:translateY(0px);animation-timing-function:step-end} 4.17%{transform:translateY(-0.25px);animation-timing-function:step-end} 7.29%{transform:translateY(-0.5px);animation-timing-function:step-end} 9.38%{transform:translateY(-0.75px);animation-timing-function:step-end}
+  10.42%{transform:translateY(-1px);animation-timing-function:step-end} 12.5%{transform:translateY(-1.25px);animation-timing-function:step-end} 13.54%{transform:translateY(-1.5px);animation-timing-function:step-end} 14.58%{transform:translateY(-1.75px);animation-timing-function:step-end}
+  15.63%{transform:translateY(-2px);animation-timing-function:step-end} 16.67%{transform:translateY(-2.25px);animation-timing-function:step-end} 17.71%{transform:translateY(-2.5px);animation-timing-function:step-end} 18.75%{transform:translateY(-2.75px);animation-timing-function:step-end}
+  19.79%{transform:translateY(-3px);animation-timing-function:step-end} 20.83%{transform:translateY(-3.25px);animation-timing-function:step-end} 21.88%{transform:translateY(-3.5px);animation-timing-function:step-end} 22.92%{transform:translateY(-4px);animation-timing-function:step-end}
+  23.96%{transform:translateY(-4.25px);animation-timing-function:step-end} 25%{transform:translateY(-4.5px);animation-timing-function:step-end} 26.04%{transform:translateY(-4.75px);animation-timing-function:step-end} 27.08%{transform:translateY(-5px);animation-timing-function:step-end}
+  28.13%{transform:translateY(-5.5px);animation-timing-function:step-end} 29.17%{transform:translateY(-5.75px);animation-timing-function:step-end} 30.21%{transform:translateY(-6px);animation-timing-function:step-end} 31.25%{transform:translateY(-6.25px);animation-timing-function:step-end}
+  32.29%{transform:translateY(-6.5px);animation-timing-function:step-end} 33.33%{transform:translateY(-6.75px);animation-timing-function:step-end} 34.38%{transform:translateY(-7px);animation-timing-function:step-end} 35.42%{transform:translateY(-7.25px);animation-timing-function:step-end}
+  36.46%{transform:translateY(-7.5px);animation-timing-function:step-end} 37.5%{transform:translateY(-7.75px);animation-timing-function:step-end} 38.54%{transform:translateY(-8px);animation-timing-function:step-end} 40.63%{transform:translateY(-8.25px);animation-timing-function:step-end}
+  41.67%{transform:translateY(-8.5px);animation-timing-function:step-end} 43.75%{transform:translateY(-8.75px);animation-timing-function:step-end} 46.88%{transform:translateY(-9px);animation-timing-function:step-end} 54.17%{transform:translateY(-8.75px);animation-timing-function:step-end}
+  57.29%{transform:translateY(-8.5px);animation-timing-function:step-end} 59.38%{transform:translateY(-8.25px);animation-timing-function:step-end} 60.42%{transform:translateY(-8px);animation-timing-function:step-end} 62.5%{transform:translateY(-7.75px);animation-timing-function:step-end}
+  63.54%{transform:translateY(-7.5px);animation-timing-function:step-end} 64.58%{transform:translateY(-7.25px);animation-timing-function:step-end} 65.63%{transform:translateY(-7px);animation-timing-function:step-end} 66.67%{transform:translateY(-6.75px);animation-timing-function:step-end}
+  67.71%{transform:translateY(-6.5px);animation-timing-function:step-end} 68.75%{transform:translateY(-6.25px);animation-timing-function:step-end} 69.79%{transform:translateY(-6px);animation-timing-function:step-end} 70.83%{transform:translateY(-5.75px);animation-timing-function:step-end}
+  71.88%{transform:translateY(-5.5px);animation-timing-function:step-end} 72.92%{transform:translateY(-5px);animation-timing-function:step-end} 73.96%{transform:translateY(-4.75px);animation-timing-function:step-end} 75%{transform:translateY(-4.5px);animation-timing-function:step-end}
+  76.04%{transform:translateY(-4.25px);animation-timing-function:step-end} 77.08%{transform:translateY(-4px);animation-timing-function:step-end} 78.13%{transform:translateY(-3.5px);animation-timing-function:step-end} 79.17%{transform:translateY(-3.25px);animation-timing-function:step-end}
+  80.21%{transform:translateY(-3px);animation-timing-function:step-end} 81.25%{transform:translateY(-2.75px);animation-timing-function:step-end} 82.29%{transform:translateY(-2.5px);animation-timing-function:step-end} 83.33%{transform:translateY(-2.25px);animation-timing-function:step-end}
+  84.38%{transform:translateY(-2px);animation-timing-function:step-end} 85.42%{transform:translateY(-1.75px);animation-timing-function:step-end} 86.46%{transform:translateY(-1.5px);animation-timing-function:step-end} 87.5%{transform:translateY(-1.25px);animation-timing-function:step-end}
+  88.54%{transform:translateY(-1px);animation-timing-function:step-end} 90.63%{transform:translateY(-0.75px);animation-timing-function:step-end} 91.67%{transform:translateY(-0.5px);animation-timing-function:step-end} 93.75%{transform:translateY(-0.25px);animation-timing-function:step-end}
+  96.88%{transform:translateY(0px);animation-timing-function:step-end} 100%{transform:translateY(0px)}
+}
+/* 0.5°/步（光芒尖端约 0.8px 位移），15.7Hz */
+@keyframes spin-slow { from { transform: rotate(0deg); animation-timing-function: steps(720); } to { transform: rotate(360deg); } }
+/* 0.5px/步，约 3.4Hz（38s/47s 周期） */
+@keyframes drift-x { from { transform: translateX(0); animation-timing-function: steps(128, jump-none); } to { transform: translateX(64px); } }
+@keyframes meteor {
+  0%, 55% { opacity: 0; transform: translate(0, 0) rotate(-24deg); }
+  58% { opacity: 1; }
+  66% { opacity: 0; transform: translate(-340px, 150px) rotate(-24deg); }
+  /* 100% 显式钉住终点位形：不写则 66%→100% 会在 opacity:0 下悄悄插值回原位，白出 3.7s 帧 */
+  100% { opacity: 0; transform: translate(-340px, 150px) rotate(-24deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+/* ═══ 响应式：≤720px 手机单列 ═══ */
+
+@media (max-width: 980px) {
+  .layout-grid { grid-template-columns: 1fr; }
+  .rail-column { flex-direction: row; }
+  .rail-column .surface { flex: 1; }
+  .summary-chips { display: none; }
+  .dag-graph { gap: 44px; }
+}
+
+@media (max-width: 720px) {
+  .topbar { padding: 0 14px; gap: 8px; }
+  .topbar-meta { display: none; }
+  .brand .brand-sub { display: none; }
+  .view-tabs { padding: 0 10px; overflow-x: auto; scrollbar-width: none; }
+  .tab-button { padding: 0 12px; white-space: nowrap; }
+  .page-shell { padding: 12px 12px 64px; }
+  .rail-column { flex-direction: column; }
+  .task-list { max-height: none; padding: 10px; }
+  .task-row { min-height: 44px; padding: 12px; }
+  .task-line2 { flex-wrap: wrap; overflow: visible; white-space: normal; } /* 窄屏信息完整优先于行高一致 */
+  .task-line1 { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .task-title-button { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .badge-slot { justify-content: flex-start; }
+  /* 窄屏徽标回到内容宽：单列布局下槽位满宽，撑满会把徽标拉成通栏胶囊 */
+  .badge-slot .transport-badge, .badge-slot .business-badge { width: auto; }
+  .task-line1 .action-slot { width: auto; justify-content: flex-start; }
+  .filter-bar { padding: 10px 12px; }
+  .sky-moon { width: 52px; height: 52px; right: 16px; top: 140px; }
+  .sky-sun { width: 56px; height: 56px; right: 16px; }
+  .sky-cloud.b { display: none; }
+  .dag-node { width: 200px; }
+  .dag-graph { flex-direction: column; gap: 28px; align-items: center; }
+  .history-item { grid-template-columns: minmax(0, 1fr); }
+  .history-item .badge-slot { justify-content: flex-start; }
+}

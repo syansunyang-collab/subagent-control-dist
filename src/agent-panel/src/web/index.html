@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="panel-token" content="__PANEL_TOKEN__">
+    <link rel="icon" href="data:,">
+    <title>异步运行台 · Agent Panel</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="sky" aria-hidden="true">
+      <div class="sky-stars"></div>
+      <div class="sky-moon"><div class="halo"></div><div class="body"></div><div class="crater" style="left:22%;top:30%;width:13px;height:13px"></div><div class="crater" style="left:55%;top:52%;width:8px;height:8px"></div><div class="crater" style="left:38%;top:66%;width:6px;height:6px"></div></div>
+      <div class="sky-meteor"></div>
+      <div class="sky-sun"><div class="halo"></div><div class="rays"><svg viewBox="0 0 136 136" fill="none"><g stroke="#F4B653" stroke-width="3" stroke-linecap="round" opacity="0.85"><path d="M68 2v16"/><path d="M68 118v16"/><path d="M2 68h16"/><path d="M118 68h16"/><path d="M21 21l11 11"/><path d="M104 104l11 11"/><path d="M115 21l-11 11"/><path d="M32 104 21 115"/></g></svg></div><div class="body"></div></div>
+      <div class="sky-cloud a"><i style="left:0;top:18px;width:110px;height:34px"></i><i style="left:44px;top:0;width:84px;height:44px"></i><i style="left:104px;top:14px;width:86px;height:32px"></i></div>
+      <div class="sky-cloud b"><i style="left:0;top:14px;width:86px;height:28px"></i><i style="left:36px;top:0;width:66px;height:36px"></i><i style="left:82px;top:12px;width:66px;height:26px"></i></div>
+      <div class="sky-skyline" aria-hidden="true"><svg viewBox="0 0 1440 200" preserveAspectRatio="xMidYMax slice">
+        <g class="b-back">
+          <rect x="26" y="92" width="88" height="108"/><rect x="150" y="70" width="72" height="130"/>
+          <rect x="252" y="110" width="64" height="90"/><rect x="410" y="84" width="92" height="116"/>
+          <rect x="560" y="60" width="66" height="140"/><rect x="700" y="100" width="84" height="100"/>
+          <rect x="842" y="76" width="70" height="124"/><rect x="1010" y="94" width="92" height="106"/>
+          <rect x="1168" y="66" width="64" height="134"/><rect x="1306" y="102" width="88" height="98"/>
+          <rect x="188" y="58" width="4" height="14"/><rect x="590" y="46" width="4" height="16"/><rect x="1196" y="52" width="4" height="16"/>
+        </g>
+        <g class="b-front">
+          <rect x="0" y="86" width="80" height="114"/>
+          <rect x="96" y="120" width="52" height="80"/>
+          <rect x="166" y="52" width="92" height="148"/><rect x="206" y="38" width="4" height="16"/>
+          <rect x="278" y="132" width="60" height="68"/>
+          <rect x="356" y="78" width="86" height="122"/><rect x="372" y="66" width="26" height="14"/>
+          <rect x="462" y="108" width="50" height="92"/>
+          <rect x="530" y="44" width="106" height="156"/><rect x="556" y="30" width="16" height="16"/><rect x="606" y="34" width="3" height="12"/>
+          <rect x="656" y="122" width="66" height="78"/>
+          <rect x="742" y="72" width="90" height="128"/><rect x="806" y="60" width="14" height="14"/>
+          <rect x="852" y="100" width="56" height="100"/>
+          <rect x="928" y="56" width="98" height="144"/><rect x="972" y="42" width="4" height="16"/>
+          <rect x="1046" y="116" width="70" height="84"/>
+          <rect x="1134" y="76" width="92" height="124"/>
+          <rect x="1244" y="104" width="58" height="96"/>
+          <rect x="1320" y="62" width="120" height="138"/><rect x="1352" y="48" width="18" height="16"/>
+        </g>
+        <g class="day-lit">
+          <rect x="0" y="86" width="11" height="114"/><rect x="96" y="120" width="8" height="80"/>
+          <rect x="166" y="52" width="13" height="148"/><rect x="278" y="132" width="9" height="68"/>
+          <rect x="356" y="78" width="12" height="122"/><rect x="462" y="108" width="8" height="92"/>
+          <rect x="530" y="44" width="14" height="156"/><rect x="656" y="122" width="9" height="78"/>
+          <rect x="742" y="72" width="12" height="128"/><rect x="852" y="100" width="8" height="100"/>
+          <rect x="928" y="56" width="13" height="144"/><rect x="1134" y="76" width="12" height="124"/>
+          <rect x="1244" y="104" width="8" height="96"/><rect x="1320" y="62" width="14" height="138"/>
+        </g>
+        <g class="day-glass">
+          <rect x="552" y="56" width="8" height="144"/><rect x="576" y="56" width="8" height="144"/><rect x="600" y="56" width="8" height="144"/>
+          <rect x="950" y="68" width="8" height="132"/><rect x="974" y="68" width="8" height="132"/><rect x="998" y="68" width="8" height="132"/>
+          <rect x="1344" y="74" width="8" height="126"/><rect x="1372" y="74" width="8" height="126"/><rect x="1400" y="74" width="8" height="126"/>
+          <rect x="186" y="64" width="7" height="136"/><rect x="208" y="64" width="7" height="136"/><rect x="232" y="64" width="7" height="136"/>
+          <rect x="762" y="84" width="7" height="116"/><rect x="786" y="84" width="7" height="116"/><rect x="810" y="84" width="7" height="116"/>
+        </g>
+      </svg>
+      <!-- 窗层独立成 svg：动画挂在 HTML 层级的 svg 元素上走纯合成路径，
+           不落在主 svg 的 drop-shadow 子树里，避免每帧整幅重绘天际线。 -->
+      <svg class="win-layer tw1" viewBox="0 0 1440 200" preserveAspectRatio="xMidYMax slice">
+        <g class="win">
+          <rect x="12" y="102" width="6" height="8"/><rect x="34" y="120" width="6" height="8"/><rect x="58" y="102" width="6" height="8"/><rect x="24" y="150" width="6" height="8"/>
+          <rect x="182" y="70" width="6" height="8"/><rect x="222" y="88" width="6" height="8"/><rect x="204" y="118" width="6" height="8"/><rect x="238" y="142" width="6" height="8"/>
+          <rect x="376" y="94" width="6" height="8"/><rect x="414" y="112" width="6" height="8"/><rect x="392" y="146" width="6" height="8"/>
+          <rect x="548" y="62" width="6" height="8"/><rect x="588" y="80" width="6" height="8"/><rect x="612" y="104" width="6" height="8"/><rect x="562" y="134" width="6" height="8"/><rect x="598" y="164" width="6" height="8"/>
+          <rect x="762" y="90" width="6" height="8"/><rect x="798" y="118" width="6" height="8"/><rect x="778" y="152" width="6" height="8"/>
+          <rect x="948" y="74" width="6" height="8"/><rect x="988" y="96" width="6" height="8"/><rect x="962" y="128" width="6" height="8"/><rect x="1002" y="160" width="6" height="8"/>
+          <rect x="1152" y="92" width="6" height="8"/><rect x="1192" y="120" width="6" height="8"/><rect x="1168" y="154" width="6" height="8"/>
+          <rect x="1342" y="80" width="6" height="8"/><rect x="1390" y="102" width="6" height="8"/><rect x="1360" y="138" width="6" height="8"/><rect x="1402" y="166" width="6" height="8"/>
+        </g>
+      </svg>
+      <svg class="win-layer tw2" viewBox="0 0 1440 200" preserveAspectRatio="xMidYMax slice">
+        <g class="win cool">
+          <rect x="116" y="134" width="6" height="8"/><rect x="296" y="146" width="6" height="8"/><rect x="478" y="122" width="6" height="8"/>
+          <rect x="672" y="136" width="6" height="8"/><rect x="868" y="116" width="6" height="8"/><rect x="1062" y="130" width="6" height="8"/>
+          <rect x="1260" y="120" width="6" height="8"/><rect x="440" y="90" width="6" height="8"/><rect x="1216" y="100" width="6" height="8"/>
+        </g>
+      </svg></div>
+    </div>
+    <header class="topbar" data-testid="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span><strong>异步运行台</strong><span class="brand-sub">ASYNC CONSOLE</span></span>
+      </div>
+
+      <div class="summary-chips" id="summary-strip" data-testid="summary-strip" role="group" aria-label="运行摘要"></div>
+
+      <div class="topbar-right">
+        <label class="project-switch" title="切换监控仓，配置仍走全局解析器">
+          <span>监控</span>
+          <select id="monitor-project" data-testid="monitor-project" aria-label="切换监控项目"></select>
+        </label>
+        <span class="topbar-meta"><span id="scope-summary">范围：全部</span><span class="meta-divider" aria-hidden="true">│</span><span id="last-refresh">未同步</span></span>
+        <div class="connection-chip" id="connection-state" data-testid="connection-state" data-state="loading">
+          <span class="connection-dot" aria-hidden="true"></span>
+          <span class="connection-label">连接检查中</span>
+        </div>
+        <button class="icon-button" type="button" data-action="theme" data-testid="theme-switch" aria-label="切换主题" aria-pressed="false" title="切换明暗主题">◐ 主题</button>
+        <button class="icon-button" type="button" data-action="sky-motion" data-testid="sky-motion-switch" aria-label="切换天象动效" aria-pressed="false" title="天象氛围动画开关：默认静止省电，开启后星月云流动">✨ 动效</button>
+      </div>
+    </header>
+
+    <section class="global-blocker is-hidden" id="global-blocker" data-testid="global-blocker" aria-live="assertive">
+      <strong>暂未同步</strong>
+      <span id="global-blocker-copy">保留当前数据和编辑，恢复后自动同步。</span>
+      <span class="mono" id="global-blocker-detail">等待下一次轮询</span>
+      <button type="button" class="secondary-button" data-action="retry-connection">立即重试</button>
+    </section>
+
+    <nav class="view-tabs" role="tablist" aria-label="视图切换">
+      <button type="button" class="tab-button is-active" role="tab" id="tab-activity" aria-controls="activity-view" data-action="view-tab" data-view="activity" aria-selected="true">运行 <span id="activity-count">0</span></button>
+      <button type="button" class="tab-button" role="tab" id="tab-picks" aria-controls="picks-view" data-action="view-tab" data-view="picks" aria-selected="false">角色与模型</button>
+      <button type="button" class="tab-button" role="tab" id="tab-res" aria-controls="res-view" data-action="view-tab" data-view="res" aria-selected="false">角色资源</button>
+      <button type="button" class="tab-button" role="tab" id="tab-import" aria-controls="import-view" data-action="view-tab" data-view="import" aria-selected="false">导入范围</button>
+      <button type="button" class="tab-button" role="tab" id="tab-models" aria-controls="models-view" data-action="view-tab" data-view="models" aria-selected="false">模型档位</button>
+      <button type="button" class="tab-button" role="tab" id="tab-history" aria-controls="history-view" data-action="view-tab" data-view="history" aria-selected="false">历史 <span id="history-count">0</span></button>
+    </nav>
+
+    <div class="sync-status is-hidden" id="sync-status" role="status" aria-live="polite"></div>
+
+    <main class="page-shell">
+      <section class="view-panel" id="activity-view" data-view-panel="activity" role="tabpanel" aria-labelledby="tab-activity">
+        <div class="layout-grid">
+          <section class="surface task-surface" data-region="tasks" aria-labelledby="tasks-title">
+            <div class="surface-heading">
+              <h3 id="tasks-title">活动任务</h3>
+              <div class="surface-heading-meta">
+                <span class="state-badge state-success" id="task-region-state">加载中</span>
+                <span class="mono muted" id="task-count">0 条</span>
+              </div>
+            </div>
+
+            <div class="inline-dag is-hidden" id="inline-dag" data-testid="inline-dag" aria-label="进行中的 DAG"></div>
+            <div class="pending-fleet is-hidden" id="pending-fleet" data-testid="pending-fleet" aria-label="待处理运行"></div>
+
+            <div class="task-list" id="task-list" data-testid="task-list" aria-live="polite"></div>
+          </section>
+
+        </div>
+      </section>
+
+      <section class="view-panel is-hidden" id="history-view" data-view-panel="history" aria-hidden="true" role="tabpanel" aria-labelledby="tab-history">
+        <section class="surface history-surface" data-region="history" aria-labelledby="history-title">
+          <div class="surface-heading">
+            <h3 id="history-title">历史任务</h3>
+            <span class="mono muted" id="history-range">终态任务归档</span>
+          </div>
+
+          <div class="filter-bar" data-testid="filter-bar" aria-label="历史筛选">
+            <select id="filter-status" aria-label="结果">
+              <option value="all">全部结果</option>
+              <option value="done">完成</option>
+              <option value="uncertain">有保留项</option>
+              <option value="partial">部分完成</option>
+              <option value="failed">失败</option>
+              <option value="blocked">受阻</option>
+              <option value="cancelled">已取消</option>
+              <option value="unknown">未知</option>
+            </select>
+            <select id="filter-role" aria-label="角色"><option value="all">全部角色</option></select>
+            <select id="filter-model" aria-label="模型"><option value="all">全部模型</option></select>
+            <select id="filter-scope" aria-label="范围">
+              <option value="all">全部</option>
+              <option value="thread">本线程</option>
+              <option value="project">本项目</option>
+            </select>
+            <select id="history-dag-select" aria-label="运行组拓扑" autocomplete="off"><option value="">运行组拓扑…</option></select>
+          </div>
+
+          <div class="history-dag-drawer is-hidden" id="history-dags" data-testid="history-dags" aria-label="运行组拓扑"></div>
+          <div id="history-list" data-testid="history-list" class="history-list"></div>
+          <div id="history-pagination" class="history-pagination" aria-label="历史分页"></div>
+        </section>
+      </section>
+
+      <section class="view-panel is-hidden cfg" id="picks-view" data-view-panel="picks" aria-hidden="true" role="tabpanel" aria-labelledby="tab-picks"></section>
+      <section class="view-panel is-hidden cfg" id="res-view" data-view-panel="res" aria-hidden="true" role="tabpanel" aria-labelledby="tab-res"></section>
+      <section class="view-panel is-hidden cfg" id="import-view" data-view-panel="import" aria-hidden="true" role="tabpanel" aria-labelledby="tab-import"></section>
+      <section class="view-panel is-hidden cfg" id="models-view" data-view-panel="models" aria-hidden="true" role="tabpanel" aria-labelledby="tab-models"></section>
+    </main>
+
+    <aside class="detail-drawer is-hidden" id="task-detail" data-testid="task-detail" aria-hidden="true" aria-labelledby="detail-title">
+      <div class="drawer-backdrop" data-action="close-detail"></div>
+      <div class="drawer-panel">
+        <div class="drawer-heading">
+          <h2 id="detail-title">任务详情</h2>
+          <button type="button" class="close-button" data-action="close-detail" aria-label="关闭任务详情">×</button>
+        </div>
+        <div id="detail-content" class="drawer-content"></div>
+      </div>
+    </aside>
+
+    <div class="modal-layer is-hidden" id="cancel-modal" data-testid="cancel-modal" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="cancel-title">
+        <h2 id="cancel-title">确认取消这个任务？</h2>
+        <p id="cancel-copy">将使用当前 revision 发起一次取消请求。版本冲突会原样返回，不会覆盖新状态。</p>
+        <div class="modal-actions">
+          <button type="button" class="secondary-button" data-action="close-cancel">返回</button>
+          <button type="button" class="danger-button" data-action="confirm-cancel">确认取消</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

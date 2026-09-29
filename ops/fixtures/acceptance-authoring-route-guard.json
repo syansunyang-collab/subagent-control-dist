@@ -1,0 +1,29 @@
+{
+  "checks": {
+    "allowed_next_actions": [
+      "ask_user",
+      "dispatch_docs",
+      "dispatch_fact",
+      "dispatch_plan_check",
+      "enter_planner",
+      "pause",
+      "resume",
+      "write_context"
+    ],
+    "decision_source_types": [
+      "agent_default_reported",
+      "domain_owner_confirmed",
+      "evidence_derived",
+      "user_bulk_accepted",
+      "user_explicit",
+      "user_selected_option"
+    ],
+    "proposal_challenge_passed": null
+  },
+  "context": "ops/fixtures/acceptance-authoring-route-context.md",
+  "exit_code": 0,
+  "issues": [],
+  "status": "pass",
+  "target": "planner",
+  "tool": "alignment_guard"
+}

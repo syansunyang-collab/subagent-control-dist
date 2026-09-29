@@ -1,0 +1,48 @@
+alignment_delta:
+  delta_id: AD-EXAMPLE-01
+  stage: product
+  active_surface: requirements
+  surface_preview:
+    surface: requirements
+    status: accepted
+    locked_statement: 示例目标与成功口径已由用户确认。
+    in_scope: [示例范围]
+    out_of_scope: []
+    validation_object: example_validation_object
+    decision_source:
+      type: user_selected_option
+      confirmation_ref: notes/context/example-discussion-log.md#round-2
+    still_open: []
+    planner_impact: 范围与验收意图约束后续方案。
+  confirmation:
+    confirmation_ref: notes/context/example-discussion-log.md#round-2
+    mode: popup
+    presented: [requirements, D-02, D-03]
+    bulk_accept: true
+    selected_option: 验收按推荐；其余全部按推荐
+  decisions:
+    - id: D-02
+      topic: acceptance
+      class: must_ask
+      question: 什么算完成
+      selected: 回归测试全过且示例可复现
+      reason: 可机械验证
+      source: {type: user_selected_option, mode: popup, confirmation_ref: notes/context/example-discussion-log.md#round-2}
+      status: locked
+    - id: D-03
+      topic: naming
+      class: disclosed_default
+      question: 输出文件命名
+      selected: <task>-report.md
+      reason: 与现有报告命名一致
+      override_cost: 改一处常量与一条测试
+      source: {type: user_bulk_accepted, mode: popup, confirmation_ref: notes/context/example-discussion-log.md#round-2}
+      status: locked
+  mutation_scope:
+    alignment_state_paths: []
+    discussion_log: append_one_round
+  coverage_manifest:
+    - stable_id: SURFACE-requirements-state
+      target_section: Alignment State
+      required_fields: [locks.requirements_locked]
+  next_step: ask_user

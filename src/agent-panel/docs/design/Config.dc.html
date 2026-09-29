@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+  <style>
+    :root {
+      --bg: #05081A; --text: #F0F4FF; --muted: #93A0C8;
+      --surface: rgba(16,23,48,0.30); --surface2: rgba(26,35,68,0.26);
+      --line: rgba(165,192,255,0.17); --teal: #35E0C8; --peri: #97A0FF;
+      --ok: #35E0C8; --warn: #FFC66E; --err: #F08CA0;
+      --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+      --disp: "Space Grotesk", "Segoe UI", sans-serif;
+      --sans: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    body { margin: 0; font-family: var(--sans); color: var(--text); font-size: 13px; }
+    .stage { position: relative; width: 1440px; height: 860px; overflow: hidden; padding: 20px 24px;
+      background:
+        radial-gradient(900px 560px at 10% 90%, rgba(151,160,255,0.20), transparent 60%),
+        radial-gradient(820px 520px at 90% -5%, rgba(53,224,200,0.15), transparent 62%),
+        linear-gradient(163deg, #191148 0%, #111A36 40%, #0A1A2A 72%, #05081A 100%); }
+    .moon { position: absolute; top: 30px; right: 60px; width: 52px; height: 52px; pointer-events: none; opacity: 0.9;
+      animation: moonfloat 16s ease-in-out infinite; }
+    .moon .body { position: absolute; inset: 0; border-radius: 50%;
+      background: radial-gradient(circle at 36% 32%, #FFFDF4 0%, #E8ECFF 52%, #B9C4EE 100%);
+      box-shadow: 0 0 34px rgba(214,226,255,0.45); }
+    @keyframes moonfloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    .card { position: relative; z-index: 1; background: var(--surface); backdrop-filter: blur(20px) saturate(1.3); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 16px; }
+    .card-h { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+    .card-h h3 { margin: 0; font-size: 14px; font-weight: 600; }
+    .spacer { flex: 1; }
+    .hint { padding: 10px 16px 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+    .hint code { font-family: var(--mono); font-size: 11px; color: var(--teal); }
+    .badge { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 10px; border-radius: 999px;
+      border: 1px solid var(--line); background: rgba(19,26,52,0.5); font-size: 11.5px; }
+    .b-ok { color: #A9EFC9; }
+    .ghostbtn { height: 30px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 12px;
+      display: inline-flex; align-items: center; background: transparent; }
+    .primarybtn { height: 30px; padding: 0 18px; border-radius: 999px; border: none; background: var(--teal); color: #052A26;
+      font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; }
+    .primarybtn.off { opacity: 0.4; }
+    .dangerbtn { height: 30px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(229,138,151,0.4); color: var(--err);
+      font-size: 12px; display: inline-flex; align-items: center; background: transparent; }
+
+    .rolecards { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+    .rolecard { border: 1px solid var(--line); border-radius: 12px; background: var(--surface2); padding: 14px 16px; }
+    .rolecard.dirty { border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal) inset; }
+    .rc-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+    .rc-h b { font-family: var(--mono); font-size: 13px; }
+    .rc-h .desc { font-size: 12px; color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rc-h .rev { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+    .fgrid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px 12px; margin-bottom: 12px; }
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .flabel { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
+    .fselect span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fselect { height: 32px; border-radius: 8px; border: 1px solid var(--line); background: rgba(10,14,30,0.5);
+      display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font-family: var(--mono); font-size: 11.5px; }
+    .fselect svg { opacity: 0.6; flex: none; }
+    .rc-a { display: flex; align-items: center; gap: 10px; }
+    .dirtynote { color: var(--teal); font-size: 11.5px; }
+
+    .chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: 999px;
+      border: 1px solid var(--line); background: rgba(10,14,30,0.4); font-size: 11.5px; color: var(--muted); }
+    .chip.on { border-color: var(--teal); color: var(--teal); }
+    .chip .box { width: 10px; height: 10px; border-radius: 3px; border: 1px solid currentColor; display: inline-block; }
+    .chip.on .box { background: var(--teal); border-color: var(--teal); }
+  </style>
+</helmet>
+<div class="stage">
+  <div class="moon"><div class="body"></div></div>
+  <div class="card">
+    <div class="card-h">
+      <h3>子代理配置</h3>
+      <div class="spacer"></div>
+      <span class="badge b-ok">已读取</span>
+      <div class="ghostbtn">重新读取</div>
+    </div>
+    <div class="hint">改动逐角色保存，写入 <code>ops/agents/&lt;role&gt;.toml</code>；保存用当前 revision 做 CAS，页面外改过会提示冲突并保留你的编辑。</div>
+    <div class="rolecards">
+      <div class="rolecard dirty">
+        <div class="rc-h"><b>executor-agent</b><span class="desc">已有 dispatch_manifest lane 需要执行，或明确路径、动作和边界的有界实施任务。</span><span class="rev">rev aa3975e728f1</span></div>
+        <div class="fgrid">
+          <div class="field"><span class="flabel">pi 模型</span><div class="fselect"><span>openai-codex/gpt-5.6-sol · 272K</span><svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 1.5 4 4.5 7 1.5" stroke="currentColor" stroke-width="1.3"/></svg></div></div>
+          <div class="field"><span class="flabel">pi 推理档</span><div class="fselect"><span>max</span><svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 1.5 4 4.5 7 1.5" stroke="currentColor" stroke-width="1.3"/></svg></div></div>
+          <div class="field"><span class="flabel">模型特性</span><div class="fselect"><span>判断/攻坚主力 · 长任务稳定</span></div></div>
+        </div>
+        <div class="rc-a"><span class="dirtynote">有未保存的更改</span><div class="spacer"></div><div class="ghostbtn">放弃</div><div class="primarybtn">保存</div></div>
+      </div>
+      <div class="rolecard">
+        <div class="rc-h"><b>planner-agent</b><span class="desc">用户要求规划、拆解、计划，或多项独立改动需要先形成 PLAN。</span><span class="rev">rev f7822fa07724</span></div>
+        <div class="fgrid">
+          <div class="field"><span class="flabel">pi 模型</span><div class="fselect"><span>openai-codex/gpt-5.6-sol · 272K</span><svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 1.5 4 4.5 7 1.5" stroke="currentColor" stroke-width="1.3"/></svg></div></div>
+          <div class="field"><span class="flabel">pi 推理档</span><div class="fselect"><span>max</span><svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 1.5 4 4.5 7 1.5" stroke="currentColor" stroke-width="1.3"/></svg></div></div>
+          <div class="field"><span class="flabel">模型特性</span><div class="fselect"><span>规划与契约分析</span></div></div>
+        </div>
+        <div class="rc-a"><div class="spacer"></div><div class="ghostbtn">放弃</div><div class="primarybtn off">保存</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h">
+      <h3>模型特性笔记</h3>
+      <div class="spacer"></div>
+      <span style="font-family: var(--mono); font-size: 11px; color: var(--muted);">ops/model-notes.toml</span>
+    </div>
+    <div class="hint">tag 提供候选列短标签，description 保存主代理选型时使用的完整特性画像。</div>
+    <div class="rolecards">
+      <div class="rolecard">
+        <div class="rc-h"><b>openai-codex/gpt-5.6-sol</b><span class="desc">判断/攻坚主力</span></div>
+        <div class="field"><span class="flabel">description</span><div class="fselect"><span>判断力最强档；适合高风险契约与跨文件实现。</span></div></div>
+        <div class="rc-a"><div class="dangerbtn">删除笔记</div><div class="spacer"></div><div class="primarybtn off">保存</div></div>
+      </div>
+      <div class="rc-a" style="padding: 0 2px;"><div class="ghostbtn">＋ 添加模型笔记</div></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

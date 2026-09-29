@@ -1,0 +1,70 @@
+{
+  "route_id": "verify-agent__code-verification",
+  "package_id": "review-evidence-recorder-fixture",
+  "goal": "对 recorder 路径授权、跨进程 writer 锁、审查复用和退役 route 做实现后验证。",
+  "scope": {
+    "read": [
+      "ops/tools/alignment_recorder.py",
+      "ops/tools/alignment_recorder_benchmark.py",
+      "ops/tools/alignment_guard.py",
+      "ops/tools/dispatch_prepare.mjs",
+      "ops/tools/subagent_handoff_check.mjs",
+      "ops/fixtures/alignment-recorder-example-delta.yaml",
+      "ops/fixtures/alignment-recorder-original-timings.json",
+      "ops/agents/plan-checker.toml",
+      "ops/protocols/task-package-routes/plan-checker__requirement-granularity-review.md",
+      "notes/reports/20260711-alignment-recorder-mechanical-fast-path-practice.md"
+    ]
+  },
+  "contract": {
+    "verify_mode": "verification",
+    "task_description": "本地 recorder 增加路径级 mutation 授权和同 spec 跨进程 writer 锁，并保持 P0-P5 毫秒快路径与 review 复用。",
+    "review_goal": "确认空授权 state_patch 被拒绝、并发 recorder 不丢写，同时核验原生 self-test 与 route 退场非回归。",
+    "affected_files": [
+      "ops/tools/alignment_recorder.py",
+      "ops/tools/alignment_recorder_benchmark.py",
+      "ops/tools/alignment_guard.py",
+      "ops/tools/dispatch_prepare.mjs",
+      "ops/tools/subagent_handoff_check.mjs",
+      "ops/fixtures/alignment-recorder-example-delta.yaml",
+      "ops/fixtures/alignment-recorder-original-timings.json",
+      "ops/agents/plan-checker.toml",
+      "ops/protocols/task-package-routes/plan-checker__requirement-granularity-review.md"
+    ],
+    "require_test_first_evidence": false,
+    "changed_surfaces": [
+      "ops/tools/alignment_recorder.py: state_patch_outside_mutation_scope authorization",
+      "ops/tools/alignment_recorder.py: recorder_lock atomic_write",
+      "ops/tools/alignment_recorder.py: conflict.returncode busy lock_target read_text",
+      "ops/tools/alignment_recorder.py: matches report_exists action reuse",
+      "ops/tools/alignment_recorder.py: matching surface review was not reused",
+      "ops/tools/dispatch_prepare.mjs: alignment-recorder-agent is retired",
+      "ops/tools/dispatch_prepare.mjs: alignment_recorder_async_route_retired",
+      "ops/agents/plan-checker.toml: direct-tool model alignment"
+    ],
+    "allowed_risk_triggers": ["input", "persistence", "concurrency", "command", "path", "config_default"],
+    "disallowed_topics": ["泛安全加固", "历史遗留问题", "与 recorder 目标无关的风格问题"],
+    "issue_admission_required": true,
+    "mechanical_checks": [
+      {
+        "id": "recorder-self-test",
+        "argv": ["python", "-B", "ops/tools/alignment_recorder.py", "--self-test"],
+        "cwd": ".",
+        "timeout_seconds": 120
+      },
+      {
+        "id": "alignment-guard-self-test",
+        "argv": ["python", "-B", "ops/tools/alignment_guard.py", "--self-test"],
+        "cwd": ".",
+        "timeout_seconds": 120
+      },
+      {
+        "id": "dispatch-prepare-self-test",
+        "argv": ["node", "ops/tools/dispatch_prepare.mjs", "--self-test", "--format", "json"],
+        "cwd": ".",
+        "timeout_seconds": 120
+      }
+    ]
+  },
+  "slug": "review-evidence-recorder-verification"
+}

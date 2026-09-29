@@ -1,0 +1,23 @@
+# 运行态和本机数据
+.runtime/
+
+# Node 本地缓存
+node_modules/
+npm-debug.log*
+
+# .NET 构建产物（覆盖 shell 与 tests 下的所有项目）
+**/bin/
+**/obj/
+
+# 本机 IDE 文件
+.vs/
+.vscode/
+*.user
+*.suo
+
+# 测试工具产物
+coverage/
+test-results/
+
+# 设计画布落版产物（由 docs/design/*.dc.html + canvas.json 再生，不入库）
+docs/design/async-console-redesign.html

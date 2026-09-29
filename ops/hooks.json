@@ -1,0 +1,67 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -X utf8 ops/hooks/agent_monitor.py",
+            "timeout": 5,
+            "statusMessage": "Checking Codex session hook"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|apply_patch|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -X utf8 ops/hooks/agent_monitor.py",
+            "timeout": 5,
+            "statusMessage": "Checking approval hook"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|spawn_agent|create_thread|fork_thread|multi_agent_v1\\.spawn_agent|codex_app\\.(create_thread|fork_thread)|mcp__.*__(spawn_agent|create_thread|fork_thread)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -X utf8 ops/hooks/agent_monitor.py",
+            "timeout": 5,
+            "statusMessage": "Checking subagent dispatch gate"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -X utf8 ops/hooks/agent_monitor.py",
+            "timeout": 5,
+            "statusMessage": "Checking tool result"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -X utf8 ops/hooks/agent_monitor.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

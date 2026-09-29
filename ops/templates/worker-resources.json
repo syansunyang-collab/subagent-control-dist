@@ -1,0 +1,361 @@
+{
+  "version": 2,
+  "tools": {
+    "antigravity": {
+      "access": "optional",
+      "label": "Antigravity 工具",
+      "group": "联网"
+    },
+    "bash": {
+      "access": "optional",
+      "label": "命令行（bash）",
+      "group": "命令执行"
+    },
+    "edit": {
+      "access": "optional",
+      "label": "编辑文件",
+      "group": "文件修改"
+    },
+    "fetch_content": {
+      "access": "optional",
+      "label": "网页抓取",
+      "group": "联网"
+    },
+    "get_search_content": {
+      "access": "optional",
+      "label": "搜索结果全文",
+      "group": "联网"
+    },
+    "ls": {
+      "access": "optional",
+      "label": "列出目录",
+      "group": "读取与检索"
+    },
+    "lsp_diagnostics": {
+      "access": "optional",
+      "label": "语言服务诊断",
+      "group": "代码诊断"
+    },
+    "lsp_fix": {
+      "access": "optional",
+      "label": "语言服务修复",
+      "group": "代码诊断"
+    },
+    "mcp": {
+      "access": "optional",
+      "label": "MCP 调用",
+      "group": "外部服务"
+    },
+    "mcpScript": {
+      "access": "optional",
+      "label": "MCP 脚本",
+      "group": "外部服务"
+    },
+    "powershell": {
+      "access": "optional",
+      "label": "命令行（PowerShell）",
+      "group": "命令执行"
+    },
+    "read": {
+      "access": "optional",
+      "label": "读取文件",
+      "group": "读取与检索"
+    },
+    "read_symbol": {
+      "access": "optional",
+      "label": "按符号读取",
+      "group": "读取与检索"
+    },
+    "research_fetch": {
+      "access": "optional",
+      "label": "调研抓取",
+      "group": "联网"
+    },
+    "research_search": {
+      "access": "optional",
+      "label": "调研搜索",
+      "group": "联网"
+    },
+    "source_check": {
+      "access": "optional",
+      "label": "来源核对",
+      "group": "联网"
+    },
+    "visual_explainer": {
+      "access": "optional",
+      "label": "图解页面生成",
+      "group": "产出"
+    },
+    "web_search": {
+      "access": "optional",
+      "label": "网页搜索",
+      "group": "联网"
+    },
+    "write": {
+      "access": "optional",
+      "label": "新建文件",
+      "group": "文件修改"
+    },
+    "grep": {
+      "access": "default_on",
+      "label": "内容搜索",
+      "group": "读取与检索"
+    },
+    "find": {
+      "access": "default_on",
+      "label": "文件查找",
+      "group": "读取与检索"
+    },
+    "command_job": {
+      "access": "default_on",
+      "label": "后台长命令",
+      "group": "命令执行"
+    },
+    "submit_task_result": {
+      "access": "default_on",
+      "label": "提交任务结果",
+      "group": "运行必需"
+    },
+    "submit_review_result": {
+      "access": "default_on",
+      "label": "提交审查结果",
+      "group": "运行必需"
+    },
+    "dispatch_prepare": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "delegate_work": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "submit_work_result": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "subagent_wait": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "subagent_get": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "subagent_result": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "subagent_server_info": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "subagent_cancel": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "subagent_pause": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "subagent_resume": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "fleet_start": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "fleet_status": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "fleet_wait": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "fleet_review": {
+      "access": "off",
+      "group": "主代理"
+    },
+    "fleet_cancel": {
+      "access": "off",
+      "group": "主代理"
+    }
+  },
+  "extensions": {
+    "openai-codex-sol-context-alias": {
+      "access": "default_on",
+      "label": "模型接入：Codex 型号别名"
+    },
+    "pi-claude-code-provider": {
+      "access": "default_on",
+      "label": "模型接入：Claude Code"
+    },
+    "@tian.zuo/pi-antigravity": {
+      "access": "default_on",
+      "label": "模型接入：Antigravity"
+    },
+    "pi-cursor-host": {
+      "access": "default_on",
+      "label": "模型接入：Cursor"
+    },
+    "pi-midrun-compact": {
+      "access": "default_on",
+      "label": "长任务中途压缩"
+    },
+    "pi-compaction-model*": {
+      "access": "default_on",
+      "label": "压缩失败恢复"
+    },
+    "search-route-policy": {
+      "access": "default_on",
+      "label": "搜索路由"
+    },
+    "search-effort-patch": {
+      "access": "default_on",
+      "label": "搜索档位修正"
+    },
+    "payload-cache-diag": {
+      "access": "optional",
+      "label": "缓存诊断"
+    },
+    "pi-web-access": {
+      "access": "optional",
+      "label": "联网搜索与抓取"
+    },
+    "pi-mcp-adapter": {
+      "access": "optional",
+      "label": "MCP 接入"
+    },
+    "@narumitw/pi-lsp": {
+      "access": "optional",
+      "label": "语言服务"
+    },
+    "@alexanderfortin/pi-token-usage": {
+      "access": "optional",
+      "label": "用量统计"
+    },
+    "visual-explainer": {
+      "access": "optional",
+      "label": "图解页面"
+    },
+    "pi-read-symbol": {
+      "access": "optional",
+      "label": "符号读取"
+    },
+    "subagent-control": {
+      "access": "off",
+      "label": "派发、收割与面板"
+    },
+    "control-delegate": {
+      "access": "off",
+      "label": "分身控制"
+    },
+    "@juicesharp/rpiv-ask-user-question": {
+      "access": "off",
+      "label": "向用户提问（弹窗）"
+    },
+    "@eko24ive/pi-ask": {
+      "access": "off",
+      "label": "向用户提问"
+    },
+    "@narumitw/pi-plan-mode": {
+      "access": "off",
+      "label": "规划模式"
+    },
+    "pi-hermes-memory": {
+      "access": "off",
+      "label": "长期记忆"
+    },
+    "pi-context-prune*": {
+      "access": "off",
+      "label": "工具结果裁剪"
+    },
+    "@jl1990/pi-scheduler": {
+      "access": "off",
+      "label": "定时任务"
+    },
+    "pi-scheduler-native": {
+      "access": "off",
+      "label": "定时任务（原生）"
+    },
+    "pi-global-system-tail": {
+      "access": "off",
+      "label": "主代理系统提示尾注"
+    },
+    "paste-image": {
+      "access": "off",
+      "label": "粘贴图片"
+    },
+    "@zenspc/pi-quiet": {
+      "access": "off",
+      "label": "工具行精简显示"
+    }
+  },
+  "skills": {
+    "block-discussion": {
+      "access": "optional",
+      "label": "分块讨论"
+    },
+    "change-rationale": {
+      "access": "optional",
+      "label": "决策留档"
+    },
+    "external-review-rescue": {
+      "access": "optional",
+      "label": "外部评审求援"
+    },
+    "git-recovery": {
+      "access": "optional",
+      "label": "Git 恢复"
+    },
+    "pi-rail-dispatch": {
+      "access": "optional",
+      "label": "Pi 轨派发"
+    },
+    "rule-authoring": {
+      "access": "optional",
+      "label": "规则编写"
+    },
+    "rule-corpus-cleanup": {
+      "access": "optional",
+      "label": "规则库清理"
+    },
+    "skill-authoring-governance": {
+      "access": "optional",
+      "label": "技能编写规范"
+    },
+    "subagent-fleet-discipline": {
+      "access": "optional",
+      "label": "批量派发纪律"
+    },
+    "tooling-iteration": {
+      "access": "optional",
+      "label": "工具迭代"
+    },
+    "writing-governance": {
+      "access": "optional",
+      "label": "写作规范"
+    },
+    "powerpoint": {
+      "access": "optional",
+      "label": "PowerPoint 读写"
+    },
+    "mcp-scripting": {
+      "access": "optional",
+      "label": "MCP 脚本编写"
+    },
+    "docx-cli": {
+      "access": "optional",
+      "label": "Word 读写"
+    },
+    "visual-explainer": {
+      "access": "optional",
+      "label": "图解页面生成"
+    }
+  },
+  "required_tools": [
+    "submit_task_result",
+    "submit_review_result"
+  ]
+}

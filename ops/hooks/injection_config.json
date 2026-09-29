@@ -1,0 +1,18 @@
+{
+  "schema_version": 2,
+  "limits": {
+    "additional_context_max_chars": 5000
+  },
+  "toggles": {
+    "compact_agents_reminder": true,
+    "stop_state_check_reminder": true,
+    "dispatch_reminder": true,
+    "external_truth_reminder": true
+  },
+  "prompts": {
+    "compact_agents_reminder": "ops/hooks/prompts/main/compact-agents-reminder.md",
+    "stop_state_check_reminder": "ops/hooks/prompts/main/stop-state-check.md",
+    "dispatch_reminder": "ops/hooks/prompts/main/post-tool-dispatch-reminder.md",
+    "external_truth_reminder": "ops/hooks/prompts/main/external-truth-reminder.md"
+  }
+}

@@ -1,0 +1,30 @@
+# 运行态整体不入库，但 cockpit 骨架目录经 .gitkeep 跟踪——clone 后面板读取合同
+# （.runtime/cockpit 必须存在，缺失即 CONTROL_RUNTIME_UNAVAILABLE）开箱即满足。
+.runtime/*
+!.runtime/cockpit
+.runtime/cockpit/*
+!.runtime/cockpit/.gitkeep
+tmp/
+.agents/
+outputs/
+test-results/
+
+.codex/map/*.html
+.codex/map/*.md
+
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.orig
+
+node_modules/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+.DS_Store
+Thumbs.db
+
+# 外部参考仓 checkout(调研资产,不入库)
+refs/
