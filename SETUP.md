@@ -113,6 +113,6 @@
 | 发布失败 | 看 `tmp/release-runs/` 最新目录下各步的 `*.stderr.log` 与 `result.json` |
 | 面板报端口被占用，但查不到占用进程 | 端口落在 Windows 保留段（`netsh int ipv4 show excludedportrange protocol=tcp`）；重启系统或调整保留段 |
 | 首次打开面板「导入范围」页要等十几秒 | 首次探测已装插件的工具表，结果缓存后变快 |
-| bootstrap 某项报 `conflict` | 本机已有同名插件、登记或设置且内容不同，未改动；要换成分发版本时删除或改名本机那一项后重跑 |
+| bootstrap 某项报 `conflict` | 本机已有同名插件、登记或设置项且内容不同，该项保留本机内容；设置文件按顶层键处理，同一文件中缺失的其它键照常写入，`detail` 分列写入与保留的键。要换成分发版本时删除或改名本机那一项后重跑 |
 
 发布槽 `~/.subagent-control/releases/` 下的文件由发布生成，改动一律改本仓后重跑 bootstrap。
