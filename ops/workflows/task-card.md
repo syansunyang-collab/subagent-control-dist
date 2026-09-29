@@ -1,10 +1,10 @@
 # 任务卡
 
 > 职责：规定任务卡道的卡片结构、一次确认、校验、执行、升级与收口。
-> 真源：任务卡字段、deliver / explore 差异、三个确认出口、升级条件与新建用户界面的判定边界
+> 真源：任务卡字段、deliver / explore 差异、三个确认出口、界面样稿确认与升级条件
 > 读取：命中读取
 
-任务卡服务单次交付或试错：不新建用户界面，目标、范围或必问项需要用户确认一次（入口判定见 `ops/workflows/alignment/WORKFLOW.md` §1）。任务卡不写对齐状态。
+任务卡服务单次交付或试错：目标、范围或必问项需要用户确认一次（入口判定见 `ops/workflows/alignment/WORKFLOW.md` §1）。任务卡不写对齐状态。
 
 ## 1. 卡片
 
@@ -36,7 +36,9 @@ task_card:
 
 起草卡片时先核对推荐所依赖的事实，本地短验证能关闭的就地核实。`tech_route` 或 `design_point` 决策仍依赖未经独立核对的事实，或存在替代路线时，呈现前做一轮专家审核：材料能内联时，专家人选与同轮 pick 数按 `ops/skills/external-review-rescue/SKILL.md` 选择；需要自行翻仓核对事实时，派能完整覆盖的专职角色，无专职覆盖时用 `general-agent / general-default` 的 `deep` pick 并保留读取工具。任务书要求核对事实、给出反例与更简单路线，并对新增的门或维护面说明保护对象、删除后的副作用与更简单替代。仅对未闭合争点或新的关键差异开第二轮；仍有分歧作为选项随卡呈现。结论写入 `expert_review`。
 
-按 `ops/workflows/alignment/decision-ledger.md` §4 呈现，所用模式记在 `confirm_mode`，只取 popup 或 card。提问工具不可用时在对话中发卡片文本，记 `confirm_mode: card`。
+按 `ops/workflows/alignment/decision-ledger.md` §4 呈现，所用模式记在 `confirm_mode`，只取 popup 或 card。
+
+卡片涉及新增或改版用户界面时，随卡附一份用真实内容做的静态样稿（做法见 `ops/skills/tool-ui-design/SKILL.md` §2），与卡片同轮确认；成品交付后请用户对照样稿看过再收口。提问工具不可用时在对话中发卡片文本，记 `confirm_mode: card`。
 
 | 用户回应 | 动作 |
 | --- | --- |
@@ -60,13 +62,6 @@ task_card:
 ## 4. 升级为标准规格
 
 执行前或执行中命中 `ops/workflows/alignment/WORKFLOW.md` §1 的标准规格条件时，沿本节升级，`status: promoted`。用 recorder `init` 建规格书，再用 `record` 将卡上已确认的 `decisions` 原样登记，保留 `source.confirmation_ref` 的卡片引用；`fact_refs` 带卡片路径，`mutation_scope.discussion_log: unchanged`。复用卡上的目标、范围与验收起草 preview，只询问新增差异；三面新增的合同内容仍按标准规格拍板。必问项数量、呈现模式与写域跨度不是升级条件。
-
-新建用户界面：新增可独立描述用途、入口和主要操作路径的界面单元；仅重排、拆分或换皮已有功能不算。
-
-- 在现有面板新增「任务历史」标签页，带查询、详情、恢复等新路径：算新建。
-- 把现有列表拆成「运行中 / 已结束」两个标签，功能与操作路径不变：不算。
-- 给现有表单加普通字段、沿用原提交路径：不算；新字段同时引入独立审批、支付等操作流程时，重新判断是否形成新的界面单元。
-- 需要向用户确认字段含义属于必问项，不构成升级理由。
 
 ## 5. 收口
 

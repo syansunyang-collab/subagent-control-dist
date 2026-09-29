@@ -337,6 +337,10 @@
       "access": "optional",
       "label": "写作规范"
     },
+    "tool-ui-design": {
+      "access": "optional",
+      "label": "工具界面设计"
+    },
     "powerpoint": {
       "access": "optional",
       "label": "PowerPoint 读写"

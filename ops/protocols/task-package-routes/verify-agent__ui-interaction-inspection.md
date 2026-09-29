@@ -4,7 +4,7 @@
 > 真源：对应能力的 task_package 构造、拒收条件和回执接收规则
 > 读取：命中读取
 
-触发对象：执行完成后验收 Web、桌面、GUI、交互式报告、界面控件、用户操作路径、加载/空/错误/成功/禁用状态、响应式布局、视觉层级、文案或 UI 设计合约。构包用 `node ops/tools/dispatch_prepare.mjs --seed-template` 取骨架；本 route 只定义本能力的任务对象、seed 差异、拒收条件和回执接收。算法语义、数据链路、真实产物语义和用户能否完成业务的判断按 `verify-agent / functional-inspection` 派发；同一任务同时包含两类对象时按 P7 拆分。
+触发对象：执行完成后验收 Web、桌面、GUI、交互式报告、界面控件、用户操作路径、加载/空/错误/成功/禁用状态、响应式布局、视觉层级、文案或 UI 设计合约。构包用 `node ops/tools/dispatch_prepare.mjs --seed-template` 取骨架；本 route 只定义本能力的任务对象、seed 差异、拒收条件和回执接收。界面能否被识别、操作、给出反馈并兑现已确认样稿由本能力判断；业务计算、持久化结果或产物内容需要另一种判据时，另派 `verify-agent / functional-inspection`，两者可共用同一次操作证据。
 
 ### 固定包头
 
@@ -19,6 +19,7 @@ agent:
     - ops/agent-prompts/_common.md
     - ops/agent-prompts/_review-common.md
     - ops/agent-prompts/verify-agent/ui-interaction-inspection.md
+    - ops/skills/tool-ui-design/SKILL.md
 ```
 
 以上字段按固定值原样写入 `task_package.agent`；角色、能力名和路径以本块为准。
@@ -41,15 +42,15 @@ agent:
     {"path": "scope.write_extra", "hint": "授权固定证据根目录；route 按 package_id 生成 work_dir，构包器把本授权投影到 scope.write 和写冲突键", "example": ["test-results/ui-interaction-inspection/"]},
     {"path": "contract.inspection_target", "hint": "被审界面、页面、窗口、报告或组件", "example": "清洗结果浏览页"},
     {"path": "contract.source_refs", "hint": "用户需求、alignment context、PLAN 或执行目标原文", "example": ["docs/requirements.md"]},
-    {"path": "contract.ui_entrypoints", "hint": "结构化真实入口：target 是 URL 或窗口名，start_command 是可选应用启动命令；驱动发现、探活和替代选择由 verifier 完成", "example": {"target": "http://127.0.0.1:8000/", "start_command": "python src/ui/app.py"}},
-    {"path": "contract.screens_or_components", "hint": "本次要检查的页面、窗口、组件或区域", "example": ["结果列表页", "详情面板"]},
-    {"path": "contract.interaction_paths", "hint": "用户主路径和关键动作", "example": ["选择输入文件 -> 执行清洗 -> 查看结果 -> 导出报告"]},
-    {"path": "contract.state_scenarios", "hint": "加载、空、错误、成功、禁用、数据加载后等状态场景", "example": ["加载", "空", "错误", "成功", "数据加载后"]},
-    {"path": "contract.viewport_requirements", "hint": "需要覆盖的桌面、移动、窗口尺寸；确不需要时写 not_needed", "example": ["1280x800", "375x667"]},
-    {"path": "contract.implementation_refs", "hint": "组件、样式、路由、视图或桌面入口实现", "example": ["src/ui/views/results.py"]}
+    {"path": "contract.ui_entrypoints", "hint": "结构化真实入口：target 是 URL 或窗口名，start_command 是可选应用启动命令；驱动发现、探活和替代选择由 verifier 完成", "example": {"target": "http://127.0.0.1:8000/", "start_command": "python src/ui/app.py"}}
   ],
   "optional": [
     {"path": "slug", "hint": "报告文件名短名，缺省自动生成"},
+    {"path": "contract.screens_or_components", "hint": "可省略；省略时 verifier 从 source_refs、已确认样稿与 scope 定位本次页面、窗口或区域", "example": ["结果列表页", "详情面板"]},
+    {"path": "contract.interaction_paths", "hint": "可省略；省略时按 source_refs 与样稿推出用户主路径和关键动作", "example": ["选择输入文件 -> 执行清洗 -> 查看结果 -> 导出报告"]},
+    {"path": "contract.state_scenarios", "hint": "可省略；省略时只覆盖本次改动涉及的真实状态，不套用全状态清单", "example": ["加载", "空", "错误", "成功", "数据加载后"]},
+    {"path": "contract.viewport_requirements", "hint": "可省略；省略时覆盖该界面常用窗口尺寸，并在报告写明", "example": ["1280x800", "375x667"]},
+    {"path": "contract.implementation_refs", "hint": "可省略；省略时从 scope.read 中的界面实现定位", "example": ["src/ui/views/results.py"]},
     {"path": "contract.ui_contract_refs", "hint": "product_experience.ui_design_contract、设计规格或 UI 合约；缺省按差异卡默认 null"},
     {"path": "contract.artifact_paths", "hint": "已有截图、报告、导出物或 UI 产物路径；缺省按差异卡默认空列表"},
     {"path": "contract.design_system_refs", "hint": "组件配置、样式配置、设计系统文档或既有组件路径"},

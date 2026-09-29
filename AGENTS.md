@@ -32,7 +32,7 @@
 
 | 要做什么 | 使用什么 |
 | --- | --- |
-| 新建用户界面，或用户要求走标准规格 | `ops/workflows/alignment/WORKFLOW.md` |
+| 用户要求走标准规格 | `ops/workflows/alignment/WORKFLOW.md` |
 | 目标、范围或必问项需要一次确认的单次交付或试错 | `ops/workflows/task-card.md` |
 | 已审核规格的执行需要跨会话或跨天交接，或继续已有 `dispatch_manifest` | `ops/workflows/planning/WORKFLOW.md` |
 | 用户声明事故并要求先止损 | `ops/workflows/incident-containment.md` |
