@@ -66,14 +66,19 @@ def check_prerequisites() -> dict:
 
 
 def npm_tree_matches(directory: Path) -> bool:
-    """node_modules 与 package-lock 的非可选、非 peer 条目逐一同版本。"""
+    """lock 的非可选、非 peer 条目与 npm 记录已装的条目（含本平台 optional 原生包）逐一有实体目录且同版本。"""
     hidden = directory / "node_modules/.package-lock.json"
     if not hidden.is_file():
         return False
     installed = json.loads(hidden.read_text(encoding="utf-8"))["packages"]
     locked = json.loads((directory / "package-lock.json").read_text(encoding="utf-8"))["packages"]
-    return all(installed.get(key, {}).get("version") == entry.get("version")
-               for key, entry in locked.items() if key and not entry.get("optional") and not entry.get("peer"))
+    required = {key for key, entry in locked.items() if key and not entry.get("optional") and not entry.get("peer")}
+    for key in required | {key for key in installed if key}:
+        manifest = directory / key / "package.json"
+        expected = locked.get(key, installed[key]).get("version")
+        if not manifest.is_file() or json.loads(manifest.read_text(encoding="utf-8")).get("version") != expected:
+            return False
+    return True
 
 
 def step_npm(apply: bool) -> list[dict]:
