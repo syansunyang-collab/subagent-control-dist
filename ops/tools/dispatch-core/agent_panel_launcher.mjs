@@ -12,7 +12,8 @@
 //
 // 与 Python 的已知形态差异（不是行为差异）：
 //   - probeHealth / portIsFree / allocateEndpoint / ensureAgentPanel / backgroundBuild 返回 Promise（Node 无同步网络原语）。
-//   - creationFlags 保留原值语义，实际 spawn 用 Node 的 detached + windowsHide 表达同一意图。
+//   - creationFlags 保留原值语义，实际 spawn 用 Node 的 detached + windowsHide 表达；桌面壳不设 windowsHide，
+//     因为它同时把 SW_HIDE 交给窗口程序的首次显示，会让面板窗口不可见。
 //   - background_python()（pythonw.exe 择优）无 JS 对应物，后台构建改用 process.execPath 跑 CLI。
 import { createHash } from "node:crypto";
 import { closeSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
@@ -148,13 +149,13 @@ export function resolveDeps(overrides = {}) {
 }
 
 // argv[0] 为可执行文件，与 Python subprocess.Popen 的列表形态一致。
-function spawnDetached(argv, { cwd, env } = {}) {
+function spawnDetached(argv, { cwd, env, windowsHide = true } = {}) {
   const child = spawnChild(argv[0], argv.slice(1), {
     cwd,
     env,
     stdio: "ignore",
     detached: true,
-    windowsHide: true,
+    windowsHide,
   });
   child.unref();
   return { pid: child.pid };
@@ -338,7 +339,7 @@ export function startShell(executable, endpoint, { deps } = {}) {
       "--port", String(pyGetItem(endpoint, "port")),
       "--loopback-url", String(pyGetItem(endpoint, "url")),
     ],
-    launchOptions(resolved),
+    { ...launchOptions(resolved), windowsHide: false },
   );
   const state = {
     running: true,
