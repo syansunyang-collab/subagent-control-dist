@@ -1,0 +1,25 @@
+{
+  "packages": [
+    "npm:pi-midrun-compact",
+    "npm:pi-web-access@0.21.0",
+    "local-packages/pi-compaction-model-recovery",
+    "local-packages/pi-context-prune"
+  ],
+  "pi_settings": {
+    "compaction": {"enabled": false, "reserveTokens": 65536},
+    "compactionModel": {
+      "model": "openai-codex/gpt-6-luna-fast-700k",
+      "thinkingLevel": "xhigh",
+      "reasons": ["manual", "threshold", "overflow"]
+    }
+  },
+  "web_search": {
+    "searchRouting": {
+      "providers": ["openai", "brave", "tavily", "exa", "xai", "duckduckgo"],
+      "fallbackOn": ["quota", "transient", "network", "invalid-response"]
+    },
+    "workflow": "none",
+    "openaiSearchModel": "gpt-5.6-luna:medium",
+    "pageAnswer": {"model": "openai-codex/gpt-5.6-luna", "reasoning": "low"}
+  }
+}

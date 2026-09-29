@@ -1,0 +1,11 @@
+{
+  "name": "pi-context-prune-local",
+  "version": "1.6.0-local.10",
+  "type": "module",
+  "license": "MIT",
+  "pi": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  }
+}

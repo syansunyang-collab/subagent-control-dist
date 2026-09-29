@@ -1,0 +1,9 @@
+{
+  "name": "pi-compaction-model",
+  "version": "0.1.0-local.1",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "pi": { "extensions": ["./src/index.ts"] },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": ">=0.86.0" }
+}

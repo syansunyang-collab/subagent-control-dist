@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "thresholdPercent": 90,
+  "autoResume": true,
+  "notify": true,
+  "customCompactionInstructions": "Preserve the active user task, completed work, decisions, changed files, failures, pending tool-loop state, exact file paths, numeric results, and next steps so execution can resume immediately after compaction."
+}

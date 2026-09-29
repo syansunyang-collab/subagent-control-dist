@@ -1,0 +1,9 @@
+{
+  "mode": "cold-mask",
+  "triggerTokens": 15000,
+  "keepRecentToolTurns": 2,
+  "summarizerModel": "openai-codex/gpt-6-luna-fast-700k",
+  "summarizerThinking": "high",
+  "summarizerMaxCharsPerResult": 8000,
+  "stageSummary": false
+}

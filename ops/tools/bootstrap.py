@@ -19,8 +19,9 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[2]
 HOME = Path.home()
 NPM_DIRS = (("ops", ()), ("adapters/pi", ("--ignore-scripts",)), ("src/agent-panel", ()))
-ALIAS_EXTENSION = ROOT / "adapters/pi/user-extensions/openai-codex-sol-context-alias.ts"
+ADDONS = ROOT / "adapters/pi/user-addons"
 PI_AGENT = HOME / ".pi/agent"
+WEB_SEARCH_CONFIG = HOME / ".pi/web-search.json"
 CLAUDE_JSON = HOME / ".claude.json"
 CODEX_CONFIG = HOME / ".codex/config.toml"
 PRODUCER_REGISTRY = HOME / ".subagent-control/bridge-producer.json"
@@ -137,20 +138,76 @@ def step_codex_registration(apply: bool, node: str) -> dict:
     return {"step": "codex-mcp", "status": "done" if apply else "todo", "detail": str(CODEX_CONFIG)}
 
 
-def step_alias_extension(apply: bool) -> dict:
-    target = PI_AGENT / "extensions" / ALIAS_EXTENSION.name
-    source = ALIAS_EXTENSION.read_bytes()
-    if target.is_file() and target.read_bytes() == source:
-        return {"step": "pi-alias-extension", "status": "ok"}
-    detail = str(target)
-    if apply:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists():
-            backup = target.with_name(f"{target.name}.bak-{datetime.now():%Y%m%d%H%M%S}")
-            target.replace(backup)
-            detail += f"（旧文件备份为 {backup.name}）"
-        target.write_bytes(source)
-    return {"step": "pi-alias-extension", "status": "done" if apply else "todo", "detail": detail}
+def step_addon_units(apply: bool) -> list[dict]:
+    """快照里 extensions/、local-packages/、context-prune/ 下的每一项是一个单元：
+    本机缺失则整份装入；快照文件逐字节相同为 ok（本机多出的文件不管）；其余为冲突，跳过不覆盖。"""
+    root = ADDONS / "agent"
+    results = []
+    for unit in sorted(item for container in root.iterdir() for item in container.iterdir()):
+        relative = unit.relative_to(root).as_posix()
+        files = [unit] if unit.is_file() else sorted(path for path in unit.rglob("*") if path.is_file())
+        targets = [(path, PI_AGENT / path.relative_to(root)) for path in files]
+        if all(target.is_file() and target.read_bytes() == path.read_bytes() for path, target in targets):
+            results.append({"step": f"pi-addon:{relative}", "status": "ok"})
+        elif (PI_AGENT / relative).exists():
+            results.append({"step": f"pi-addon:{relative}", "status": "conflict",
+                            "detail": f"{PI_AGENT / relative} 已存在且内容不同，未覆盖"})
+        else:
+            if apply:
+                for path, target in targets:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(path.read_bytes())
+            results.append({"step": f"pi-addon:{relative}", "status": "done" if apply else "todo"})
+    return results
+
+
+def npm_name(entry: str) -> str:
+    spec = entry.removeprefix("npm:")
+    return spec[:spec.rindex("@")] if spec.rfind("@") > 0 else spec
+
+
+def step_pi_packages(apply: bool, packages: list[str]) -> list[dict]:
+    """npm 包经 `pi install` 安装并登记；本地包登记绝对路径。同名已登记但版本或来源不同为冲突。"""
+    settings_path = PI_AGENT / "settings.json"
+    results = []
+    for wanted in packages:
+        settings = read_json(settings_path) if settings_path.exists() else {}
+        entries = [item for item in settings.get("packages", []) if isinstance(item, str)]
+        step = f"pi-package:{wanted}"
+        if wanted.startswith("npm:"):
+            same = [item for item in entries if item.startswith("npm:") and npm_name(item) == npm_name(wanted)]
+            if wanted in same:
+                results.append({"step": step, "status": "ok"})
+            elif same:
+                results.append({"step": step, "status": "conflict", "detail": f"已登记 {same[0]}，未改动"})
+            else:
+                if apply:
+                    subprocess.run([shutil.which("pi"), "install", wanted], stdin=subprocess.DEVNULL, check=True)
+                results.append({"step": step, "status": "done" if apply else "todo"})
+            continue
+        path = (PI_AGENT / wanted).resolve()
+        if any((PI_AGENT / item).resolve() == path for item in entries if not item.startswith(("npm:", "git:", "http"))):
+            results.append({"step": step, "status": "ok"})
+            continue
+        if apply:
+            settings["packages"] = [*settings.get("packages", []), path.as_posix()]
+            write_json(settings_path, settings)
+        results.append({"step": step, "status": "done" if apply else "todo"})
+    return results
+
+
+def step_json_keys(apply: bool, name: str, path: Path, wanted: dict) -> dict:
+    """顶层键缺失则写入；已有且值不同为冲突，保留原值。"""
+    data = read_json(path) if path.exists() else {}
+    missing = [key for key in wanted if key not in data]
+    differing = [key for key in wanted if key in data and data[key] != wanted[key]]
+    if apply and missing:
+        data.update({key: wanted[key] for key in missing})
+        write_json(path, data)
+    status = "conflict" if differing else ("done" if apply else "todo") if missing else "ok"
+    detail = "; ".join(part for part in (f"写入 {', '.join(missing)}" if missing else "",
+                                         f"保留本机不同值 {', '.join(differing)}" if differing else "") if part)
+    return {"step": name, "status": status, **({"detail": f"{path}：{detail}"} if detail else {})}
 
 
 def step_pi_skills(apply: bool) -> dict:
@@ -198,7 +255,11 @@ def main() -> int:
         steps.extend(step_npm(args.apply))
         steps.append(step_claude_registration(args.apply, environment["node_path"]))
         steps.append(step_codex_registration(args.apply, environment["node_path"]))
-        steps.append(step_alias_extension(args.apply))
+        addons = read_json(ADDONS / "manifest.json")
+        steps.extend(step_addon_units(args.apply))
+        steps.extend(step_pi_packages(args.apply, addons["packages"]))
+        steps.append(step_json_keys(args.apply, "pi-settings", PI_AGENT / "settings.json", addons["pi_settings"]))
+        steps.append(step_json_keys(args.apply, "web-search-config", WEB_SEARCH_CONFIG, addons["web_search"]))
         steps.append(step_pi_skills(args.apply))
         steps.append(step_producer_registration(args.apply))
         steps.append(step_release(args.apply))

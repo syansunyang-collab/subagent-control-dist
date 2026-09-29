@@ -39,3 +39,6 @@ notes/verify/evidence/local-incremental-20260923/** -text -eol -whitespace
 notes/verify/evidence/head-baseline-20260923/** -text -eol -whitespace
 notes/verify/evidence/local-tail-20260923/** -text -eol -whitespace
 notes/verify/evidence/chief-engineer-20260923/** -text -eol -whitespace
+
+# 用户级 Pi 插件快照按原字节部署，bootstrap 逐字节比对本机安装。
+adapters/pi/user-addons/** -text
