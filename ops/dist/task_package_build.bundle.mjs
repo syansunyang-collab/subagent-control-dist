@@ -173,9 +173,9 @@ function runtimeRoot() {
 }
 var ROOT = projectRoot();
 var RUNTIME_ROOT = runtimeRoot();
-function runGit(args) {
+function runGit(args, cwd = ROOT) {
   const cmd = ["git", ...args.map(String)];
-  const proc = spawnSync("git", args.map(String), { cwd: ROOT, encoding: "utf8", windowsHide: true });
+  const proc = spawnSync("git", args.map(String), { cwd, encoding: "utf8", windowsHide: true });
   if (proc.error) {
     if (proc.error.code === "ENOENT") throw new ToolError("git executable not found");
     throw new ToolError(`git failed to start: ${proc.error.message}`);
@@ -914,8 +914,8 @@ function scopeFromSeed(seed) {
     out_of_scope: stringList(pyGet(scope, "out_of_scope"), "scope.out_of_scope")
   };
 }
-function gitValue(args, fallback = "") {
-  const result = runGit(args);
+function gitValue(args, fallback = "", cwd = void 0) {
+  const result = runGit(args, cwd);
   if (result.exit_code !== 0) return fallback;
   return result.stdout.trim() || fallback;
 }

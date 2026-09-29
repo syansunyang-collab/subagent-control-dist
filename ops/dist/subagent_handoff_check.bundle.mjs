@@ -1240,9 +1240,9 @@ function rel(value) {
   if (relative.startsWith("..") || path2.isAbsolute(relative)) return String(value).replace(/\\/g, "/");
   return relative.replace(/\\/g, "/");
 }
-function runGit(args) {
+function runGit(args, cwd = ROOT) {
   const cmd = ["git", ...args.map(String)];
-  const proc = spawnSync("git", args.map(String), { cwd: ROOT, encoding: "utf8", windowsHide: true });
+  const proc = spawnSync("git", args.map(String), { cwd, encoding: "utf8", windowsHide: true });
   if (proc.error) {
     if (proc.error.code === "ENOENT") throw new ToolError("git executable not found");
     throw new ToolError(`git failed to start: ${proc.error.message}`);

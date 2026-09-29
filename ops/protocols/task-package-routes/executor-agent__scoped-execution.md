@@ -34,7 +34,7 @@ agent:
     {"path": "scope.read", "hint": "列出相关源码、测试和必要输入", "example": ["src/app.py"]},
     {"path": "scope.write_extra", "hint": "覆盖实现和验证需要修改的文件或目录；报告和handoff由编译器加入", "example": ["src/app.py", "tests/"]},
     {"path": "contract.scoped.operation_type", "enum": ["source_clone_only", "file_create", "file_update", "file_move", "bounded_probe"], "hint": "主要操作类型", "example": "file_update"},
-    {"path": "contract.scoped.success_conditions", "hint": "可观察的完成条件", "example": ["重试达到上限后结束，相关测试通过"]}
+    {"path": "contract.scoped.success_conditions", "hint": "可观察的完成条件；测试写定向用例通过，全量套件写不新增失败", "example": ["重试达到上限后结束，相关测试通过，全量测试不新增失败"]}
   ],
   "optional": [
     {"path": "contract.scoped.target_paths", "hint": "可选的重点文件或目录，用于定位工作对象", "example": ["src/app.py"]},
@@ -46,6 +46,8 @@ agent:
     {"path": "contract.scoped.ref_resolution.if_missing", "enum": ["needs_owner", "partial", "fallback_default_branch"], "hint": "candidate 不存在时的处理方式"},
     {"path": "contract.scoped.ref_resolution.fallback_ref", "required_when": {"path": "contract.scoped.ref_resolution.if_missing", "equals": "fallback_default_branch"}, "hint": "所选替代引用"},
     {"path": "scope.delete", "hint": "本次需要删除的路径，缺省为空"},
+    {"path": "tool_contract.network_allowed", "hint": "实施需要联网（查文档、拉取依赖）时设 true；缺省 false"},
+    {"path": "tool_contract.install_allowed", "hint": "实施需要安装依赖时设 true；缺省 false"},
     {"path": "known_facts", "hint": "子代理需要的当前事实"}
   ],
   "contract_defaults": {

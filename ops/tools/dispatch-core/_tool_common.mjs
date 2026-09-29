@@ -273,9 +273,9 @@ export function rel(value) {
 
 // ---- 子进程与文件 ----
 
-export function runGit(args) {
+export function runGit(args, cwd = ROOT) {
   const cmd = ["git", ...args.map(String)];
-  const proc = spawnSync("git", args.map(String), { cwd: ROOT, encoding: "utf8", windowsHide: true });
+  const proc = spawnSync("git", args.map(String), { cwd, encoding: "utf8", windowsHide: true });
   if (proc.error) {
     if (proc.error.code === "ENOENT") throw new ToolError("git executable not found");
     throw new ToolError(`git failed to start: ${proc.error.message}`);

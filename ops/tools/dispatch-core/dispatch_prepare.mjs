@@ -88,7 +88,7 @@ import {
   routesWithCards,
 } from "./seed_minimal.mjs";
 import { readRequiredFiles, renderTaskMaterialFile, roleDeveloperInstructions } from "./subagent_preload.mjs";
-import { buildPackage, parseSeed, sampleSeed, truthyText } from "./task_package_build.mjs";
+import { buildPackage, gitValue, parseSeed, sampleSeed, truthyText } from "./task_package_build.mjs";
 export { truthyText };
 import { lintPackage } from "./task_package_lint.mjs";
 import { conditionalRequiredFiles, routeIdFromAgent } from "./task_package_profiles.mjs";
@@ -1457,11 +1457,17 @@ export function resolveAsyncRuntimeOptions(taskPackage, options = {}) {
     );
   }
   if (!pySamePath(effectiveTargetCwd, resolveLikePython(ROOT)) && !resultMode) {
-    resultMode = "read_only_audit";
+    // 报告与 handoff 之外声明了写域即为跨仓实施；只写这两份产物才是只读审计。
+    const outputs = new Set([taskPackage?.expected_output?.file_path, taskPackage?.handoff_contract?.handoff_file]
+      .filter(Boolean).map((item) => String(resolveLikePython(item))));
+    const businessWrites = (taskPackage?.scope?.write ?? []).filter((item) => !outputs.has(String(resolveLikePython(item))));
+    resultMode = businessWrites.length ? "real_rerun" : "read_only_audit";
     crossRepo.result_mode = resultMode;
     extensions.cross_repo_acceptance = crossRepo;
     taskPackage.extensions = extensions;
-    warnings.push("跨仓result_mode缺省为read_only_audit；需要实施业务改动时显式选择real_rerun及对应写入范围。");
+    warnings.push(businessWrites.length
+      ? "跨仓result_mode按业务写域缺省为real_rerun；只读审计时显式选择read_only_audit。"
+      : "跨仓result_mode缺省为read_only_audit：写域只有报告与handoff；需要实施业务改动时在scope.write_extra声明写域。");
   }
   if (resultMode === "simulated_planning" && effectiveExecutionProfile !== "simulation") {
     warnings.push(`result_mode=simulated_planning：execution_profile由${effectiveExecutionProfile}推导为simulation。`);
@@ -1927,13 +1933,17 @@ export function prepareDispatch(seed, delivery, options = {}) {
   const normalizedAction = normalizeDispatchAction(action);
   const preview = normalizedAction === "preview";
   if (asyncTargetCwd) {
-    seed = {
-      ...seed,
-      runtime_context: {
-        ...(seed.runtime_context ?? {}),
-        target_repo: String(resolveLikePython(asyncTargetCwd)),
-      },
-    };
+    const targetRepo = String(resolveLikePython(asyncTargetCwd));
+    const runtimeContext = { ...(seed.runtime_context ?? {}), target_repo: targetRepo };
+    // 子代理在目标树里运行：执行目录与 git 快照取目标树；报告与 handoff 仍按 output_root 落在发起方仓。
+    if (!pySamePath(targetRepo, resolveLikePython(ROOT))) {
+      runtimeContext.cwd ??= targetRepo;
+      runtimeContext.git ??= {
+        branch: gitValue(["branch", "--show-current"], "(unknown)", targetRepo),
+        head: gitValue(["rev-parse", "--short=12", "HEAD"], "(unknown)", targetRepo),
+      };
+    }
+    seed = { ...seed, runtime_context: runtimeContext };
   }
   const pkg = buildPackage(seed);
   markDispatchPhase("lint");

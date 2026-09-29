@@ -202,8 +202,8 @@ export function scopeFromSeed(seed) {
   };
 }
 
-export function gitValue(args, fallback = "") {
-  const result = runGit(args);
+export function gitValue(args, fallback = "", cwd = undefined) {
+  const result = runGit(args, cwd);
   if (result.exit_code !== 0) return fallback;
   return result.stdout.trim() || fallback;
 }

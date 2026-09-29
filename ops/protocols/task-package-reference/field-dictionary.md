@@ -18,7 +18,7 @@
 | `runtime_context.network_needed` | `yes | no` |
 | `runtime_context.scope_exists` | `yes | no | partial` |
 | `runtime_context.target_repo_create_allowed` | `true | false` |
-| `extensions.cross_repo_acceptance.result_mode` | `read_only_audit | simulated_planning | real_rerun`；跨仓省略时投影为 `read_only_audit`。 |
+| `extensions.cross_repo_acceptance.result_mode` | `read_only_audit | simulated_planning | real_rerun`；跨仓省略时，报告与 handoff 之外有写域投影为 `real_rerun`，否则投影为 `read_only_audit`。 |
 | `extensions.review_execution.profile` | `evidence_only_v1 | evidence_assisted_v1 | semantic_review_v2 | acceptance_synthesis_v1` |
 | `extensions.review_execution.material_mode` | `full | index`；仅 `semantic_review_v2` 使用。 |
 | `alignment.scope` | `none | light | phase | project | discovery | resume` |
@@ -26,7 +26,7 @@
 | `concurrency_contract.parallel_policy` | `forbidden | allowed_if_no_conflict | barrier_required` |
 | `FINAL_HANDOFF.verdict` | `done | partial | needs_owner | needs_split | failed | pass | fail` |
 
-`read_only_audit`声明只做只读审计；需要实施业务改动时显式选择`real_rerun`及写域。`simulated_planning`推导`execution_profile=simulation`，仍需提供`simulation.role`与结构化`simulation.persona`。编译回执的`warnings`记录模式投影；Pi直接/批量回执及Fleet节点与状态摘要保留这些说明。
+`read_only_audit`声明只做只读审计；在 `scope.write_extra` 声明目标树写域即按实施投影为`real_rerun`。`simulated_planning`推导`execution_profile=simulation`，仍需提供`simulation.role`与结构化`simulation.persona`。编译回执的`warnings`记录模式投影；Pi直接/批量回执及Fleet节点与状态摘要保留这些说明。
 
 ## 2. task_package 顶层
 
@@ -85,7 +85,7 @@
 
 实际回执中的 `scope_actual` 是事实记录。结构化语义审查在 `review_result_v1.scope.actual_reads` 声明实际消费的输入；完整消费时可用 `$scope_read`，runner 展开后再生成 `scope_actual.read`。
 
-`scope.write` 和 `scope.delete` 的相对路径按 `runtime_context.output_root` 解析；`output_root` 缺失时按 `runtime_context.cwd` 解析。跨仓扫描只扩大 `scope.read`，不改变写入根。
+报告与 handoff 的相对路径按 `runtime_context.output_root` 解析；`scope.write` 其余条目与 `scope.delete` 的相对路径按执行目录 `runtime_context.cwd` 解析，跨仓时即目标树。报告与 handoff 始终落在发起方仓。
 
 ## 6. ownership
 
@@ -168,7 +168,7 @@ hook、notification 和运行提示不是完成证明。
 
 | 字段 | 含义 |
 | --- | --- |
-| `cwd` | 当前工作目录。 |
+| `cwd` | 子代理执行目录；跨仓时为目标树，`git` 快照同样取自该目录。 |
 | `output_root` | 控制仓根记录，由编译器生成。 |
 | `target_repo` | 可选跨仓目标绝对路径；扫描任务只影响扫描对象和相对读取路径；执行任务可在 `scope.write` 显式列出的 `target_repo` 子路径写入。 |
 | `target_repo_create_allowed` | 目标仓尚不存在且本任务被授权创建时写 `true`；未授权创建目标仓时写 `false` 或省略。该字段只解除 `target_repo` 存在性检查，不放开任意外部路径。 |

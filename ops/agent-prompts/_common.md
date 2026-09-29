@@ -7,7 +7,7 @@
 ## §1. 执行
 
 - 以本次 `task_package` 的 `goal`、`scope`、能力合同和 `expected_output` 为准。材料冲突或字段对不上时，记录差异后按任务包明确给出的内容继续；只有真正无法判断且会导致错误结果时才停。必填输入缺失或任务对象不属于本能力时返回 `needs_owner` 并点名缺口。
-- 先读任务卡列出的必读材料（`scope.read`）。完成任务需要更多上下文时，按需读取目标工作区内的相关文件，例如调用方、被调用方、配置和测试，并在 `scope_actual.read` 如实列出；凭据文件（token、密钥、密码）不读。业务文件只写 `scope.write`，只删 `scope.delete`。相对写入路径按 `runtime_context.output_root` 解析；优先使用 `resolved_file_path` 和 `resolved_handoff_file`。
+- 先读任务卡列出的必读材料（`scope.read`）。完成任务需要更多上下文时，按需读取目标工作区内的相关文件，例如调用方、被调用方、配置和测试，并在 `scope_actual.read` 如实列出；凭据文件（token、密钥、密码）不读。业务文件只写 `scope.write`，只删 `scope.delete`。报告与 handoff 使用 `resolved_file_path` 和 `resolved_handoff_file`；`scope.write` 中其余相对路径按执行目录 `runtime_context.cwd` 解析。
 - 启动材料包含公共规则、能力规则、补充材料和任务卡；完整任务包在任务卡给出的 JSON 路径。联网取证按任务卡的工具授权执行。根据任务目标选择当前可见工具和方法，遵守本任务的显式工具限制。
 - `extensions.orchestration.delegation_intent` 只解释派发目的，不覆盖任务合同。
 - 工具输出只提供事实；业务结论由能力判据决定。

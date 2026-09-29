@@ -1170,9 +1170,9 @@ function rel(value) {
   if (relative.startsWith("..") || path2.isAbsolute(relative)) return String(value).replace(/\\/g, "/");
   return relative.replace(/\\/g, "/");
 }
-function runGit(args) {
+function runGit(args, cwd = ROOT) {
   const cmd = ["git", ...args.map(String)];
-  const proc = spawnSync("git", args.map(String), { cwd: ROOT, encoding: "utf8", windowsHide: true });
+  const proc = spawnSync("git", args.map(String), { cwd, encoding: "utf8", windowsHide: true });
   if (proc.error) {
     if (proc.error.code === "ENOENT") throw new ToolError("git executable not found");
     throw new ToolError(`git failed to start: ${proc.error.message}`);
@@ -3850,8 +3850,8 @@ function scopeFromSeed(seed) {
     out_of_scope: stringList(pyGet(scope, "out_of_scope"), "scope.out_of_scope")
   };
 }
-function gitValue(args, fallback = "") {
-  const result = runGit(args);
+function gitValue(args, fallback = "", cwd = void 0) {
+  const result = runGit(args, cwd);
   if (result.exit_code !== 0) return fallback;
   return result.stdout.trim() || fallback;
 }
@@ -9159,11 +9159,13 @@ function resolveAsyncRuntimeOptions(taskPackage, options = {}) {
     );
   }
   if (!pySamePath(effectiveTargetCwd, resolveLikePython(ROOT)) && !resultMode) {
-    resultMode = "read_only_audit";
+    const outputs = new Set([taskPackage?.expected_output?.file_path, taskPackage?.handoff_contract?.handoff_file].filter(Boolean).map((item) => String(resolveLikePython(item))));
+    const businessWrites = (taskPackage?.scope?.write ?? []).filter((item) => !outputs.has(String(resolveLikePython(item))));
+    resultMode = businessWrites.length ? "real_rerun" : "read_only_audit";
     crossRepo.result_mode = resultMode;
     extensions.cross_repo_acceptance = crossRepo;
     taskPackage.extensions = extensions;
-    warnings.push("\u8DE8\u4ED3result_mode\u7F3A\u7701\u4E3Aread_only_audit\uFF1B\u9700\u8981\u5B9E\u65BD\u4E1A\u52A1\u6539\u52A8\u65F6\u663E\u5F0F\u9009\u62E9real_rerun\u53CA\u5BF9\u5E94\u5199\u5165\u8303\u56F4\u3002");
+    warnings.push(businessWrites.length ? "\u8DE8\u4ED3result_mode\u6309\u4E1A\u52A1\u5199\u57DF\u7F3A\u7701\u4E3Areal_rerun\uFF1B\u53EA\u8BFB\u5BA1\u8BA1\u65F6\u663E\u5F0F\u9009\u62E9read_only_audit\u3002" : "\u8DE8\u4ED3result_mode\u7F3A\u7701\u4E3Aread_only_audit\uFF1A\u5199\u57DF\u53EA\u6709\u62A5\u544A\u4E0Ehandoff\uFF1B\u9700\u8981\u5B9E\u65BD\u4E1A\u52A1\u6539\u52A8\u65F6\u5728scope.write_extra\u58F0\u660E\u5199\u57DF\u3002");
   }
   if (resultMode === "simulated_planning" && effectiveExecutionProfile !== "simulation") {
     warnings.push(`result_mode=simulated_planning\uFF1Aexecution_profile\u7531${effectiveExecutionProfile}\u63A8\u5BFC\u4E3Asimulation\u3002`);
@@ -9571,13 +9573,16 @@ function prepareDispatch(seed, delivery, options = {}) {
   const normalizedAction = normalizeDispatchAction(action);
   const preview = normalizedAction === "preview";
   if (asyncTargetCwd) {
-    seed = {
-      ...seed,
-      runtime_context: {
-        ...seed.runtime_context ?? {},
-        target_repo: String(resolveLikePython(asyncTargetCwd))
-      }
-    };
+    const targetRepo = String(resolveLikePython(asyncTargetCwd));
+    const runtimeContext = { ...seed.runtime_context ?? {}, target_repo: targetRepo };
+    if (!pySamePath(targetRepo, resolveLikePython(ROOT))) {
+      runtimeContext.cwd ??= targetRepo;
+      runtimeContext.git ??= {
+        branch: gitValue(["branch", "--show-current"], "(unknown)", targetRepo),
+        head: gitValue(["rev-parse", "--short=12", "HEAD"], "(unknown)", targetRepo)
+      };
+    }
+    seed = { ...seed, runtime_context: runtimeContext };
   }
   const pkg = buildPackage(seed);
   markDispatchPhase("lint");
