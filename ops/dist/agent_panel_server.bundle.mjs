@@ -1540,13 +1540,14 @@ var PanelProjection = class {
     }
     const status = String(result.status || "");
     const confirmed = status === "cancelled";
+    const summary = result.summary || {};
     return {
       accepted: true,
       status: confirmed ? "cancelled" : status || "cancelling",
       confirmed,
-      reason: result.reason ?? null,
-      active: Array.isArray(result.active) ? result.active.map(String) : [],
-      errors: Array.isArray(result.errors) ? result.errors.slice(0, 20).map(String) : []
+      reason: summary.cancellation?.reason ?? null,
+      active: Array.isArray(summary.active) ? summary.active.map((node) => String(node.node_id)) : [],
+      errors: Array.isArray(summary.cancellation?.errors) ? summary.cancellation.errors.slice(0, 20).map(String) : []
     };
   }
 };
