@@ -99,6 +99,20 @@
    受管配置冲突时保留本机型号选择，同时吸收上游新增的字段、角色和条目。
 3. `python -B ops/tools/bootstrap.py --apply`，重启 Claude Code 与 Pi，按「验证」冒烟。
 
+## macOS
+
+本仓只在 Windows 10/11 上实跑验证。派发运行时的进程管理多数写有 POSIX 分支，但从未在 macOS 上运行；已知需要改动的位置如下，改动提交在 `local` 分支。
+
+| 位置 | 问题 | 改法 |
+| --- | --- | --- |
+| `ops/tools/run-pi-task.mjs` 的 `DEFAULT_PI_CLI`；`ops/tools/pi_worker_resources.mjs` 的 `PI_CLI` | 按 Windows 全局 npm 布局（`%APPDATA%/npm/node_modules/@earendil-works/pi-coding-agent/dist/cli.js`）拼 Pi CLI 路径；macOS 上不存在，每次派发以 `worker_resources_unavailable` 失败 | 改为 `npm root -g` 下的 `@earendil-works/pi-coding-agent/dist/cli.js`。环境变量 `PI_CONTROL_PI` 不能替代：设置后子代理跳过插件与导入范围加载 |
+| `ops/tools/bootstrap.py` 的 `step_panel_build`、`step_panel_shortcut` | 只要有 `dotnet` 就构建 Windows 桌面壳（`net10.0-windows`），并调用 `powershell.exe` 建快捷方式，两步都会报错 | 非 Windows 平台跳过这两步，面板改用浏览器模式 |
+| 面板 | 桌面壳是 WinForms + WebView2，只能在 Windows 上运行 | 浏览器模式，在仓根执行 `node "<root>/ops/dist/agent_panel_server.bundle.mjs" --browser --control-repo "$PWD"`，`<root>` 取 `~/.subagent-control/agent-panel/runtime-root.json` 的 `root`；服务就绪后用 `open` 打开浏览器。可写成桌面上的 `Agent Panel.command` |
+| 派发后自动拉起面板 | 启动器尝试构建 Windows 桌面壳并失败 | 只记诊断，不影响派发 |
+| `ops/tools/_stdio-jsonrpc.mjs` 的 `killProcessTree` | 非 Windows 平台直接返回，不会结束子代理启动的长驻进程（测试服务器等） | 取消任务后检查残留进程；需要时补 `process.kill(-pid)` 分支 |
+| 路径大小写 | APFS 默认不区分大小写，代码在 POSIX 上按原样比较路径 | 仓路径与项目路径始终使用同一种大小写写法 |
+| 本文件的 Windows 专属项 | 开发者模式、.NET、WebView2、PowerShell 命令不适用；`COPY-INSTALL.ps1` 需要 `pwsh` | 前置条件改为 Homebrew 安装 node、python、git，npm 全局安装 Pi |
+
 ## 常见故障
 
 | 现象 | 处理 |
