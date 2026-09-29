@@ -2880,13 +2880,13 @@ function resolveDeps(overrides = {}) {
   deps4.startBackgroundBuild ??= () => startBackgroundBuild({ deps: deps4 });
   return deps4;
 }
-function spawnDetached(argv, { cwd, env } = {}) {
+function spawnDetached(argv, { cwd, env, windowsHide = true } = {}) {
   const child = spawnChild(argv[0], argv.slice(1), {
     cwd,
     env,
     stdio: "ignore",
     detached: true,
-    windowsHide: true
+    windowsHide
   });
   child.unref();
   return { pid: child.pid };
@@ -3044,7 +3044,7 @@ function startShell(executable, endpoint, { deps: deps4 } = {}) {
       "--loopback-url",
       String(pyGetItem(endpoint, "url"))
     ],
-    launchOptions(resolved)
+    { ...launchOptions(resolved), windowsHide: false }
   );
   const state = {
     running: true,
