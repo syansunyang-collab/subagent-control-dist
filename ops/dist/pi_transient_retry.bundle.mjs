@@ -7,7 +7,7 @@ var TRANSIENT_RETRY_EXTENSION_NAMES = Object.freeze([
   "pi_transient_retry.mjs",
   "pi_transient_retry.bundle.mjs"
 ]);
-var TRANSIENT_SERVICE_ERROR = /service(?:\s+is)?\s+temporarily\s+unavailable|availability is currently degraded/i;
+var TRANSIENT_SERVICE_ERROR = /service(?:\s+is)?\s+temporarily\s+unavailable|availability is currently degraded|\bat capacity\b|high demand/i;
 var ALREADY_NATIVE_RETRYABLE = /overloaded|rate.?limit|too many requests|\b429\b|\b500\b|\b502\b|\b503\b|\b504\b|\b524\b|provider.?returned.?error|fetch failed|timed?\s*out|timeout|terminated|connection.?error|server.?error|internal.?error/i;
 function isTransientServiceError(errorMessage) {
   return TRANSIENT_SERVICE_ERROR.test(String(errorMessage ?? ""));

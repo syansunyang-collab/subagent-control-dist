@@ -58,12 +58,18 @@ def sync(target: Path, head: str, files: dict[str, bytes], apply: bool) -> dict:
         for path in changed:
             (target / path).parent.mkdir(parents=True, exist_ok=True)
             (target / path).write_bytes(files[path])
-        # 只暂存导出集合内的变化，分发仓里的其它本地文件不进提交。
-        subprocess.run(["git", "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"], cwd=target,
-                       input="\0".join(changed + removed).encode("utf-8"), capture_output=True, check=True)
-        if subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=target).returncode:
-            git(target, "commit", "-q", "-m", f"sync: control plane {head[:12]}")
-            committed = git(target, "rev-parse", "HEAD").strip()
+        # 已跟踪仓只提交本轮 changed+removed，pathspec 不带走无关暂存；无已跟踪文件时整体提交导出集合。
+        paths = sorted(files) if not tracked else changed + removed
+        if paths:
+            spec = "\0".join(paths).encode("utf-8")
+            subprocess.run(["git", "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"], cwd=target,
+                           input=spec, capture_output=True, check=True)
+            cached = set(filter(None, git(target, "diff", "--cached", "--name-only", "-z").split("\0")))
+            if set(paths) & cached:
+                subprocess.run(["git", "commit", "-q", "-m", f"sync: control plane {head[:12]}",
+                                "--pathspec-from-file=-", "--pathspec-file-nul"],
+                               cwd=target, input=spec, capture_output=True, check=True)
+                committed = git(target, "rev-parse", "HEAD").strip()
     return {"status": "synced" if apply else "plan", "source_head": head, "target": str(target),
             "files": len(files), "changed": changed, "removed": removed, "commit": committed}
 

@@ -175,7 +175,7 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
   }
   function renderPicks() {
     const roles = Object.keys(drafts.picks);
-    if (!roles.includes(selectedPickRole)) selectedPickRole = roles[0];
+    if (!roles.includes(selectedPickRole) && roles.length) selectedPickRole = roles[0];
     const role = selectedPickRole;
     const picks = drafts.picks[role] || [];
     const warnings = sel.catalog.warnings.filter((item) => item.role).map((item) => `<li>${html(describe(item))}</li>`).join('');
@@ -492,6 +492,7 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
       updateSync(sel.sync_status);
     } catch (error) {
       loadError = `读取失败：${error.body?.error?.details?.message ? describe(error.body.error.details) : error.message}`;
+      updateSync(null);
     }
     renderAll();
     if (loaded && !resourceRequested) void refreshResources();
@@ -521,7 +522,7 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
     const generation = syncGeneration;
     syncInFlight = request('/api/config').then(({ config }) => {
       if (generation === syncGeneration) updateSync(config.sync_status);
-    }).catch(() => { /* 任务轮询管理连接错误；保留最后一次已知横幅。 */ }).finally(() => { syncInFlight = null; });
+    }).catch(() => { if (generation === syncGeneration) updateSync(null); }).finally(() => { syncInFlight = null; });
     return syncInFlight;
   }
   async function refreshCatalog() {
@@ -699,7 +700,8 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
     if (act === 'pick-role') { selectedPickRole = target.dataset.role; pickDetailsOpen = false; render(page); return; }
     if (act === 'save') { savers[page](); return; }
     if (act === 'reload' && (page === 'res' || page === 'import') && !catalog().available) { void refreshResources(); return; }
-    if (act === 'reload') { if (sel) resetPage(page); pages[page] = { busy: false, errors: [], notice: '' }; void load(); return; }
+    // 主动重新读取丢弃本页草稿，由 load() 按新读到的配置重建。
+    if (act === 'reload') { if (page === 'picks') drafts.picks = {}; else resetPage(page); pages[page] = { busy: false, errors: [], notice: '' }; void load(); return; }
     if (act === 'recover-role' || act === 'reload-role') { void resolveRole(target.dataset.role, act === 'reload-role'); return; }
     if (act === 'retry-catalog') { void refreshCatalog(); return; }
     if (act === 'discard') { resetPage(page); pages[page].errors = []; }

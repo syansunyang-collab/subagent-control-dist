@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import platform
 import shutil
 import subprocess
 import sys
@@ -63,17 +64,31 @@ def check_prerequisites() -> dict:
         except OSError as error:
             raise BootstrapError(f"当前用户不能创建符号链接（{error}）；Windows 需开启「开发者模式」。") from error
     node = subprocess.run([found["node"], "--version"], capture_output=True, text=True, check=True).stdout.strip()
+    if int(node.removeprefix("v").split(".", 1)[0]) < 24:
+        raise BootstrapError(f"需要 Node 24+（当前 {node}）。")
     return {"node": node, "node_path": found["node"]}
 
 
+def optional_matches_host(entry: dict) -> bool:
+    """有 os/cpu 限制且命中本机的 optional 才强制；无限制或异平台不要求。os 用 sys.platform，cpu 把 AMD64/x86_64 映到 x64、ARM64/aarch64 映到 arm64。"""
+    if not entry.get("optional"):
+        return False
+    systems, cpus = entry.get("os"), entry.get("cpu")
+    if not systems and not cpus:
+        return False
+    cpu = {"amd64": "x64", "x86_64": "x64", "arm64": "arm64", "aarch64": "arm64"}.get(platform.machine().lower())
+    return (not systems or sys.platform in systems) and (not cpus or cpu in cpus)
+
+
 def npm_tree_matches(directory: Path) -> bool:
-    """lock 的非可选、非 peer 条目与 npm 记录已装的条目（含本平台 optional 原生包）逐一有实体目录且同版本。"""
+    """非 peer 必需条目，加上命中本机的 optional，都要有实体目录且与 lock 同版本。"""
     hidden = directory / "node_modules/.package-lock.json"
     if not hidden.is_file():
         return False
     installed = json.loads(hidden.read_text(encoding="utf-8"))["packages"]
     locked = json.loads((directory / "package-lock.json").read_text(encoding="utf-8"))["packages"]
-    required = {key for key, entry in locked.items() if key and not entry.get("optional") and not entry.get("peer")}
+    required = {key for key, entry in locked.items()
+                if key and not entry.get("peer") and (not entry.get("optional") or optional_matches_host(entry))}
     if not required <= installed.keys():
         return False
     for key in required | {key for key in installed if key}:
@@ -99,10 +114,14 @@ def step_npm(apply: bool) -> list[dict]:
 
 
 def step_claude_registration(apply: bool, node: str) -> dict:
-    """发布只改写已有注册，首装在这里建占位，指向由发布切到发布槽。"""
+    """发布只改写已有注册，首装在这里建占位，指向由发布切到发布槽。已有非对象值为冲突，不覆盖。"""
     data = read_json(CLAUDE_JSON) if CLAUDE_JSON.exists() else {}
-    if isinstance(data.get("mcpServers", {}).get("asyncSubagent"), dict):
-        return {"step": "claude-mcp", "status": "ok"}
+    servers = data.get("mcpServers")
+    if isinstance(servers, dict) and "asyncSubagent" in servers:
+        if isinstance(servers["asyncSubagent"], dict):
+            return {"step": "claude-mcp", "status": "ok"}
+        return {"step": "claude-mcp", "status": "conflict",
+                "detail": f"{CLAUDE_JSON} 的 asyncSubagent 已存在且不是对象，未改动"}
     if apply:
         data.setdefault("mcpServers", {})["asyncSubagent"] = {
             "type": "stdio", "command": node,
@@ -166,16 +185,25 @@ def npm_name(entry: str) -> str:
     return spec[:spec.rindex("@")] if spec.rfind("@") > 0 else spec
 
 
+def package_source(item) -> str | None:
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict) and isinstance(item.get("source"), str):
+        return item["source"]
+    return None
+
+
 def step_pi_packages(apply: bool, packages: list[str]) -> list[dict]:
-    """npm 包经 `pi install` 安装并登记；本地包登记绝对路径。同名已登记但版本或来源不同为冲突。"""
+    """npm 包经 `pi install` 安装并登记；本地包登记绝对路径。同名已登记但版本或来源不同为冲突。
+    字符串与 {source: ...} 按 source 比较，对象上的过滤字段原样保留。"""
     settings_path = PI_AGENT / "settings.json"
     results = []
     for wanted in packages:
         settings = read_json(settings_path) if settings_path.exists() else {}
-        entries = [item for item in settings.get("packages", []) if isinstance(item, str)]
+        sources = [source for source in map(package_source, settings.get("packages", [])) if source]
         step = f"pi-package:{wanted}"
         if wanted.startswith("npm:"):
-            same = [item for item in entries if item.startswith("npm:") and npm_name(item) == npm_name(wanted)]
+            same = [item for item in sources if item.startswith("npm:") and npm_name(item) == npm_name(wanted)]
             if wanted in same:
                 results.append({"step": step, "status": "ok"})
             elif same:
@@ -186,7 +214,7 @@ def step_pi_packages(apply: bool, packages: list[str]) -> list[dict]:
                 results.append({"step": step, "status": "done" if apply else "todo"})
             continue
         path = (PI_AGENT / wanted).resolve()
-        if any((PI_AGENT / item).resolve() == path for item in entries if not item.startswith(("npm:", "git:", "http"))):
+        if any((PI_AGENT / item).resolve() == path for item in sources if not item.startswith(("npm:", "git:", "http"))):
             results.append({"step": step, "status": "ok"})
             continue
         if apply:
@@ -254,14 +282,15 @@ def powershell(script: str) -> str:
 
 
 def step_panel_build(apply: bool, node: str) -> dict:
-    """面板桌面壳需要 .NET 10 SDK 现场构建；首装时预先构建，避免第一次打开空等。"""
+    """面板桌面壳需要 .NET 10 SDK 现场构建；首装时预先构建，避免第一次打开空等。
+    是否可复用以启动器 --status 的 reusable 为准（与启动器 validManifest 同一判据）。"""
     if not shutil.which("dotnet"):
         return {"step": "panel-build", "status": "skipped", "detail": "未找到 dotnet，面板需要 .NET 10 SDK 与 WebView2；派发不受影响"}
     if not apply and not PANEL_LAUNCHER.is_file():
         return {"step": "panel-build", "status": "todo", "detail": "发布后构建"}
-    manifest = json.loads(subprocess.run([node, str(PANEL_LAUNCHER), "--status"], cwd=ROOT, capture_output=True,
-                                         text=True, encoding="utf-8", check=True).stdout).get("manifest") or {}
-    if manifest.get("executable") and Path(manifest["executable"]).is_file():
+    status = json.loads(subprocess.run([node, str(PANEL_LAUNCHER), "--status"], cwd=ROOT, capture_output=True,
+                                       text=True, encoding="utf-8", check=True).stdout)
+    if status.get("reusable"):
         return {"step": "panel-build", "status": "ok"}
     if apply:
         subprocess.run([node, str(PANEL_LAUNCHER), "--build"], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)

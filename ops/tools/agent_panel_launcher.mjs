@@ -15,6 +15,7 @@ import {
   probeHealth,
   readJson,
   selfTest,
+  validManifest,
 } from "./dispatch-core/agent_panel_launcher.mjs";
 
 const USAGE = "usage: agent_panel_launcher.mjs [-h] [--build] [--status] [--self-test]";
@@ -68,6 +69,8 @@ async function main(argv) {
       shell: readJson(SHELL_STATE_PATH),
       build: readJson(BUILD_STATE_PATH),
       manifest: readJson(MANIFEST_PATH),
+      // 与启动器自身复用判据一致：壳存在且构建对应当前发布。
+      reusable: Boolean(validManifest().executable),
     };
   } else {
     result = await ensureAgentPanel();
