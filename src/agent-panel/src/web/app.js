@@ -72,7 +72,7 @@ const state = {
   projects: [],
   monitorRoot: '',
   // 配置页与运行槽的差异：打开配置页时沿任务轮询刷新，同步与保存后立即更新
-  sync: { status: [], open: false },
+  sync: { status: null, open: false },
   // 渲染签名缓存：数据没变就不重绘，轮询不闪动
   renderSig: Object.create(null)
 };
@@ -734,15 +734,17 @@ function renderViewState() {
   const sync = ui['sync-status'];
   if (sync) {
     const items = state.sync.status;
-    sync.classList.toggle('is-hidden', !CONFIG_VIEWS.includes(state.activeView) || !items.length);
+    sync.classList.toggle('is-hidden', !CONFIG_VIEWS.includes(state.activeView) || !items);
+    sync.classList.toggle('is-ok', items?.length === 0);
     // 详情按「配置 · 状况」归并，多个运行环境只计数，不显示路径。
     const lines = new Map();
-    for (const item of items) {
+    for (const item of items || []) {
       const text = `${configPages.fileLabel(item.file)} · ${({ differs: '内容不同', missing: '缺失', unreadable: '不可读' })[item.reason]}`;
       lines.set(text, (lines.get(text) || 0) + 1);
     }
     const details = state.sync.open ? `<ul class="sync-details">${[...lines].map(([text, count]) => `<li>${escapeHtml(text)}${count > 1 ? ` · ${count} 个运行环境` : ''}</li>`).join('')}</ul>` : '';
-    sync.innerHTML = items.length ? `<div class="sync-line"><span class="txt">有改动尚未同步到运行环境</span><button type="button" class="secondary-button" data-action="sync-details">${state.sync.open ? '收起详情' : '查看详情'}</button><button type="button" class="secondary-button" data-action="sync-now">同步</button></div>${details}` : '';
+    sync.innerHTML = items?.length ? `<div class="sync-line"><span class="txt">有改动尚未同步到运行环境</span><button type="button" class="secondary-button" data-action="sync-details">${state.sync.open ? '收起详情' : '查看详情'}</button><button type="button" class="secondary-button" data-action="sync-now">同步</button></div>${details}`
+      : items ? '<div class="sync-line"><span class="txt">配置已同步 · 保存后的设置在下一次派发生效</span></div>' : '';
   }
 }
 

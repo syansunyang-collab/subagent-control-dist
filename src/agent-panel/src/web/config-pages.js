@@ -33,19 +33,25 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
   let dragging = null;
   const drafts = { picks: {}, efforts: {}, res: {}, imports: {} };
   const pages = Object.fromEntries(Object.keys(roots).map((page) => [page, { busy: false, errors: [], notice: '' }]));
-  const collapsed = new Set();
   const expanded = new Set();
   const narrowing = new Map();
   const openGroups = new Set();
+  let selectedPickRole = 'executor-agent';
+  let pickDetailsOpen = false;
+  const missingNames = new Set();
 
   // ── 显示名与分组 ──
   const labels = () => sel?.labels || {};
   const roleLabel = (role) => labels().roles?.[role] || {};
-  const roleName = (role) => roleLabel(role).name || role;
+  const roleName = (role) => {
+    if (roleLabel(role).name) return roleLabel(role).name;
+    if (!missingNames.has(role)) { console.warn(`面板缺少角色显示名：${role}`); missingNames.add(role); }
+    return '名称待补';
+  };
   const roleHead = (role, tail) => `<div class="role-name">${roleLabel(role).name ? `${html(roleLabel(role).name)}<span class="role-id">${html(role)}</span>` : `<span class="soft mono">${html(role)}</span>`}</div>
     <div class="role-does">${html(roleLabel(role).summary)}</div><div class="role-default">${tail}</div>`;
   const capText = (role, cap) => roleLabel(role).capabilities?.[cap];
-  const capHtml = (role, cap) => (capText(role, cap) ? html(capText(role, cap)) : `<span class="soft mono">${html(cap)}</span>`);
+  const capHtml = (role, cap) => html(capText(role, cap) || '名称待补');
   function grouped(roles) {
     const order = Object.keys(labels().roles || {});
     const rank = (role) => (order.includes(role) ? order.indexOf(role) : order.length);
@@ -84,7 +90,8 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
   }
   function messages(page) {
     const state = pages[page];
-    const errors = state.errors.map((item) => `<li>${html(describe(item))}</li>`).join('');
+    const errors = state.errors.map((item) => `<li>${html(describe(page === 'picks' && item.pick_id && item.index !== undefined
+      ? { ...item, pick_id: `第 ${item.index + 1} 行` } : item))}</li>`).join('');
     const reload = state.conflict ? '<button type="button" class="secondary-button" data-act="reload">重新读取</button>' : '';
     const stale = loadError ? `<div class="cfg-msg is-error">${html(loadError)}<button type="button" class="secondary-button" data-act="reload">重新读取</button></div>` : '';
     return `${stale}${errors ? `<ul class="cfg-msg is-error">${errors}</ul>` : ''}${state.notice ? `<div class="cfg-msg">${html(state.notice)}${reload}</div>` : ''}`;
@@ -130,21 +137,21 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
     const bad = (field) => invalid('picks', (item) => item.role === role && (item.pick_id === pick.id || item.index === index) && fieldOf(item) === field);
     const attrs = (field, extra = '') => {
       const classes = [extra, bad(field) && 'is-invalid'].filter(Boolean).join(' ');
-      return `data-role="${html(role)}" data-i="${index}" data-f="${field}"${classes ? ` class="${classes}"` : ''}`;
+      return `data-role="${html(role)}" data-i="${index}" data-f="${field}" aria-label="${html(PICK_TEXT[field])}"${classes ? ` class="${classes}"` : ''}`;
     };
     const levels = levelsOf(pick.model);
     const effort = (field) => `<select ${attrs(field)}>${[...new Set([...levels, pick[field]])].map((level) => `<option${level === pick[field] ? ' selected' : ''}>${html(level)}</option>`).join('')}</select>`;
     const fixed = fixedPick(role, pick);
     const text = (field, extra) => `<input type="text" ${attrs(field, extra)} value="${html(pick[field])}"${fixed && field === 'id' ? ' readonly title="分身工具固定引用，不能改名"' : ''}>`;
     return `<tr data-role="${html(role)}" data-i="${index}">
-      <td class="order"><span class="grip" title="拖动排序">⋮⋮</span><button type="button" class="ic" data-act="up" title="上移"${index === 0 ? ' disabled' : ''}>↑</button><button type="button" class="ic" data-act="down" title="下移"${index === count - 1 ? ' disabled' : ''}>↓</button></td>
+      <td class="order"><span class="grip" title="拖动排序">⋮⋮</span><button type="button" class="ic" data-act="up" title="上移" aria-label="上移"${index === 0 ? ' disabled' : ''}>↑</button><button type="button" class="ic" data-act="down" title="下移" aria-label="下移"${index === count - 1 ? ' disabled' : ''}>↓</button></td>
       <td>${text('id', 'mono pid')}</td>
       ${compact ? '' : `<td>${text('when')}</td>`}
       <td><select ${attrs('model', inPi(pick.model) ? 'mono' : 'mono is-warn')}>${modelChoices(pick.model)}</select></td>
       <td>${effort('effort_min')}</td><td>${effort('effort')}</td><td>${effort('effort_max')}</td>
       ${compact ? '' : `<td><select ${attrs('capability')}><option value="">全部任务</option>${caps.map((cap) => `<option value="${html(cap.id)}"${cap.id === pick.capability ? ' selected' : ''}>${html(capText(role, cap.id) || cap.id)}</option>`).join('')}</select></td>`}
-      <td class="c"><button type="button" class="dot${pick.default ? ' on' : ''}${bad('default') ? ' is-invalid' : ''}" data-act="default" title="设为默认"></button></td>
-      <td class="c"><button type="button" class="ic del" data-act="delete" title="${fixed ? '分身工具固定引用，不能删除' : '删除此推荐'}"${fixed ? ' disabled' : ''}>×</button></td>
+      <td class="c"><button type="button" class="dot${pick.default ? ' on' : ''}${bad('default') ? ' is-invalid' : ''}" data-act="default" title="设为默认" aria-label="设为默认"></button></td>
+      <td class="c"><button type="button" class="danger-button" data-act="delete" title="${fixed ? '分身工具固定引用，不能删除' : '删除此推荐'}"${fixed ? ' disabled' : ''}>删除推荐</button></td>
     </tr>`;
   }
   function picksCard(role) {
@@ -153,29 +160,39 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
     const { lacking, base } = defaults(role, picks);
     const head = base ? html(pickLabel(base)) : lacking ? '缺少默认' : '按任务类型分别默认';
     const cols = compact
-      ? '<col style="width:72px"><col style="width:150px"><col><col style="width:104px"><col style="width:104px"><col style="width:104px"><col style="width:76px"><col style="width:56px">'
-      : '<col style="width:72px"><col style="width:150px"><col><col style="width:250px"><col style="width:104px"><col style="width:104px"><col style="width:104px"><col style="width:150px"><col style="width:76px"><col style="width:56px">';
+      ? '<col style="width:72px"><col style="width:150px"><col><col style="width:104px"><col style="width:104px"><col style="width:104px"><col style="width:76px"><col style="width:104px">'
+      : '<col style="width:72px"><col style="width:150px"><col><col style="width:250px"><col style="width:104px"><col style="width:104px"><col style="width:104px"><col style="width:150px"><col style="width:76px"><col style="width:104px">';
     const thead = `<tr><th rowspan="2">顺序</th><th rowspan="2">标识</th>${compact ? '' : '<th rowspan="2">适用场景</th>'}<th rowspan="2">模型</th><th colspan="3" class="grp">档位</th>${compact ? '' : '<th rowspan="2">任务类型</th>'}<th rowspan="2" class="c">默认</th><th rowspan="2" class="c">删除</th></tr><tr><th class="sub">最低</th><th class="sub">默认</th><th class="sub">最高</th></tr>`;
-    return `<article class="role${collapsed.has(role) ? ' collapsed' : ''}" data-card="${html(role)}">
-      <div class="role-head" data-act="fold">${roleHead(role, `默认 <b class="${lacking ? 'warn' : ''}">${head}</b>`)}</div>
-      <div class="role-body">
+    return `<details class="pick-details"${pickDetailsOpen ? ' open' : ''}><summary>展开配置详情 <span>编辑推荐、适用场景和技术标识</span></summary>
+      <div class="pick-editor" data-card="${html(role)}">
+        <p class="note">以下为技术配置编辑区。保存后下一次派发生效。</p>
         ${compact ? '' : `<div class="caps">${capChips(role, picks)}</div>`}
+        <p class="note">默认 ${head}</p>
         <div class="table-scroll"><table class="picks${compact ? ' compact' : ''}"><colgroup>${cols}</colgroup><thead>${thead}</thead><tbody>${picks.map((pick, index) => pickRow(role, pick, index, picks.length, compact)).join('')}</tbody></table></div>
         <button type="button" class="add" data-act="add" data-role="${html(role)}">＋ 新增推荐</button>
       </div>
-    </article>`;
+    </details>`;
   }
   function renderPicks() {
+    const roles = Object.keys(drafts.picks);
+    if (!roles.includes(selectedPickRole)) selectedPickRole = roles[0];
+    const role = selectedPickRole;
+    const picks = drafts.picks[role] || [];
     const warnings = sel.catalog.warnings.filter((item) => item.role).map((item) => `<li>${html(describe(item))}</li>`).join('');
-    return `${header('picks', '角色与模型', '各角色承担的任务类型与使用的模型，保存后下一次派发生效。', picksDirty(), true)}
-      ${warnings ? `<ul class="cfg-msg is-warn">${warnings}</ul>` : ''}
-      <div class="legend">
-        <div><b>标识</b>主代理派发时引用的名称，历史派发记录据此对照。</div>
-        <div><b>顺序</b>主代理查看推荐时按此顺序阅读，常用项靠前。</div>
-        <div><b>档位</b>主代理可在最低与最高之间调整，超出范围需用户授权；可选档位由「模型档位」页决定。</div>
-        <div><b>任务类型 · 默认</b>「全部任务」中选定一行作为角色默认；某类任务需要不同配置时，新增一行指定该任务类型并设为默认。</div>
-      </div>
-      ${grouped(Object.keys(drafts.picks)).map(([group, list]) => `<div class="group"><h2>${html(group)}</h2>${list.map(picksCard).join('')}</div>`).join('')}`;
+    const list = grouped(roles).map(([group, members]) => `<li class="pick-group">${html(group)}</li>${members.map((name) => `<li><button type="button" data-act="pick-role" data-role="${html(name)}" aria-current="${name === role}"><b>${html(roleName(name))}</b><small>${html(roleLabel(name).summary)}</small></button></li>`).join('')}`).join('');
+    const rows = picks.map((pick) => `<tr><td><strong>${html(roleLabel(role).picks?.[pick.id] || pick.when || capText(role, pick.capability) || '常规任务')}</strong>${pick.default ? `<span class="task-note">${pick.capability ? `${capHtml(role, pick.capability)}的默认推荐` : '角色默认'}</span>` : ''}</td>
+        <td class="model">${html(short(pick.model))}</td><td>${html(pick.effort)}</td><td>${html(pick.effort_min)} – ${html(pick.effort_max)}</td></tr>`).join('');
+    return `<div class="pick-heading"><div><h1>角色与模型</h1><p class="note">先找到适合任务的角色，再查看它擅长什么、默认使用哪个模型和档位。修改配置后保存。</p></div>
+      <div class="pick-heading-actions"><button type="button" class="secondary-button" data-act="reload">重新读取</button>
+      <button type="button" class="secondary-button" data-act="discard"${picksDirty() && !pages.picks.busy ? '' : ' disabled'}>放弃修改</button>
+      <button type="button" class="primary-button" data-act="save"${picksDirty() && !pages.picks.busy && !pages.picks.conflict ? '' : ' disabled'}>${pages.picks.busy ? '保存中…' : '保存更改'}</button></div></div>
+      ${messages('picks')}${warnings ? `<ul class="cfg-msg is-warn">${warnings}</ul>` : ''}
+      <div class="pick-layout"><aside class="pick-panel pick-nav"><div class="pick-panel-head"><h2>角色</h2><p>选择角色，查看任务类型与模型推荐。</p></div><ul>${list}</ul></aside>
+      <section class="pick-panel pick-main"><div class="pick-eyebrow">当前角色</div><div class="pick-title"><h2>${html(roleName(role))}</h2><span class="pick-badge">${html(roleLabel(role).group || '未分组')}</span></div>
+      <div class="pick-intro"><strong>擅长</strong><p>${html(roleLabel(role).summary || '名称待补')}</p></div>
+      <div class="pick-section-head"><h3>任务类型与模型推荐</h3><p>先看常用配置，再按任务选择其它推荐。</p></div>
+      <div class="table-scroll"><table class="pick-summary"><thead><tr><th scope="col">任务类型</th><th scope="col">推荐模型</th><th scope="col">默认档位</th><th scope="col">可调范围</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="pick-foot">档位由 off 至 max 递增；可选档位在「模型档位」页维护。</p>${picksCard(role)}</section></div>`;
   }
   function nearest(levels, value) {
     const rank = (level) => effortLevels().indexOf(level);
@@ -569,13 +586,23 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
       } else state.errors = [{ message: `保存失败：${error.body?.error?.message || error.message}` }];
     } finally {
       state.busy = false;
+      if (page === 'picks' && state.errors.length) {
+        selectedPickRole = state.errors[0].role || selectedPickRole;
+        pickDetailsOpen = true;
+      }
       renderAll();
     }
     roots[page].querySelector('.is-invalid, .cfg-msg.is-error')?.scrollIntoView({ block: 'center' });
   }
   function savePicks() {
     const errors = checkIds();
-    if (errors.length) { pages.picks.errors = errors; renderAll(); return; }
+    if (errors.length) {
+      pages.picks.errors = errors;
+      selectedPickRole = errors[0].role;
+      pickDetailsOpen = true;
+      renderAll();
+      return;
+    }
     const roles = Object.fromEntries(Object.entries(drafts.picks).filter(([role, picks]) => !same(picks, sel.editable.roles[role])));
     void save('picks', async () => {
       await request('/api/selection', { method: 'PUT', body: JSON.stringify({ draft: { roles: copy(roles) }, expected_revision: sel.revisions }) });
@@ -669,17 +696,17 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
     const target = event.target.closest('[data-act]');
     if (!target || target.disabled || pages[page].busy) return;
     const act = target.dataset.act;
+    if (act === 'pick-role') { selectedPickRole = target.dataset.role; pickDetailsOpen = false; render(page); return; }
     if (act === 'save') { savers[page](); return; }
     if (act === 'reload' && (page === 'res' || page === 'import') && !catalog().available) { void refreshResources(); return; }
-    if (act === 'reload') { resetPage(page); pages[page] = { busy: false, errors: [], notice: '' }; void load(); return; }
+    if (act === 'reload') { if (sel) resetPage(page); pages[page] = { busy: false, errors: [], notice: '' }; void load(); return; }
     if (act === 'recover-role' || act === 'reload-role') { void resolveRole(target.dataset.role, act === 'reload-role'); return; }
     if (act === 'retry-catalog') { void refreshCatalog(); return; }
     if (act === 'discard') { resetPage(page); pages[page].errors = []; }
     if (act === 'fold') {
       if (event.target.closest('input, select, button')) return;
       const role = target.closest('[data-card]').dataset.card;
-      const set = page === 'res' ? expanded : collapsed;
-      if (set.has(role)) set.delete(role); else set.add(role);
+      if (expanded.has(role)) expanded.delete(role); else expanded.add(role);
     }
     const row = target.closest('tr[data-i]');
     if (row) {
@@ -759,6 +786,9 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
     root.addEventListener('click', (event) => onClick(page, event));
     root.addEventListener('change', (event) => onChange(page, event));
   }
+  roots.picks.addEventListener('toggle', (event) => {
+    if (event.target.matches?.('.pick-details')) pickDetailsOpen = event.target.open;
+  }, true);
   for (const type of ['mousedown', 'mouseup', 'dragstart', 'dragover', 'drop', 'dragend']) roots.picks.addEventListener(type, onDrag);
 
   // 同步详情里的受管文件用界面名称显示。

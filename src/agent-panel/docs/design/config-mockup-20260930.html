@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>角色与模型 · 配置页静态样稿</title>
+  <style>
+    :root { color-scheme: light; --bg:#F8F3E6; --text:#292317; --muted:#665D49; --surface:#FFFDF8; --surface-2:#F8F5ED; --line:#CEC5B4; --accent:#B7441F; --accent-ink:#FFFFFF; --danger:#B3343B; --danger-ink:#FFFFFF; --warning:#7E4C05; --warning-bg:#FFF2D6; --selected:#F9E9DB; --focus:#B7441F; --shadow:0 1px 3px rgba(140,115,60,.13); --sans:"Segoe UI","Microsoft YaHei UI",system-ui,sans-serif; }
+    [data-theme="dark"] { color-scheme: dark; --bg:#05081A; --text:#F0F4FF; --muted:#ADB9D7; --surface:#131A34; --surface-2:#171F38; --line:#48516D; --accent:#35E0C8; --accent-ink:#052A26; --danger:#A72D45; --danger-ink:#FFFFFF; --warning:#FFE0A5; --warning-bg:#352917; --selected:#183D46; --focus:#35E0C8; --shadow:0 1px 2px rgba(0,0,0,.35); }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 var(--sans); }
+    button,input,select { font:inherit; }
+    button { cursor:pointer; }
+    :focus-visible { outline:3px solid var(--focus); outline-offset:2px; }
+    .top { background:var(--surface); border-bottom:1px solid var(--line); }
+    .top-inner { max-width:1280px; margin:auto; padding:12px 24px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+    .brand { font-size:16px; font-weight:700; margin-right:auto; }
+    .theme, .secondary { border:1px solid var(--line); background:var(--surface); color:var(--text); border-radius:8px; min-height:36px; padding:6px 13px; }
+    .theme { white-space:nowrap; }
+    .tabs { max-width:1280px; margin:auto; padding:0 24px; display:flex; gap:24px; overflow-x:auto; white-space:nowrap; }
+    .tabs span { padding:10px 0; color:var(--muted); }
+    .tabs .active { border-bottom:3px solid var(--accent); color:var(--text); font-weight:700; }
+    .shell { max-width:1280px; width:100%; padding:0 24px 64px; margin:24px auto 0; }
+    .banner { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 14px; border:1px solid var(--line); background:var(--surface); border-radius:10px; margin-bottom:20px; }
+    .banner strong { font-size:13px; }
+    .banner span { color:var(--muted); font-size:13px; }
+    .heading { display:flex; align-items:flex-start; gap:20px; flex-wrap:wrap; margin-bottom:20px; }
+    .heading > div:first-child { flex:1 1 260px; min-width:0; }
+    h1 { font-size:22px; line-height:1.3; margin:0 0 5px; }
+    h2 { font-size:17px; margin:0; }
+    h3 { font-size:15px; margin:0 0 5px; }
+    p { margin:0; }
+    .subtle { color:var(--muted); }
+    .actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .actions button { flex-shrink:0; white-space:nowrap; }
+    .primary,.danger { border:1px solid transparent; border-radius:8px; min-height:36px; padding:6px 16px; font-weight:600; white-space:nowrap; }
+    .primary { background:var(--accent); color:var(--accent-ink); }
+    .danger { background:var(--danger); color:var(--danger-ink); }
+    .layout { display:grid; grid-template-columns:minmax(220px,300px) minmax(0,1fr); gap:16px; align-items:start; }
+    .panel { background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); min-width:0; }
+    .panel-head { padding:16px; border-bottom:1px solid var(--line); }
+    .panel-head p { color:var(--muted); font-size:13px; margin-top:4px; }
+    .role-list { list-style:none; padding:8px; margin:0; display:grid; gap:3px; }
+    .role-list li { margin:0; }
+    .role-list button { width:100%; text-align:left; border:1px solid transparent; background:transparent; border-radius:8px; padding:9px 11px; color:var(--text); }
+    .role-list button[aria-current="true"] { background:var(--selected); border-color:var(--line); }
+    .role-list b,.role-list small { display:block; }
+    .role-list small { font-size:12px; color:var(--muted); margin-top:2px; }
+    .role-list .group { margin:12px 11px 4px; color:var(--muted); font-size:12px; font-weight:700; }
+    .detail { padding:20px; }
+    .eyebrow { color:var(--muted); font-size:12px; font-weight:700; margin-bottom:4px; }
+    .role-title { display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; margin-bottom:12px; }
+    .role-title h2 { font-size:20px; }
+    .intro { background:var(--surface-2); border-radius:8px; padding:12px 14px; margin-bottom:20px; }
+    .intro strong { display:block; margin-bottom:2px; }
+    .section-head { display:flex; gap:16px; justify-content:space-between; align-items:baseline; flex-wrap:wrap; margin-bottom:10px; }
+    .section-head p { color:var(--muted); font-size:13px; }
+    .scroll { overflow-x:auto; }
+    table { width:100%; min-width:615px; border-collapse:collapse; text-align:left; }
+    th { color:var(--muted); font-size:12px; font-weight:600; border-bottom:1px solid var(--line); padding:9px 10px; }
+    td { border-bottom:1px solid var(--line); padding:12px 10px; vertical-align:top; }
+    tr:last-child td { border-bottom:0; }
+    .model { font-weight:600; overflow-wrap:anywhere; }
+    .task-note { display:block; font-size:12px; color:var(--muted); }
+    .badge { display:inline-block; border-radius:6px; border:1px solid var(--line); background:var(--surface-2); padding:2px 8px; white-space:nowrap; }
+    .section-foot { margin-top:10px; color:var(--muted); font-size:13px; }
+    details { margin-top:24px; border:1px solid var(--line); border-radius:10px; background:var(--surface-2); }
+    summary { padding:12px 15px; cursor:pointer; font-weight:700; }
+    summary span { font-weight:400; font-size:12px; color:var(--muted); margin-left:10px; }
+    .editor { border-top:1px solid var(--line); padding:16px; }
+    .editor > p { color:var(--muted); margin-bottom:15px; }
+    .editor-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .field { display:grid; gap:5px; font-size:13px; font-weight:600; min-width:0; }
+    .field input,.field select { width:100%; min-height:36px; border:1px solid var(--line); border-radius:7px; padding:6px 9px; color:var(--text); background:var(--surface); }
+    .field small { color:var(--muted); font-size:12px; font-weight:400; }
+    .editor h3 { margin:0 0 12px; }
+    .editor .editor-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:space-between; margin-top:18px; }
+    .editor .editor-actions > div { display:flex; gap:8px; flex-wrap:wrap; }
+    .notice { margin-top:16px; padding:14px 16px; background:var(--warning-bg); color:var(--warning); border:1px solid var(--line); border-radius:10px; }
+    .notice h3 { color:var(--text); }
+    .notice p { margin:4px 0 10px; }
+    .notice .secondary { background:var(--surface); }
+    .mock-label { font-size:12px; font-weight:700; color:var(--muted); margin:22px 0 6px; }
+    .static-note { color:var(--muted); font-size:12px; margin-top:18px; }
+    @media (max-width:850px) { .layout { grid-template-columns:1fr; } .role-list { grid-template-columns:repeat(2,minmax(0,1fr)); } .role-list .group { grid-column:1/-1; } }
+    @media (max-width:570px) { .shell { padding:0 12px 40px; } .top-inner,.tabs { padding-left:12px; padding-right:12px; } .role-list,.editor-grid { grid-template-columns:1fr; } .detail { padding:14px; } }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner"><div class="brand">异步运行台</div><button id="theme" class="theme" type="button" aria-label="切换到深色主题" aria-pressed="false">◐ 深色主题</button></div>
+    <nav class="tabs" aria-label="面板页面"><span>运行</span><span class="active" aria-current="page">角色与模型</span><span>角色资源</span><span>导入范围</span><span>模型档位</span><span>历史</span></nav>
+  </header>
+  <main class="shell">
+    <div class="banner" role="status"><strong>配置已同步</strong><span>保存后的设置将在下一次派发生效。</span></div>
+    <div class="heading"><div><h1>角色与模型</h1><p class="subtle">先找到适合任务的角色，再查看它擅长什么、默认使用哪个模型和档位。修改配置后保存。</p></div><div class="actions"><button type="button" class="secondary" title="静态样稿，不会读取数据">重新读取</button><button type="button" class="primary" title="静态样稿，不会写入配置">保存更改</button></div></div>
+    <div class="layout">
+      <aside class="panel" aria-labelledby="roles-title"><div class="panel-head"><h2 id="roles-title">角色</h2><p>选择角色，查看任务类型与模型推荐。</p></div>
+        <ul class="role-list">
+          <li class="group">取证与调研</li>
+          <li><button type="button"><b>本地取证</b><small>调查本机代码、运行环境与网络，提供证据</small></button></li>
+          <li><button type="button"><b>调研</b><small>检索外部资料、阅读文档与图片、寻找可复用方案</small></button></li>
+          <li class="group">规划与审查</li>
+          <li><button type="button"><b>计划编排</b><small>将已审规格拆解为执行计划，用于跨会话交接</small></button></li>
+          <li><button type="button"><b>方案审查</b><small>审查计划和方案的可行性与风险</small></button></li>
+          <li class="group">实施</li>
+          <li><button type="button" aria-current="true"><b>执行</b><small>在明确范围内修改代码并自测</small></button></li>
+          <li><button type="button"><b>批量处理</b><small>按既定规则批量处理同类对象</small></button></li>
+          <li><button type="button"><b>文档撰写</b><small>将已确认材料整理为正式文档</small></button></li>
+          <li class="group">验收</li>
+          <li><button type="button"><b>验收</b><small>验证代码、功能与界面</small></button></li>
+          <li><button type="button"><b>规则审查</b><small>审查规则质量与各处表述一致性</small></button></li>
+          <li class="group">通用与分身</li>
+          <li><button type="button"><b>通用</b><small>处理其他角色不覆盖的任务，提供外部咨询</small></button></li>
+          <li><button type="button"><b>分身</b><small>携带当前对话上下文在后台执行任务</small></button></li>
+        </ul>
+      </aside>
+      <section class="panel detail" aria-labelledby="selected-title">
+        <div class="eyebrow">当前角色</div><div class="role-title"><h2 id="selected-title">执行</h2><span class="badge">实施</span></div>
+        <div class="intro"><strong>擅长</strong><p>在明确范围内修改代码并自测。适合已确定交付物、改动范围和验收办法的工作。</p></div>
+        <div class="section-head"><h3>任务类型与模型推荐</h3><p>先看常用配置，再按任务选择其它推荐。</p></div>
+        <div class="scroll"><table><thead><tr><th scope="col">任务类型</th><th scope="col">推荐模型</th><th scope="col">默认档位</th><th scope="col">用途</th></tr></thead><tbody>
+          <tr><td><strong>常规实现</strong><span class="task-note">角色默认</span></td><td class="model">GPT-6 Sol</td><td>high</td><td>一般工程修改</td></tr>
+          <tr><td><strong>复杂后端与疑难</strong><span class="task-note">计划条目执行的默认推荐</span></td><td class="model">Grok 4.7</td><td>high</td><td>复杂后端与疑难问题</td></tr>
+          <tr><td><strong>页面与交互</strong></td><td class="model">GPT-6 Sol</td><td>xhigh</td><td>页面与交互实现</td></tr>
+          <tr><td><strong>链路检查</strong></td><td class="model">GPT-6 Luna</td><td>low</td><td>检查启动与结果回传</td></tr>
+        </tbody></table></div>
+        <p class="section-foot">档位由 off 至 max 递增；可选档位在「模型档位」页维护。这里的 high、xhigh 等是实际档位名。</p>
+        <details id="config-detail"><summary>展开配置详情 <span>编辑推荐、适用场景和技术标识</span></summary><div class="editor">
+          <h3>常规实现 · 推荐配置</h3><p>以下为技术配置编辑区。变更不会立即派发；保存后下一次派发生效。</p>
+          <div class="editor-grid">
+            <label class="field">标识<input type="text" value="regular"><small>派发记录用于关联此推荐，已有引用需谨慎修改。</small></label>
+            <label class="field">适用场景<input type="text" value="常规实现"><small>推荐行的配置文字，仅在详情中编辑。</small></label>
+            <label class="field">任务类型<select><option selected>全部任务</option><option>计划条目执行</option><option>限定范围执行</option></select></label>
+            <label class="field">模型<select><option selected>openai-codex/gpt-6-sol</option><option>xai/grok-4.7</option><option>openai-codex/gpt-6-luna</option></select></label>
+            <label class="field">最低档位<select><option selected>high</option><option>xhigh</option><option>max</option></select></label>
+            <label class="field">默认档位<select><option selected>high</option><option>xhigh</option><option>max</option></select></label>
+            <label class="field">最高档位<select><option>high</option><option>xhigh</option><option selected>max</option></select></label>
+            <label class="field">是否设为角色默认<select><option selected>是</option><option>否</option></select></label>
+          </div>
+          <div class="editor-actions"><div><button type="button" class="secondary">上移</button><button type="button" class="secondary">下移</button><button type="button" class="secondary">新增推荐</button></div><button type="button" class="danger" title="静态样稿，不会删除配置">删除推荐</button></div>
+        </div></details>
+        <div class="mock-label">异常状态示例 · 与上方正常状态互斥</div>
+        <div class="notice" role="alert"><h3>配置已在别处更新</h3><p>本次更改尚未保存。重新读取后再编辑和保存；当前草稿会被放弃。</p><button type="button" class="secondary" title="静态样稿，不会读取数据">重新读取配置</button></div>
+      </section>
+    </div>
+    <p class="static-note">静态样稿：主题切换和配置详情展开可操作；角色切换、编辑、重新读取、保存及删除只展示位置，不连接面板，也不修改配置。</p>
+  </main>
+  <script>
+    const themeButton = document.getElementById('theme');
+    themeButton.addEventListener('click', () => {
+      const dark = document.documentElement.dataset.theme !== 'dark';
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      themeButton.textContent = dark ? '◐ 浅色主题' : '◐ 深色主题';
+      themeButton.setAttribute('aria-label', dark ? '切换到浅色主题' : '切换到深色主题');
+      themeButton.setAttribute('aria-pressed', String(dark));
+    });
+  </script>
+</body>
+</html>

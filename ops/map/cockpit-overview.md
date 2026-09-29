@@ -107,7 +107,7 @@ graph LR
 | `ops/agent-prompts/batch-agent/mechanical-batch.md` | 规定 batch-agent / mechanical-batch 能力边界。 | 1 | 0 |
 | `ops/agent-prompts/docs-agent/documentation-authoring.md` | 规定 docs-agent / documentation-authoring 能力边界。 | 1 | 0 |
 | `ops/agent-prompts/executor-agent/plan-execution.md` | 规定 executor-agent / plan-execution 能力边界。 | 1 | 0 |
-| `ops/agent-prompts/executor-agent/scoped-execution.md` | 规定 executor-agent / scoped-execution 能力边界。 | 1 | 0 |
+| `ops/agent-prompts/executor-agent/scoped-execution.md` | 完成目标和范围明确的实施任务。 | 1 | 0 |
 | `ops/agent-prompts/explorer-agent/_explorer-common.md` | 规定探查 / 扫描类能力的公共工作流、证据状态、预算协议和报告结构。 | 2 | 1 |
 | `ops/agent-prompts/explorer-agent/codebase-scan.md` | 规定 explorer-agent / codebase-scan 能力边界。 | 1 | 0 |
 | `ops/agent-prompts/explorer-agent/network-readiness-scan.md` | 规定 explorer-agent / network-readiness-scan 能力边界。 | 1 | 0 |

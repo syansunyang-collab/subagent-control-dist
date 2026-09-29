@@ -2,7 +2,7 @@
 
 > 职责：规定 executor-agent / scoped-execution 的专用派发规范。
 > 真源：对应能力的 task_package 构造和回执接收规则。
-> 读取：命中读取。
+> 读取：命中读取
 
 承接目标和工作范围明确、未命中其它专职能力的有界实施。构包用 `node ops/tools/dispatch_prepare.mjs --seed-template` 获取骨架。
 

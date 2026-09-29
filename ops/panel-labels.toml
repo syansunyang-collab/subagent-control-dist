@@ -47,6 +47,9 @@ name = "执行"
 summary = "在明确范围内修改代码并自测"
 group = "实施"
 
+[roles."executor-agent".picks]
+probe = "链路检查"
+
 [roles."executor-agent".capabilities]
 plan-execution = "计划条目执行"
 scoped-execution = "限定范围执行"

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 测试对象是 subagent_service.mjs 的服务合同(MCP 工具面、注册表、CAS、dispatch 信封与 fleet 命令),不覆盖 run-pi-task runner 内部逻辑。
-import { copyFileSync, existsSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -133,7 +133,8 @@ async function delay(ms) {
 }
 
 async function main() {
-  const root = path.join(repoRoot, "tmp", `async-mcp-contract-${Date.now()}-${process.pid}`);
+  // 回执与 diagnostic 的 token 预算随绝对路径长度变化；假仓放在定长临时目录，结果不随检出位置（主仓 / worktree）漂移。
+  const root = mkdtempSync(path.join(os.tmpdir(), "amc-"));
   const registryRoot = path.join(root, "registry");
   const runner = path.join(root, "ops", "tools", "run-pi-task.mjs");
   ensureDir(path.dirname(runner));
