@@ -172,6 +172,13 @@ const taskOutcomeSchema = z.object({
   parent_review: z.string(),
   summary: z.string().optional(),
 }).strict();
+// 返回超出 token 预算时 boundedDisplay 另存完整副本并补这些字段（async-core runtime/utilities.mjs）。
+const displayBudgetFields = {
+  status_path: z.string().optional(),
+  full_evidence_path: z.string().optional(),
+  display_truncated: z.array(z.string()).optional(),
+  diagnostics: z.array(z.object({ step: z.string(), error: z.string() }).passthrough()).optional(),
+};
 const compactStatusSchema = z.object({
   ...modelDisplayShape,
   task_id: taskIdSchema,
@@ -193,12 +200,13 @@ const compactStatusSchema = z.object({
   write_domain_violation_count: z.number().int().nonnegative().optional(),
   artifact_state: z.string().nullable().optional(),
   process_alive: z.boolean().nullable().optional(),
+  // 紧凑回执只带 elapsed_seconds / tool_call_count / progress_state；其余三项在完整诊断投影中出现。
   progress: z.object({
     elapsed_seconds: z.number().nullable(),
-    live_age_seconds: z.number().nullable(),
+    live_age_seconds: z.number().nullable().optional(),
     tool_call_count: z.number(),
-    last_tool_kind: z.string().nullable(),
-    live_health: z.string().nullable(),
+    last_tool_kind: z.string().nullable().optional(),
+    live_health: z.string().nullable().optional(),
     progress_state: z.string().nullable(),
   }).optional(),
   failure_type: z.string().nullable().optional(),
@@ -224,6 +232,7 @@ const compactStatusSchema = z.object({
     events: z.string(),
   }).strict().optional(),
   stall: stallSchema.nullable().optional(),
+  ...displayBudgetFields,
 }).strict();
 
 const dispatchOutputSchema = z.object({
@@ -243,6 +252,7 @@ const submitOutputSchema = z.object({
   revision: z.string(),
   submitted_at: z.string(),
   poll_after_ms: z.number().int().nonnegative(),
+  ...displayBudgetFields,
 }).strict();
 const waitOutputSchema = z.object({
   contract_version: z.literal(CONTRACT_VERSION),
@@ -252,11 +262,13 @@ const waitOutputSchema = z.object({
   after_revision: z.string().nullable().optional(),
   waited_ms: z.number().int().nonnegative().optional(),
   task: compactStatusSchema.optional(),
+  ...displayBudgetFields,
 }).strict();
 const getOutputSchema = z.object({
   contract_version: z.literal(CONTRACT_VERSION),
   detail: z.enum(["compact", "diagnostic"]),
   tasks: z.array(compactStatusSchema),
+  ...displayBudgetFields,
 }).strict();
 const resultOutputSchema = z.object({
   contract_version: z.literal(CONTRACT_VERSION),
@@ -313,6 +325,7 @@ const cancelOutputSchema = z.object({
   revision: z.string(),
   reason: z.string(),
   next_step: z.string().optional(),
+  ...displayBudgetFields,
 }).strict();
 const ackReviewOutputSchema = z.object({
   contract_version: z.literal(CONTRACT_VERSION),
@@ -323,6 +336,7 @@ const ackReviewOutputSchema = z.object({
   revision: z.string(),
   reason: z.string(),
   next_step: z.string().optional(),
+  ...displayBudgetFields,
 }).strict();
 const serverInfoOutputSchema = z.object({
   server_name: z.string(),

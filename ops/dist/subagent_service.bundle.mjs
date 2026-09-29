@@ -29334,7 +29334,7 @@ function isTrustedRunnerPath(options, runnerPath) {
 init_runtime();
 var SERVER_NAME = "async-subagent";
 var SERVER_VERSION = "1.0.0";
-var BUILD_ID = true ? "18f316204085d7ca" : "dev";
+var BUILD_ID = true ? "949fe8a21c8e4864" : "dev";
 var PUBLIC_TOOL_NAMES = Object.freeze([
   "subagent_prepare",
   "subagent_dispatch",
@@ -29437,6 +29437,12 @@ var taskOutcomeSchema = external_exports.object({
   parent_review: external_exports.string(),
   summary: external_exports.string().optional()
 }).strict();
+var displayBudgetFields = {
+  status_path: external_exports.string().optional(),
+  full_evidence_path: external_exports.string().optional(),
+  display_truncated: external_exports.array(external_exports.string()).optional(),
+  diagnostics: external_exports.array(external_exports.object({ step: external_exports.string(), error: external_exports.string() }).passthrough()).optional()
+};
 var compactStatusSchema = external_exports.object({
   ...modelDisplayShape,
   task_id: taskIdSchema,
@@ -29458,12 +29464,13 @@ var compactStatusSchema = external_exports.object({
   write_domain_violation_count: external_exports.number().int().nonnegative().optional(),
   artifact_state: external_exports.string().nullable().optional(),
   process_alive: external_exports.boolean().nullable().optional(),
+  // 紧凑回执只带 elapsed_seconds / tool_call_count / progress_state；其余三项在完整诊断投影中出现。
   progress: external_exports.object({
     elapsed_seconds: external_exports.number().nullable(),
-    live_age_seconds: external_exports.number().nullable(),
+    live_age_seconds: external_exports.number().nullable().optional(),
     tool_call_count: external_exports.number(),
-    last_tool_kind: external_exports.string().nullable(),
-    live_health: external_exports.string().nullable(),
+    last_tool_kind: external_exports.string().nullable().optional(),
+    live_health: external_exports.string().nullable().optional(),
     progress_state: external_exports.string().nullable()
   }).optional(),
   failure_type: external_exports.string().nullable().optional(),
@@ -29488,7 +29495,8 @@ var compactStatusSchema = external_exports.object({
     live: external_exports.string(),
     events: external_exports.string()
   }).strict().optional(),
-  stall: stallSchema.nullable().optional()
+  stall: stallSchema.nullable().optional(),
+  ...displayBudgetFields
 }).strict();
 var dispatchOutputSchema = external_exports.object({
   task_id: taskIdSchema,
@@ -29506,7 +29514,8 @@ var submitOutputSchema = external_exports.object({
   state: external_exports.string(),
   revision: external_exports.string(),
   submitted_at: external_exports.string(),
-  poll_after_ms: external_exports.number().int().nonnegative()
+  poll_after_ms: external_exports.number().int().nonnegative(),
+  ...displayBudgetFields
 }).strict();
 var waitOutputSchema = external_exports.object({
   contract_version: external_exports.literal(CONTRACT_VERSION),
@@ -29515,12 +29524,14 @@ var waitOutputSchema = external_exports.object({
   changed: external_exports.boolean(),
   after_revision: external_exports.string().nullable().optional(),
   waited_ms: external_exports.number().int().nonnegative().optional(),
-  task: compactStatusSchema.optional()
+  task: compactStatusSchema.optional(),
+  ...displayBudgetFields
 }).strict();
 var getOutputSchema = external_exports.object({
   contract_version: external_exports.literal(CONTRACT_VERSION),
   detail: external_exports.enum(["compact", "diagnostic"]),
-  tasks: external_exports.array(compactStatusSchema)
+  tasks: external_exports.array(compactStatusSchema),
+  ...displayBudgetFields
 }).strict();
 var resultOutputSchema = external_exports.object({
   contract_version: external_exports.literal(CONTRACT_VERSION),
@@ -29576,7 +29587,8 @@ var cancelOutputSchema = external_exports.object({
   state: external_exports.string(),
   revision: external_exports.string(),
   reason: external_exports.string(),
-  next_step: external_exports.string().optional()
+  next_step: external_exports.string().optional(),
+  ...displayBudgetFields
 }).strict();
 var ackReviewOutputSchema = external_exports.object({
   contract_version: external_exports.literal(CONTRACT_VERSION),
@@ -29586,7 +29598,8 @@ var ackReviewOutputSchema = external_exports.object({
   state: external_exports.string(),
   revision: external_exports.string(),
   reason: external_exports.string(),
-  next_step: external_exports.string().optional()
+  next_step: external_exports.string().optional(),
+  ...displayBudgetFields
 }).strict();
 var serverInfoOutputSchema = external_exports.object({
   server_name: external_exports.string(),

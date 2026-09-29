@@ -177,7 +177,7 @@ _FUNCTION_START = re.compile(r"^(\s*)(?:export\s+)?(?:async\s+)?(?:function\s+([
 def oversized_sources(root: Path = ROOT) -> list[str]:
     """按 test-tooling-governance §2.1 列出超限文件与函数；只作提示，不计入失败。"""
     listed = subprocess.run(
-        ["git", "ls-files", "-z", "--", *SIZE_ROOTS],
+        ["git", "ls-files", "-z", "--", *SIZE_ROOTS, ":(exclude)adapters/pi/user-addons"],
         cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     notes: list[str] = []
