@@ -20,7 +20,7 @@ id = "regular"
 when = "常规验证与回归"
 model = "openai-codex/gpt-6-sol"
 effort = "high"
-effort_min = "off"
+effort_min = "high"
 effort_max = "max"
 default = true
 
@@ -31,13 +31,15 @@ model = "xai/grok-4.7"
 effort = "high"
 effort_min = "low"
 effort_max = "xhigh"
+capability = "functional-inspection"
+default = true
 
 [[picks]]
 id = "thinking"
 when = "深度推理复核"
 model = "openai-codex/gpt-6-astra"
-effort = "low"
-effort_min = "off"
+effort = "medium"
+effort_min = "medium"
 effort_max = "medium"
 
 [[picks]]
@@ -45,5 +47,5 @@ id = "probe"
 when = "编排链路冒烟，不做业务验收"
 model = "openai-codex/gpt-6-luna"
 effort = "low"
-effort_min = "off"
-effort_max = "max"
+effort_min = "low"
+effort_max = "medium"

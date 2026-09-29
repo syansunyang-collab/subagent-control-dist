@@ -24,7 +24,7 @@ id = "evidence"
 when = "机械取证"
 model = "openai-codex/gpt-6-luna"
 effort = "medium"
-effort_min = "off"
+effort_min = "medium"
 effort_max = "max"
 
 [[picks]]
@@ -32,7 +32,7 @@ id = "relation"
 when = "关系调查"
 model = "openai-codex/gpt-6-sol"
 effort = "high"
-effort_min = "off"
+effort_min = "high"
 effort_max = "max"
 default = true
 
@@ -41,5 +41,7 @@ id = "conflict"
 when = "冲突调查"
 model = "xai/grok-4.7"
 effort = "high"
-effort_min = "low"
+effort_min = "high"
 effort_max = "xhigh"
+capability = "codebase-scan"
+default = true

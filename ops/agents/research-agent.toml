@@ -23,7 +23,7 @@ id = "search"
 when = "资料检索与读取"
 model = "openai-codex/gpt-6-luna"
 effort = "high"
-effort_min = "off"
+effort_min = "medium"
 effort_max = "max"
 default = true
 
@@ -32,15 +32,15 @@ id = "conflict"
 when = "高可信来源实质冲突"
 model = "xai/grok-4.7"
 effort = "high"
-effort_min = "low"
-effort_max = "xhigh"
+effort_min = "high"
+effort_max = "high"
 
 [[picks]]
 id = "deep"
 when = "读源码或深度核对"
 model = "openai-codex/gpt-6-sol"
 effort = "high"
-effort_min = "off"
+effort_min = "medium"
 effort_max = "max"
 
 [[picks]]
@@ -49,7 +49,7 @@ when = "外部资料检索"
 capability = "external-research"
 model = "openai-codex/gpt-6-luna"
 effort = "xhigh"
-effort_min = "off"
+effort_min = "high"
 effort_max = "max"
 default = true
 
@@ -59,15 +59,15 @@ when = "初筛可复用候选"
 capability = "wheel-discovery"
 model = "openai-codex/gpt-6-luna"
 effort = "high"
-effort_min = "off"
+effort_min = "high"
 effort_max = "max"
 
 [[picks]]
 id = "wheel_verify"
 when = "读源码验证能否复用"
 capability = "wheel-discovery"
-model = "openai-codex/gpt-6-sol"
+model = "openai-codex/gpt-5.6-sol"
 effort = "max"
-effort_min = "off"
+effort_min = "high"
 effort_max = "max"
 default = true

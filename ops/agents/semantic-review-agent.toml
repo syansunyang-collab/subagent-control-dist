@@ -20,7 +20,7 @@ id = "regular"
 when = "规则与职责核对"
 model = "openai-codex/gpt-6-sol"
 effort = "high"
-effort_min = "off"
+effort_min = "high"
 effort_max = "max"
 default = true
 
@@ -29,7 +29,7 @@ id = "impact"
 when = "跨规则冲突与高影响契约"
 model = "xai/grok-4.7"
 effort = "high"
-effort_min = "low"
+effort_min = "high"
 effort_max = "xhigh"
 
 [[picks]]

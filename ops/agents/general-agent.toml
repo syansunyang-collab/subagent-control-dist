@@ -22,7 +22,7 @@ id = "task"
 when = "有界技术任务与关键取舍"
 model = "xai/grok-4.7"
 effort = "high"
-effort_min = "low"
+effort_min = "high"
 effort_max = "xhigh"
 default = true
 
@@ -31,7 +31,7 @@ id = "tidy"
 when = "辅助整理"
 model = "openai-codex/gpt-6-luna"
 effort = "high"
-effort_min = "off"
+effort_min = "high"
 effort_max = "max"
 
 [[picks]]
@@ -39,7 +39,7 @@ id = "deep"
 when = "高价值核对与深度对齐"
 model = "openai-codex/gpt-6-astra"
 effort = "medium"
-effort_min = "off"
+effort_min = "medium"
 effort_max = "medium"
 
 [[picks]]
@@ -47,7 +47,7 @@ id = "consult_design"
 when = "外援问询：卷宗内联、无工具、一次作答的设计取舍意见"
 model = "openai-codex/gpt-6-astra"
 effort = "medium"
-effort_min = "off"
+effort_min = "medium"
 effort_max = "medium"
 
 [[picks]]
@@ -55,5 +55,5 @@ id = "consult_diagnosis"
 when = "外援问询：卷宗内联、无工具、一次作答的诊断与根因意见"
 model = "xai/grok-4.7"
 effort = "high"
-effort_min = "low"
+effort_min = "high"
 effort_max = "xhigh"

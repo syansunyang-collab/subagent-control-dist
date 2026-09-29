@@ -59,7 +59,7 @@ id = "regular"
 when = "常规实现"
 model = "openai-codex/gpt-6-sol"
 effort = "high"
-effort_min = "off"
+effort_min = "high"
 effort_max = "max"
 default = true
 
@@ -70,6 +70,8 @@ model = "xai/grok-4.7"
 effort = "high"
 effort_min = "low"
 effort_max = "xhigh"
+capability = "plan-execution"
+default = true
 
 [[picks]]
 id = "frontend"

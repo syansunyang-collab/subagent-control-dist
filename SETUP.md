@@ -10,7 +10,7 @@
 - Python 3.12+、Node.js 24+、Git，均在 PATH 上
 - Pi 0.87+：`npm i -g @earendil-works/pi-coding-agent`
 - Claude Code
-- .NET 10 SDK 与 WebView2 运行时：面板桌面壳在本机构建；缺少时面板两步标 `skipped`，派发不受影响
+- .NET 10 SDK 与 Microsoft Edge WebView2 Runtime：面板桌面壳在本机构建并用 WebView2 显示；bootstrap 只检查 `dotnet`，缺少时面板两步标 `skipped`，WebView2 不做检查；缺哪一项都不影响派发
 - Pi 中至少登录一个模型服务商（`pi` 内执行 `/login`）；角色卡默认用 `openai-codex/gpt-6-*`（ChatGPT 订阅）与 `xai/grok-4.7`，没有的型号按「适配本机模型」替换
 
 可选：
@@ -109,6 +109,7 @@
 | bootstrap 报「本机发布源登记为 …」 | 本机已由另一份仓发布；改在那份仓执行，或删除 `~/.subagent-control/bridge-producer.json` 后重跑 |
 | 发布失败 | 看 `tmp/release-runs/` 最新目录下各步的 `*.stderr.log` 与 `result.json` |
 | 面板报端口被占用，但查不到占用进程 | 端口落在 Windows 保留段（`netsh int ipv4 show excludedportrange protocol=tcp`）；重启系统或调整保留段 |
+| 面板进程启动后窗口不显示或报 WebView2 错误 | 本机缺 WebView2 运行时：安装 Microsoft Edge WebView2 Runtime（Evergreen）后再双击 |
 | 双击 `Agent Panel` 没有新窗口 | 面板已由别的项目打开或旧桌面壳残留（派发会自动拉起面板）：关掉已有面板窗口；无窗口时结束 `AgentPanel.Shell` 进程后再双击 |
 | 首次打开面板「导入范围」页要等十几秒 | 首次探测已装插件的工具表，结果缓存后变快 |
 | bootstrap 某项报 `conflict` | 本机已有同名插件、登记或设置项且内容不同，该项保留本机内容；设置文件按顶层键处理，同一文件中缺失的其它键照常写入，`detail` 分列写入与保留的键。要换成分发版本时删除或改名本机那一项后重跑 |
