@@ -70,8 +70,8 @@
 | `ops/model-notes.toml` | 各型号的说明、可选档位 |
 | `ops/templates/worker-resources.json` | 子代理可导入的工具、插件、技能及默认开关 |
 
-1. 列出本机可用型号：`pi --list-models`。
-2. 把角色卡中本机没有的 `model` 换成可用型号；换成的新型号在 `ops/model-notes.toml` 补一节说明。
+1. 找出本机缺的型号：`list` 输出的「警告」段逐条列出 `model_not_in_pi`（角色卡文件、`picks` 序号、型号）；本机可用型号用 `pi --list-models` 查看。
+2. 把这些 `model` 换成可用型号；换成的新型号在 `ops/model-notes.toml` 补一节说明，直到 `list` 不再报 `model_not_in_pi`。
 3. 两种生效方式：在面板「选型」「模型档位」「导入范围」页修改，面板同时写本仓与各发布槽；或直接改文件后重跑 `python -B ops/tools/bootstrap.py --apply`。
 4. 在 `local` 分支提交。
 
@@ -80,9 +80,10 @@
 ## 升级
 
 1. 把上游分发仓加为远程（只需一次）：`git remote add upstream <分发仓地址>`
-2. 拉取并合并：
+2. 还原发布重建的产物（`ops/dist` 带构建时间，每次发布都会变），再拉取并合并：
 
    ```bash
+   git restore ops/dist
    git fetch upstream
    git merge upstream/main
    ```
