@@ -10,11 +10,11 @@
 - Python 3.12+、Node.js 24+、Git，均在 PATH 上
 - Pi 0.87+：`npm i -g @earendil-works/pi-coding-agent`
 - Claude Code
+- .NET 10 SDK 与 WebView2 运行时：面板桌面壳在本机构建；缺少时面板两步标 `skipped`，派发不受影响
 - Pi 中至少登录一个模型服务商（`pi` 内执行 `/login`）；角色卡默认用 `openai-codex/gpt-6-*`（ChatGPT 订阅）与 `xai/grok-4.7`，没有的型号按「适配本机模型」替换
 
 可选：
 
-- .NET 10 SDK 与 WebView2 运行时：面板首次打开时现场构建桌面壳；缺少时派发不受影响
 - Pi 插件 `pi-mcp-adapter`、`@narumitw/pi-lsp`、`visual-explainer` 等：角色卡列出但本机未装的插件和技能只记 warning、不加载
 
 ## 安装
@@ -25,7 +25,7 @@
    git switch -c local
    ```
 
-2. 预览，确认每步状态（`ok` 已满足、`todo` 将执行、`conflict` 本机已有不同内容，跳过）：
+2. 预览，确认每步状态（`ok` 已满足、`todo` 将执行、`conflict` 本机已有不同内容，跳过；`skipped` 缺少可选前置条件）：
 
    ```bash
    python -B ops/tools/bootstrap.py
@@ -44,6 +44,7 @@
    - 把技能目录加入 `~/.pi/agent/settings.json` 的 `skills`
    - 登记本仓为本机发布源（`~/.subagent-control/bridge-producer.json`）
    - 发布：构建后部署 Pi 扩展、MCP 服务、consumer 包，并把技能链接到 `~/.claude/skills/`
+   - 构建面板桌面壳（首次数分钟），在桌面建快捷方式 `Agent Panel`
 
 
 4. 完全退出并重启 Claude Code 与 Pi。已打开的会话继续使用旧的 MCP、扩展与技能。
@@ -64,11 +65,7 @@
 1. Claude Code 新会话：调用 `mcp__asyncSubagent__subagent_server_info`，`build_id` 与 `~/.pi/agent/extensions/subagent-control/deployment.json` 的 `build_id` 相同；再用 `mcp__asyncSubagent__subagent_prepare` 的 `list` 动作，返回角色与型号的逐行目录。
 2. Pi 新会话：调用 `dispatch_prepare` 的 `list` 动作，返回同一目录。
 3. 真实派发：按技能 `pi-rail-dispatch` 派一单只读小任务，等到终态 `completed`。
-4. 面板（可选）：在本仓根执行下面这条命令，首次打开会构建桌面壳，耗时数分钟。
-
-   ```powershell
-   node "$HOME\.subagent-control\releases\consumer\current\ops\consumer-tools\agent_panel_launcher.mjs"
-   ```
+4. 面板：双击桌面快捷方式 `Agent Panel`，窗口显示任务列表与「选型」「模型档位」「导入范围」等配置页。
 
 ## 适配本机模型
 
@@ -112,6 +109,7 @@
 | bootstrap 报「本机发布源登记为 …」 | 本机已由另一份仓发布；改在那份仓执行，或删除 `~/.subagent-control/bridge-producer.json` 后重跑 |
 | 发布失败 | 看 `tmp/release-runs/` 最新目录下各步的 `*.stderr.log` 与 `result.json` |
 | 面板报端口被占用，但查不到占用进程 | 端口落在 Windows 保留段（`netsh int ipv4 show excludedportrange protocol=tcp`）；重启系统或调整保留段 |
+| 双击 `Agent Panel` 没有新窗口 | 面板已由别的项目打开或旧桌面壳残留（派发会自动拉起面板）：关掉已有面板窗口；无窗口时结束 `AgentPanel.Shell` 进程后再双击 |
 | 首次打开面板「导入范围」页要等十几秒 | 首次探测已装插件的工具表，结果缓存后变快 |
 | bootstrap 某项报 `conflict` | 本机已有同名插件、登记或设置项且内容不同，该项保留本机内容；设置文件按顶层键处理，同一文件中缺失的其它键照常写入，`detail` 分列写入与保留的键。要换成分发版本时删除或改名本机那一项后重跑 |
 

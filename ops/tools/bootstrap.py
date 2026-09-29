@@ -63,7 +63,7 @@ def check_prerequisites() -> dict:
         except OSError as error:
             raise BootstrapError(f"当前用户不能创建符号链接（{error}）；Windows 需开启「开发者模式」。") from error
     node = subprocess.run([found["node"], "--version"], capture_output=True, text=True, check=True).stdout.strip()
-    return {"node": node, "node_path": found["node"], "panel_dotnet": bool(shutil.which("dotnet"))}
+    return {"node": node, "node_path": found["node"]}
 
 
 def npm_tree_matches(directory: Path) -> bool:
@@ -244,6 +244,54 @@ def step_release(apply: bool) -> dict:
     return {"step": "release", "status": "done"}
 
 
+PANEL_LAUNCHER = HOME / ".subagent-control/releases/consumer/current/ops/consumer-tools/agent_panel_launcher.mjs"
+
+
+def powershell(script: str) -> str:
+    encoded = __import__("base64").b64encode(script.encode("utf-16-le")).decode("ascii")
+    return subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+                          capture_output=True, text=True, encoding="utf-8", check=True).stdout.strip()
+
+
+def step_panel_build(apply: bool, node: str) -> dict:
+    """面板桌面壳需要 .NET 10 SDK 现场构建；首装时预先构建，避免第一次打开空等。"""
+    if not shutil.which("dotnet"):
+        return {"step": "panel-build", "status": "skipped", "detail": "未找到 dotnet，面板需要 .NET 10 SDK 与 WebView2；派发不受影响"}
+    if not apply and not PANEL_LAUNCHER.is_file():
+        return {"step": "panel-build", "status": "todo", "detail": "发布后构建"}
+    manifest = json.loads(subprocess.run([node, str(PANEL_LAUNCHER), "--status"], cwd=ROOT, capture_output=True,
+                                         text=True, encoding="utf-8", check=True).stdout).get("manifest") or {}
+    if manifest.get("executable") and Path(manifest["executable"]).is_file():
+        return {"step": "panel-build", "status": "ok"}
+    if apply:
+        subprocess.run([node, str(PANEL_LAUNCHER), "--build"], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
+    return {"step": "panel-build", "status": "done" if apply else "todo"}
+
+
+def step_panel_shortcut(apply: bool, node: str, desktop: Path | None = None) -> dict:
+    """桌面快捷方式经 consumer current 的启动器打开面板，升级后路径不变；同名快捷方式指向别处时为冲突。"""
+    if not shutil.which("dotnet"):
+        return {"step": "panel-shortcut", "status": "skipped", "detail": "面板未构建"}
+    desktop = desktop or Path(powershell("[Environment]::GetFolderPath('Desktop')"))
+    link = desktop / "Agent Panel.lnk"
+    quote = lambda value: "'" + str(value).replace("'", "''") + "'"
+    wanted = f'{node}|"{PANEL_LAUNCHER}"|{ROOT}'
+    if link.exists():
+        current = powershell(f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut({quote(link)}); "
+                             "\"$($s.TargetPath)|$($s.Arguments)|$($s.WorkingDirectory)\"")
+        if os.path.normcase(current) == os.path.normcase(wanted):
+            return {"step": "panel-shortcut", "status": "ok"}
+        return {"step": "panel-shortcut", "status": "conflict", "detail": f"{link} 已指向 {current}，未改动"}
+    if apply:
+        state = HOME / ".subagent-control/agent-panel/build-manifest.json"
+        icon = read_json(state).get("executable", "") if state.is_file() else ""
+        powershell(f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut({quote(link)}); "
+                   f"$s.TargetPath={quote(node)}; $s.Arguments={quote(f'\"{PANEL_LAUNCHER}\"')}; "
+                   f"$s.WorkingDirectory={quote(ROOT)}; $s.WindowStyle=7; $s.Description='Agent Panel'; "
+                   + (f"$s.IconLocation={quote(icon + ',0')}; " if icon else "") + "$s.Save()")
+    return {"step": "panel-shortcut", "status": "done" if apply else "todo", "detail": str(link)}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="预览或执行本机 Pi 轨安装与升级；默认只预览。")
     parser.add_argument("--apply", action="store_true", help="执行写入与发布。")
@@ -263,11 +311,11 @@ def main() -> int:
         steps.append(step_pi_skills(args.apply))
         steps.append(step_producer_registration(args.apply))
         steps.append(step_release(args.apply))
+        steps.append(step_panel_build(args.apply, environment["node_path"]))
+        steps.append(step_panel_shortcut(args.apply, environment["node_path"]))
         result = {"status": "applied" if args.apply else "plan", "environment": environment, "steps": steps}
         if args.apply:
             result["next"] = "重启 Claude Code 与 Pi，新会话才加载新的 MCP、扩展与技能；然后按 SETUP.md「验证」一节冒烟。"
-        if not environment["panel_dotnet"]:
-            result["panel"] = "未找到 dotnet：面板首次打开需要 .NET 10 SDK 与 WebView2，派发本身不受影响。"
     except (BootstrapError, OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
         result = {"status": "failed", "error": str(error), "steps": steps}
     if args.format == "json":
@@ -275,7 +323,7 @@ def main() -> int:
     else:
         for step in result["steps"]:
             print(f"[{step['status']:>4}] {step['step']}" + (f"  {step['detail']}" if step.get("detail") else ""))
-        for key in ("error", "panel", "next"):
+        for key in ("error", "next"):
             if key in result:
                 print(f"{key}: {result[key]}")
         print(f"status: {result['status']}")
