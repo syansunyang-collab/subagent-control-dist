@@ -73,6 +73,8 @@ def npm_tree_matches(directory: Path) -> bool:
     installed = json.loads(hidden.read_text(encoding="utf-8"))["packages"]
     locked = json.loads((directory / "package-lock.json").read_text(encoding="utf-8"))["packages"]
     required = {key for key, entry in locked.items() if key and not entry.get("optional") and not entry.get("peer")}
+    if not required <= installed.keys():
+        return False
     for key in required | {key for key in installed if key}:
         manifest = directory / key / "package.json"
         expected = locked.get(key, installed[key]).get("version")
