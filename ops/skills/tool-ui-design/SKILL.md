@@ -3,7 +3,7 @@ name: tool-ui-design
 layer: business
 domain: tool-interfaces
 capability_group: ui-design
-portability: portable
+portability: repo-bound
 description: Use when designing, building, or checking tool and admin interfaces that people read and operate — web pages, the agent panel, Windows desktop and WinForms windows. 触发：界面看不懂、文案不是人话、对齐、配色、字体、表单与控件、配置页、角色选型页、窗口布局、界面验收。Starts from the user's task and real-content mockups, keeps display text separate from runtime configuration, and applies the project's interaction decisions. Not for marketing or landing pages, standalone explainer diagrams (visual-explainer), backend-only changes, or model-facing prompt text (rule-authoring).
 ---
 
@@ -58,7 +58,9 @@ description: Use when designing, building, or checking tool and admin interfaces
 
 WinForms 保留原生控件、系统字体和系统颜色，统一在窗体或共享样式处设置；用 Dock、Anchor、TableLayoutPanel 实现对齐。网页 px 不原样换算成 Font 点数，按目标 DPI 和实际中文显示核对。窗口覆盖任务约定的最小尺寸与 100%、150% 缩放；确认 Tab 顺序、焦点可见、标签完整、按钮可达。不要求把 WinForms 换成网页。
 
-## 5. 项目特有的展开与图表决定
+## 5. 本仓面板已定的交互
+
+以下是用户对本仓 agent 面板定过的交互，只在当前页面涉及对应功能时适用；其它界面从任务包与已确认样稿取决定。
 
 - 点开大对象进入独占查看模式：检索条和列表退场；收起后恢复原筛选、选择和位置。
 - 一级入口保留高频动作；低频批量操作放抽屉或下拉。
@@ -72,10 +74,10 @@ WinForms 保留原生控件、系统字体和系统颜色，统一在窗体或�
 
 必须记录以下事实，即使页面还能点击完成：
 
-- 人话：已约定的人话字段被内部标识、路由标识、规则引用或模型文字替代；输入无可见标题或可访问名称，表无列头；首次使用者无法从页面说出当前对象、主要动作、操作结果与恢复方法。
+- 人话：已约定的人话字段被内部标识、路由标识、规则引用或模型文字替代；输入缺可见标题；控件缺可访问名称；表无列头；首次使用者无法从页面说出当前对象、主要动作、操作结果与恢复方法。
 - 状态与反馈：状态只靠颜色区分，或名称与颜色含义冲突；加载、提交、保存缺反馈，保存提示与实际生效范围不符；错误没有恢复动作；禁用没有解释；合同操作无法用键盘到达。
 - 版面：同类信息字体或对齐不一致、同页区域边缘不齐、遮挡截断、页面级横滚、文字明显看不清、关键动作不在可达区域。
-- 决定兑现：已确认样稿中的主要信息、层级或操作位置在成品中缺失或变化；独占查看、完整连线等项目决定未兑现。
+- 决定兑现：已确认样稿中的主要信息、层级或操作位置在成品中缺失或变化；页面涉及时，第 5 节的面板交互决定未兑现。
 
 每项给具体位置、实际与预期、影响和复现证据。审查者按合同判通过、失败或未验证；纯个人风格偏好列为建议并说明取舍，不伪装成缺陷。无法操作目标时交付已取得的静态证据与缺口，不把静态通过写成真实交互通过。
 
