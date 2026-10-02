@@ -2,8 +2,7 @@
   "packages": [
     "npm:pi-midrun-compact",
     "npm:pi-web-access@0.21.0",
-    "local-packages/pi-compaction-model-recovery",
-    "local-packages/pi-context-prune"
+    "local-packages/pi-compaction-model-recovery"
   ],
   "pi_models": {
     "xai": [

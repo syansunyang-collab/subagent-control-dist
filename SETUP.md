@@ -58,7 +58,6 @@
 | Grok 快速型号 | `models.json` 的 `xai/grok-4.7-build-fast`（由 manifest 的 `pi_models` 登记） | 控制面 `/fast` 自动切换 Grok 4.7；按快版真实单价记账（普通版两倍）；已有同 id 不同定义保留并报 conflict |
 | 型号别名 | `extensions/openai-codex-sol-context-alias.ts` | `-700k` / `-500k` 型号改写为上游型号与请求档 |
 | 压缩链 | npm `pi-midrun-compact` 与 `extensions/pi-midrun-compact/config.json`（上下文 90% 时中途压缩并自动续跑）；本地包 `pi-compaction-model-recovery`；设置 `compaction.enabled=false`、`compactionModel`（`openai-codex/gpt-6-luna-fast-700k` @xhigh） | 压缩交给指定型号，不占用当前会话型号 |
-| 工具结果裁剪 | 本地包 `pi-context-prune`（1.6.0-local.10）与 `context-prune/policy-lab.json`（摘要型号 luna-fast-700k） | 主会话旧工具结果冷遮蔽与摘要；子代理默认不加载 |
 | 联网搜索 | npm `pi-web-access@0.21.0`；补丁 `extensions/search-effort-patch/`（给 OpenAI 搜索注入 `openaiSearchModel` 的档位后缀）、`extensions/search-route-policy.ts`（与 `pi-web-access` 同时存在时隐藏 Claude 搜索工具）；`~/.pi/web-search.json` 的 `searchRouting`、`workflow`、`openaiSearchModel`、`pageAnswer` | 调研类子代理联网；不配密钥时走 Exa 与 Codex 登录态，Brave、Tavily 等需在 `~/.pi/web-search.json` 自行补 key |
 
 ## 验证
@@ -80,7 +79,7 @@
 
 1. 找出本机缺的型号：`list` 输出的「警告」段逐条列出 `model_not_in_pi`（角色卡文件、`picks` 序号、型号）；本机可用型号用 `pi --list-models` 查看。
 2. 把这些 `model` 换成可用型号；换成的新型号在 `ops/model-notes.toml` 补一节说明，直到 `list` 不再报 `model_not_in_pi`。
-   Pi 侧另有三处用户级设置写了型号，本机没有时直接改：`~/.pi/agent/settings.json` 的 `compactionModel.model`、`~/.pi/agent/context-prune/policy-lab.json` 的 `summarizerModel`、`~/.pi/web-search.json` 的 `openaiSearchModel` 与 `pageAnswer.model`。改过之后 bootstrap 对这几项报 `conflict` 并保留本机值。
+   Pi 侧另有两处用户级设置写了型号，本机没有时直接改：`~/.pi/agent/settings.json` 的 `compactionModel.model`、`~/.pi/web-search.json` 的 `openaiSearchModel` 与 `pageAnswer.model`。改过之后 bootstrap 对这几项报 `conflict` 并保留本机值。
 3. 两种生效方式：在面板「选型」「模型档位」「导入范围」页修改，面板同时写本仓与各发布槽；或直接改文件后重跑 `python -B ops/tools/bootstrap.py --apply`。
 4. 在 `local` 分支提交。
 

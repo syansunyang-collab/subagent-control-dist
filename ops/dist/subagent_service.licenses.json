@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-02T19:17:37.634Z",
-  "build_id": "662d838f176b3515",
+  "generated_at": "2026-10-02T20:28:46.856Z",
+  "build_id": "a9a1b973376ba812",
   "packages": [
     {
       "name": "@decimalturn/toml-patch",
