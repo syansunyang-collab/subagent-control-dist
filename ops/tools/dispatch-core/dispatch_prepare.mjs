@@ -1407,7 +1407,14 @@ export function resolveAsyncRuntimeOptions(taskPackage, options = {}) {
     executionProfile = "",
     stallSilenceMs = null,
     catalogCacheWrite = false,
+    fast = taskPackage?.runtime_context?.fast === true,
   } = options;
+  if (fast === true) {
+    taskPackage.runtime_context ??= {};
+    taskPackage.runtime_context.fast = true;
+  } else if (taskPackage.runtime_context) {
+    delete taskPackage.runtime_context.fast;
+  }
   const agent = isRecord(taskPackage?.agent) ? taskPackage.agent : {};
   const resolvedToolAllowlist = taskToolAllowlist(taskPackage);
   const warnings = [];
@@ -1512,6 +1519,7 @@ export function resolveAsyncRuntimeOptions(taskPackage, options = {}) {
   return {
     agent_type: pyStr(pyTruthy(agent.runtime_role) ? agent.runtime_role : (pyTruthy(agent.role) ? agent.role : "")),
     executor: "pi",
+    fast: fast === true,
     execution_profile: effectiveExecutionProfile,
     context_mode: evidenceOnly ? "isolated" : (pyTruthy(contextMode) ? contextMode : "project-aware"),
     runner_path: effectiveRunnerPath,
@@ -1568,6 +1576,7 @@ export function prepareAsyncSubagent(pkg, options = {}) {
     displayTitle = "",
     action = "submit",
     originId = "",
+    fast = undefined,
     reviewEvidenceBuilder = null,
     budget = null,
   } = options;
@@ -1619,6 +1628,7 @@ export function prepareAsyncSubagent(pkg, options = {}) {
       executionProfile,
       stallSilenceMs,
       catalogCacheWrite,
+      fast,
     });
   }
 
@@ -1697,6 +1707,7 @@ export function prepareAsyncSubagent(pkg, options = {}) {
       stallSilenceMs,
       // 该回调只在 prepare/submit 路径执行：允许文件层落盘。
       catalogCacheWrite: true,
+      fast,
     });
     // The package has been changed by evidence; lint and envelope construction
     // are intentionally after that callback and before task rendering.
@@ -1794,6 +1805,7 @@ export function prepareAsyncSubagent(pkg, options = {}) {
     ...(opts.warnings?.length ? { warnings: opts.warnings } : {}),
     model: primaryModel,
     effort: primaryEffort,
+    fast: taskPackage.runtime_context?.fast === true,
   };
   if (normalizedAction === "prepare") baseResult.state = "prepared";
   if (reviewHolder.value !== undefined && reviewHolder.value !== null) {
@@ -1885,6 +1897,7 @@ export function prepareDryRun(pkg, delivery, resolvedDelivery, readiness, resolv
     const selection = isRecord(resolvedOptions.model_selection) ? resolvedOptions.model_selection : {};
     result.async_preview = {
       executor: resolvedOptions.executor ?? null,
+      fast: resolvedOptions.fast === true,
       runner_path: pyStr(pyTruthy(resolvedOptions.runner_path) ? resolvedOptions.runner_path : "") || null,
       model: pyStr(pyTruthy(selection.primary_model) ? selection.primary_model : "") || null,
       effort: pyStr(pyTruthy(selection.primary_effort) ? selection.primary_effort : "") || null,
@@ -1915,6 +1928,7 @@ export function prepareDispatch(seed, delivery, options = {}) {
     action = "",
     asyncModel = "",
     asyncEffort = "",
+    fast = undefined,
     asyncPick = "",
     asyncAuthorization = null,
     asyncContextMode = "",
@@ -1984,6 +1998,7 @@ export function prepareDispatch(seed, delivery, options = {}) {
     resolvedAsyncOptions = resolveAsyncRuntimeOptions(pyGetItem(pkg, "task_package"), {
       model: asyncModel,
       effort: asyncEffort,
+      fast,
       pick: asyncPick,
       authorization: asyncAuthorization,
       contextMode: asyncContextMode,
@@ -2024,6 +2039,7 @@ export function prepareDispatch(seed, delivery, options = {}) {
     if (!Object.hasOwn(result, "action")) result.action = normalizedAction;
     result.scope_preflight = scopePreflight;
     result.business_output = taskPackageOutputSummary(pyGetItem(pkg, "task_package"));
+    result.fast = pyGetItem(pkg, "task_package").runtime_context?.fast === true;
     const warnings = [...new Set([
       ...scopeDiagnostics, ...(result.warnings || []), ...(resolvedAsyncOptions?.warnings || []),
       result.async_model_selection?.child_model?.warning,
@@ -2056,6 +2072,7 @@ export function prepareDispatch(seed, delivery, options = {}) {
     result = prepareAsyncSubagent(pkg, {
       model: asyncModel,
       effort: asyncEffort,
+      fast,
       pick: asyncPick,
       authorization: asyncAuthorization,
       contextMode: asyncContextMode,

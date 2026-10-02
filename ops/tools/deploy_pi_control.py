@@ -58,6 +58,7 @@ CORE_FILES = (
     Path("ops/tools/pause-surface.mjs"),
     Path("ops/tools/task-outcome.mjs"),
     Path("ops/tools/pi_transient_retry.mjs"),
+    Path("ops/tools/pi_fast_mode.mjs"),
     Path("ops/tools/subagent_runtime.mjs"),
     Path("ops/tools/pi_child_bash_process_tree.mjs"),
 )
@@ -78,6 +79,7 @@ DIST_FILES = (
     Path("ops/dist/pi_worker_tools_extension.bundle.mjs"),
     Path("ops/dist/pi_search_extension.bundle.mjs"),
     Path("ops/dist/pi_transient_retry.bundle.mjs"),
+    Path("ops/dist/pi_fast_mode.bundle.mjs"),
     Path("ops/dist/pi_child_command_jobs.bundle.mjs"),
     # handoff checker 自带JS依赖；ops/node_modules只携带清单声明的原生依赖。
     Path("ops/dist/subagent_handoff_check.bundle.mjs"),

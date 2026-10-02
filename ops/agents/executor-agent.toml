@@ -57,7 +57,7 @@ developer_instructions = """
 [[picks]]
 id = "regular"
 when = "常规实现"
-model = "openai-codex/gpt-6-sol"
+model = "openai-codex/gpt-6.1-sol"
 effort = "high"
 effort_min = "high"
 effort_max = "max"
@@ -76,7 +76,7 @@ default = true
 [[picks]]
 id = "frontend"
 when = "页面与交互"
-model = "openai-codex/gpt-6-sol"
+model = "openai-codex/gpt-6.1-sol"
 effort = "xhigh"
 effort_min = "off"
 effort_max = "max"

@@ -38,7 +38,7 @@ effort_max = "high"
 [[picks]]
 id = "deep"
 when = "读源码或深度核对"
-model = "openai-codex/gpt-6-sol"
+model = "openai-codex/gpt-6.1-sol"
 effort = "high"
 effort_min = "medium"
 effort_max = "max"

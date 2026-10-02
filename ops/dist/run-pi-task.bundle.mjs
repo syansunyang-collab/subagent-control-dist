@@ -105,7 +105,7 @@ var init_stdio_jsonrpc = __esm({
 
 // ops/tools/_child-task-contract.mjs
 import { appendFileSync as appendFileSync4, readFileSync as readFileSync9, renameSync as renameSync3, rmSync as rmSync2, writeFileSync as writeFileSync7, writeSync as writeSync2 } from "node:fs";
-import path13 from "node:path";
+import path14 from "node:path";
 function runtimeLabels(runtimeName) {
   const name = String(runtimeName ?? "").trim();
   return {
@@ -532,7 +532,7 @@ function writeStdoutSync(text3) {
     }
   }
 }
-function makeFailEarly({ outDir: outDir2, resultPath: resultPath2 = path13.join(outDir2, "child-task-result.json") } = {}) {
+function makeFailEarly({ outDir: outDir2, resultPath: resultPath2 = path14.join(outDir2, "child-task-result.json") } = {}) {
   return function failEarly2(result2, failureType, message) {
     result2.ok = false;
     result2.status = "failed";
@@ -598,7 +598,7 @@ var init_child_task_contract = __esm({
       \u51FA\u9519: "failed"
     };
     INCOMPLETE_BUSINESS_STATUSES = /* @__PURE__ */ new Set(["partial", "blocked", "failed"]);
-    if (process.argv[1] && path13.basename(process.argv[1]).toLowerCase() === "_child-task-contract.mjs" && process.argv.includes("--self-test")) {
+    if (process.argv[1] && path14.basename(process.argv[1]).toLowerCase() === "_child-task-contract.mjs" && process.argv.includes("--self-test")) {
       const selfTestModule = "./_child-task-contract.selftest.mjs";
       import(selfTestModule).then((module) => {
         module.selfTest();
@@ -619,9 +619,10 @@ __export(run_pi_task_selftest_exports, {
   runSelfTest: () => runSelfTest
 });
 import { spawn as spawn3 } from "node:child_process";
-import { existsSync as existsSync12, mkdtempSync, readFileSync as readFileSync10, rmSync as rmSync3, writeFileSync as writeFileSync8 } from "node:fs";
+import { existsSync as existsSync13, mkdtempSync, readFileSync as readFileSync10, rmSync as rmSync3, writeFileSync as writeFileSync8 } from "node:fs";
 import { tmpdir } from "node:os";
-import path14 from "node:path";
+import path15 from "node:path";
+import { fileURLToPath as fileURLToPath4 } from "node:url";
 function renderPiStubSource({ finalText = PI_STUB_DEFAULT_FINAL_TEXT } = {}) {
   return [
     "import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';",
@@ -848,15 +849,15 @@ function runRunnerForSelfTest(scriptPathForSelf, runnerArgs, env) {
   });
 }
 async function runSelfTest(scriptPathForSelf) {
-  const root = mkdtempSync(path14.join(tmpdir(), "pi-runner-selftest-"));
+  const root = mkdtempSync(path15.join(tmpdir(), "pi-runner-selftest-"));
   try {
-    const stubPath = path14.join(root, "pi-stub.mjs");
+    const stubPath = path15.join(root, "pi-stub.mjs");
     writeFileSync8(stubPath, renderPiStubSource(), "utf8");
-    const targetCwd2 = path14.join(root, "target");
+    const targetCwd2 = path15.join(root, "target");
     ensureDir(targetCwd2);
-    const taskPath = path14.join(root, "task.md");
-    ensureDir(path14.join(targetCwd2, "ops", "agents"));
-    writeFileSync8(path14.join(targetCwd2, "ops", "agents", "fixture-agent.toml"), [
+    const taskPath = path15.join(root, "task.md");
+    ensureDir(path15.join(targetCwd2, "ops", "agents"));
+    writeFileSync8(path15.join(targetCwd2, "ops", "agents", "fixture-agent.toml"), [
       'name = "fixture-agent"',
       "[[picks]]",
       'id = "stub"',
@@ -867,11 +868,11 @@ async function runSelfTest(scriptPathForSelf) {
       "default = true",
       ""
     ].join("\n"), "utf8");
-    writeFileSync8(path14.join(targetCwd2, "ops", "model-notes.toml"), 'version = 1\n[notes."stub-provider/stub-model"]\nefforts = ["low", "medium"]\n', "utf8");
-    ensureDir(path14.join(targetCwd2, "ops", "templates"));
-    writeFileSync8(path14.join(targetCwd2, "ops", "templates", "worker-system-prompt.md"), "Self-test protocol fixture; no production task execution.\n", "utf8");
-    writeFileSync8(path14.join(targetCwd2, "ops", "templates", "handoff-prompt-template.md"), "Protocol fixture prompt. {{RESULT_SUBMISSION}}\n", "utf8");
-    writeFileSync8(path14.join(targetCwd2, "ops", "templates", "worker-resources.json"), JSON.stringify({
+    writeFileSync8(path15.join(targetCwd2, "ops", "model-notes.toml"), 'version = 1\n[notes."stub-provider/stub-model"]\nefforts = ["low", "medium"]\n', "utf8");
+    ensureDir(path15.join(targetCwd2, "ops", "templates"));
+    writeFileSync8(path15.join(targetCwd2, "ops", "templates", "worker-system-prompt.md"), "Self-test protocol fixture; no production task execution.\n", "utf8");
+    writeFileSync8(path15.join(targetCwd2, "ops", "templates", "handoff-prompt-template.md"), "Protocol fixture prompt. {{RESULT_SUBMISSION}}\n", "utf8");
+    writeFileSync8(path15.join(targetCwd2, "ops", "templates", "worker-resources.json"), JSON.stringify({
       version: 2,
       tools: {
         read: { access: "optional" },
@@ -884,9 +885,9 @@ async function runSelfTest(scriptPathForSelf) {
       skills: {},
       required_tools: ["submit_task_result", "submit_review_result"]
     }), "utf8");
-    const fixtureTask = { task_package: { package_id: "fixture-selftest", agent: { role: "fixture-agent" }, expected_output: { mode: "none" } } };
+    const fixtureTask = { task_package: { package_id: "fixture-selftest", agent: { role: "fixture-agent", capability: { name: "fixture" } }, expected_output: { mode: "none" } } };
     writeFileSync8(taskPath, "\u8F93\u51FA PI_STUB_OK \u5E76\u6309\u6807\u9898\u5408\u540C\u5199\u7ED3\u8BBA\u3002", "utf8");
-    const taskPackagePath = path14.join(root, "task-package.json");
+    const taskPackagePath = path15.join(root, "task-package.json");
     writeFileSync8(taskPackagePath, JSON.stringify(fixtureTask), "utf8");
     const scenario = async (name, {
       mode,
@@ -896,8 +897,8 @@ async function runSelfTest(scriptPathForSelf) {
       cancelRequest = null,
       statsDelayMs = 250
     }) => {
-      const outDir2 = path14.join(root, `out-${name}`);
-      const argvOut = path14.join(root, `argv-${name}.json`);
+      const outDir2 = path15.join(root, `out-${name}`);
+      const argvOut = path15.join(root, `argv-${name}.json`);
       const runnerArgs = [
         "--contextMode",
         "isolated",
@@ -907,7 +908,7 @@ async function runSelfTest(scriptPathForSelf) {
         "--runtimeRoot",
         targetCwd2,
         "--childCwd",
-        path14.join(root, `child-${name}`),
+        path15.join(root, `child-${name}`),
         "--taskFile",
         taskPath,
         "--taskPackageFile",
@@ -919,9 +920,9 @@ async function runSelfTest(scriptPathForSelf) {
         "--outDir",
         outDir2,
         "--artifactsDir",
-        path14.join(outDir2, "artifacts"),
+        path15.join(outDir2, "artifacts"),
         "--controlHome",
-        path14.join(root, "control-home"),
+        path15.join(root, "control-home"),
         ...turnTimeoutMs2 ? ["--turnTimeoutMs", String(turnTimeoutMs2)] : [],
         ...extraArgs
       ];
@@ -929,10 +930,10 @@ async function runSelfTest(scriptPathForSelf) {
       let cancelEligibleAt = null;
       if (cancelRequest) {
         cancelTimer = setInterval(() => {
-          const eventsPath = path14.join(outDir2, "child-task-events.jsonl");
+          const eventsPath = path15.join(outDir2, "child-task-events.jsonl");
           if (cancelRequest.whenCommand) {
-            if (!commandsOut2 || !existsSync12(commandsOut2) || !readFileSync10(commandsOut2, "utf8").includes(cancelRequest.whenCommand)) return;
-          } else if (!existsSync12(eventsPath) || !readFileSync10(eventsPath, "utf8").includes('"turn_start"')) return;
+            if (!commandsOut2 || !existsSync13(commandsOut2) || !readFileSync10(commandsOut2, "utf8").includes(cancelRequest.whenCommand)) return;
+          } else if (!existsSync13(eventsPath) || !readFileSync10(eventsPath, "utf8").includes('"turn_start"')) return;
           if (cancelEligibleAt === null) cancelEligibleAt = Date.now() + Math.max(0, Number(cancelRequest.delayMs) || 0);
           if (Date.now() < cancelEligibleAt) return;
           writeFileSync8(cancelRequest.path, `${JSON.stringify({
@@ -952,12 +953,12 @@ async function runSelfTest(scriptPathForSelf) {
         PI_STUB_MODE: mode,
         PI_STUB_STATS_DELAY_MS: String(statsDelayMs),
         PI_STUB_ARGV_OUT: argvOut,
-        ...cancelRequest ? { PI_STUB_BASH_CLEANUP_PATH: path14.join(outDir2, `bash-tree-cleanup.${cancelRequest.attemptId}.jsonl`) } : {},
+        ...cancelRequest ? { PI_STUB_BASH_CLEANUP_PATH: path15.join(outDir2, `bash-tree-cleanup.${cancelRequest.attemptId}.jsonl`) } : {},
         ...commandsOut2 ? { PI_STUB_COMMANDS_OUT: commandsOut2 } : {}
       });
       if (cancelTimer !== null) clearInterval(cancelTimer);
-      const resultPath2 = path14.join(outDir2, "child-task-result.json");
-      selfTestCheck(existsSync12(resultPath2), `${name}: child-task-result.json \u672A\u4EA7\u51FA (stderr: ${run.stderr.slice(0, 400)})`);
+      const resultPath2 = path15.join(outDir2, "child-task-result.json");
+      selfTestCheck(existsSync13(resultPath2), `${name}: child-task-result.json \u672A\u4EA7\u51FA (stderr: ${run.stderr.slice(0, 400)})`);
       const parsed = JSON.parse(readFileSync10(resultPath2, "utf8"));
       return { name, run, outDir: outDir2, argvOut, result: parsed };
     };
@@ -983,34 +984,47 @@ async function runSelfTest(scriptPathForSelf) {
     selfTestCheck(okResult.turns[0].provider === "stub-provider", "ok: turns[0].provider \u9519\u8BEF");
     selfTestCheck(okResult.permission.tool_allowlist === null, "ok: \u7F3A\u7701\u4EFB\u52A1\u4E0D\u5E94\u88C1\u526A\u5DE5\u5177");
     selfTestCheck(okResult.runtime?.exitCode === 0, `ok: pi \u9000\u51FA\u7801\u5E94\u4E3A 0,\u5B9E\u5F97 ${okResult.runtime?.exitCode}`);
-    const finalDoc = readFileSync10(path14.join(okCase.outDir, "child-final.md"), "utf8");
+    const finalDoc = readFileSync10(path15.join(okCase.outDir, "child-final.md"), "utf8");
     selfTestCheck(finalDoc.includes("## \u7ED3\u8BBA") && finalDoc.includes("## \u8FB9\u754C"), "ok: child-final.md \u516D\u6BB5\u7F3A\u5931");
-    const liveSnapshot = JSON.parse(readFileSync10(path14.join(okCase.outDir, "child-task-live.json"), "utf8"));
+    const liveSnapshot = JSON.parse(readFileSync10(path15.join(okCase.outDir, "child-task-live.json"), "utf8"));
     selfTestCheck(liveSnapshot.phase === "finished" && liveSnapshot.status === "completed", "ok: live \u7EC8\u6001\u9519\u8BEF");
     selfTestCheck(liveSnapshot.backend === BACKEND, "ok: live.backend \u9519\u8BEF");
     selfTestCheck(
-      existsSync12(path14.join(okCase.outDir, "pi-session", "stub-session.jsonl")),
+      existsSync13(path15.join(okCase.outDir, "pi-session", "stub-session.jsonl")),
       "ok: --session-dir \u672A\u751F\u6548,pi-session \u4E0B\u6CA1\u6709\u4F1A\u8BDD jsonl"
     );
-    selfTestCheck(existsSync12(path14.join(okCase.outDir, "child-handoff.md")), "ok: child-handoff.md \u672A\u4EA7\u51FA");
-    const identityDoc = JSON.parse(readFileSync10(path14.join(okCase.outDir, "child-task-identity.json"), "utf8"));
+    selfTestCheck(existsSync13(path15.join(okCase.outDir, "child-handoff.md")), "ok: child-handoff.md \u672A\u4EA7\u51FA");
+    const identityDoc = JSON.parse(readFileSync10(path15.join(okCase.outDir, "child-task-identity.json"), "utf8"));
     selfTestCheck(identityDoc.turn_receipts.length >= 1, "ok: \u8EAB\u4EFD\u5FEB\u7167\u7F3A\u5C11\u9010\u8F6E\u56DE\u6267");
     selfTestCheck(identityDoc.available_models.matched === true, "ok: \u8EAB\u4EFD\u5FEB\u7167\u6A21\u578B\u76EE\u5F55\u547D\u4E2D\u6807\u8BB0\u9519\u8BEF");
     const stubArgv = JSON.parse(readFileSync10(okCase.argvOut, "utf8"));
     const workerPromptFlagIndex = stubArgv.indexOf("--append-system-prompt");
     const workerPromptPath = stubArgv[workerPromptFlagIndex + 1];
-    const workerPromptBase = readFileSync10(path14.join(targetCwd2, "ops", "templates", "worker-system-prompt.md"), "utf8").trimEnd();
+    const workerPromptBase = readFileSync10(path15.join(targetCwd2, "ops", "templates", "worker-system-prompt.md"), "utf8").trimEnd();
     selfTestCheck(
-      workerPromptFlagIndex >= 0 && path14.resolve(workerPromptPath) === path14.resolve(okCase.outDir, "worker-system.md") && readFileSync10(workerPromptPath, "utf8").startsWith(workerPromptBase),
+      workerPromptFlagIndex >= 0 && path15.resolve(workerPromptPath) === path15.resolve(okCase.outDir, "worker-system.md") && readFileSync10(workerPromptPath, "utf8").startsWith(workerPromptBase),
       `ok: worker system \u8FFD\u52A0\u5C42\u5E94\u4E3A\u4EFB\u52A1\u76EE\u5F55\u7684 worker-system.md \u4E14\u4EE5\u901A\u7528\u89C4\u5219\u5F00\u5934 ${workerPromptPath}`
     );
     selfTestCheck(okResult.context?.globalAppendSystemSuppressed === true, "ok: child \u672A\u56DE\u663E\u5168\u5C40 APPEND \u6291\u5236\u72B6\u6001");
     selfTestCheck(!stubArgv.includes("-t") && !stubArgv.includes("--no-tools"), "ok: \u7F3A\u7701\u4EFB\u52A1\u4E0D\u5E94\u4F20\u5DE5\u5177\u767D\u540D\u5355");
     selfTestCheck(okResult.selection?.effort_check?.source === "model_notes", "ok: \u65E0\u51BB\u7ED3\u9009\u578B\u65F6\u6309\u6A21\u578B\u6863\u4F4D\u6821\u9A8C effort");
+    selfTestCheck(okResult.selection.fast === void 0, "ok: \u9ED8\u8BA4\u4EFB\u52A1\u4E0D\u5E94\u542F\u7528 fast");
+    selfTestCheck(!stubArgv.some((value) => /pi_fast_mode(?:\.bundle)?\.mjs$/.test(value)), "ok: \u9ED8\u8BA4\u4EFB\u52A1\u4E0D\u52A0\u8F7D fast \u6269\u5C55");
+    const fastPackagePath = path15.join(root, "task-package-fast.json");
+    writeFileSync8(fastPackagePath, JSON.stringify({ task_package: {
+      ...fixtureTask.task_package,
+      runtime_context: { fast: true }
+    } }), "utf8");
+    const fastCase = await scenario("fast", { mode: "ok", extraArgs: ["--taskPackageFile", fastPackagePath] });
+    selfTestCheck(fastCase.run.code === 0 && fastCase.result.selection.fast === true, "fast: \u5FEB\u901F\u4EFB\u52A1\u5E94\u5B8C\u6210\u4E14\u8BB0\u5165 selection");
+    const fastExtension = fastCase.result.selection.extensions.find((value) => /pi_fast_mode(?:\.bundle)?\.mjs$/.test(value));
+    const fastArgv = JSON.parse(readFileSync10(fastCase.argvOut, "utf8"));
+    selfTestCheck(Boolean(fastExtension) && existsSync13(fastExtension) && fastArgv.includes(fastExtension), "fast: \u540C\u76EE\u5F55\u6269\u5C55\u5E94\u8FDB pi -e");
+    selfTestCheck(!fastArgv.includes("--fast"), "fast: \u4E0D\u4F20\u6269\u5C55\u5E03\u5C14 flag");
     const outsideModel = await scenario("effort-outside-model", { mode: "ok", extraArgs: ["--effort", "high"] });
     selfTestCheck(outsideModel.result.failure_type === "invalid_model_effort", `effort_outside_model: \u5B9E\u5F97 ${outsideModel.result.failure_type}`);
     const frozen = (applied) => {
-      const file = path14.join(root, `selection-${applied.length}.json`);
+      const file = path15.join(root, `selection-${applied.length}.json`);
       writeFileSync8(file, JSON.stringify({
         requested: { pick: "stub", model: null, effort: "low" },
         role: "fixture-agent",
@@ -1034,7 +1048,7 @@ async function runSelfTest(scriptPathForSelf) {
       `frozen_range_granted: \u5B9E\u5F97 ${frozenGranted.result.failure_type}`
     );
     const toolTask = (allowed) => {
-      const file = path14.join(root, `task-package-tools-${allowed.length}.json`);
+      const file = path15.join(root, `task-package-tools-${allowed.length}.json`);
       writeFileSync8(file, JSON.stringify({ task_package: { ...fixtureTask.task_package, tool_contract: { allowed } } }), "utf8");
       return file;
     };
@@ -1049,17 +1063,17 @@ async function runSelfTest(scriptPathForSelf) {
     const closed = await scenario("tool-surface-closed", { mode: "ok", extraArgs: ["--taskPackageFile", toolTask([])] });
     const closedArgv = JSON.parse(readFileSync10(closed.argvOut, "utf8"));
     selfTestCheck(closedArgv.includes("--no-tools") && !closedArgv.includes("-t"), "tool_surface_closed: \u7A7A\u5DE5\u5177\u9762\u4FDD\u6301\u5C01\u95ED");
-    const briefCommands = path14.join(root, "commands-brief-final.txt");
+    const briefCommands = path15.join(root, "commands-brief-final.txt");
     const briefFinal = await scenario("brief-final", { mode: "brief_final", commandsOut: briefCommands });
     selfTestCheck(briefFinal.run.code === 0 && briefFinal.result.ok === true, `brief_final: \u5E94\u6309\u5B8C\u6210\u9000\u51FA,\u5B9E\u5F97 code=${briefFinal.run.code} ok=${briefFinal.result.ok}`);
     selfTestCheck(briefFinal.result.status === "completed" && briefFinal.result.failure_type === "none", `brief_final: \u9876\u5C42\u7EC8\u6001\u9519\u8BEF ${briefFinal.result.status}/${briefFinal.result.failure_type}`);
     selfTestCheck(briefFinal.result.orchestration?.ok === true && briefFinal.result.task?.ok === true, "brief_final: \u8FD0\u8F93\u4E0E\u4E1A\u52A1\u6295\u5F71\u90FD\u5E94\u5B8C\u6210");
     selfTestCheck(briefFinal.result.session?.resumable === false, "brief_final: \u5DF2\u5B8C\u6210\u4EFB\u52A1\u4E0D\u5E94\u663E\u793A resumable");
-    const writeDomainSpec2 = path14.join(root, "write-domain.json");
+    const writeDomainSpec2 = path15.join(root, "write-domain.json");
     writeFileSync8(writeDomainSpec2, `${JSON.stringify({
       contract_version: "pi-child-write-domain/v1",
       task_id: "runner-self-test",
-      paths: [path14.join(targetCwd2, "allowed.txt")],
+      paths: [path15.join(targetCwd2, "allowed.txt")],
       delete_paths: [],
       case_insensitive: process.platform === "win32"
     })}
@@ -1072,7 +1086,7 @@ async function runSelfTest(scriptPathForSelf) {
     selfTestCheck(guarded.result.write_domain?.enabled === true, "write_domain: write/edit \u5DE5\u5177\u5B58\u5728\u65F6\u5E94\u542F\u7528\u5B88\u95E8");
     selfTestCheck(guarded.result.write_domain?.audit_complete === true && guarded.result.write_domain?.scope_compliant === true, "write_domain: \u96F6\u5199\u8C03\u7528\u5BA1\u8BA1\u5E94\u5B8C\u6574\u5408\u89C4");
     const loadedWriteDomainExtension = guarded.result.selection?.extensions?.find((item) => /pi_write_domain_extension(?:\.bundle)?\.mjs$/.test(item));
-    selfTestCheck(Boolean(loadedWriteDomainExtension) && existsSync12(loadedWriteDomainExtension), "write_domain: \u540C\u76EE\u5F55\u72EC\u7ACB\u6269\u5C55\u7F3A\u5931");
+    selfTestCheck(Boolean(loadedWriteDomainExtension) && existsSync13(loadedWriteDomainExtension), "write_domain: \u540C\u76EE\u5F55\u72EC\u7ACB\u6269\u5C55\u7F3A\u5931");
     const guardedArgv = JSON.parse(readFileSync10(guarded.argvOut, "utf8"));
     selfTestCheck(guardedArgv.includes(loadedWriteDomainExtension), "write_domain: \u72EC\u7ACB\u6269\u5C55\u672A\u4F20\u7ED9 pi -e");
     const blockedWrite = await scenario("write-domain-blocked", {
@@ -1084,14 +1098,14 @@ async function runSelfTest(scriptPathForSelf) {
     selfTestCheck(blockedWrite.result.write_domain?.violations?.[0]?.raw_path === "README.md", "write_domain_blocked: \u56DE\u6267\u5E94\u70B9\u540D\u8D8A\u754C\u8DEF\u5F84");
     const invalidWriteDomain = await scenario("invalid-write-domain", {
       mode: "ok",
-      extraArgs: ["--writeDomainSpec", path14.join(root, "missing-write-domain.json")]
+      extraArgs: ["--writeDomainSpec", path15.join(root, "missing-write-domain.json")]
     });
     selfTestCheck(invalidWriteDomain.result.ok === false && invalidWriteDomain.result.failure_type === "invalid_write_domain", `invalid_write_domain: \u5B9E\u5F97 ${invalidWriteDomain.result.failure_type}`);
-    const wrongWriteDomainSpec = path14.join(root, "wrong-write-domain.json");
+    const wrongWriteDomainSpec = path15.join(root, "wrong-write-domain.json");
     writeFileSync8(wrongWriteDomainSpec, `${JSON.stringify({
       contract_version: "async-write-claim/v1",
       task_id: "runner-self-test",
-      paths: [path14.join(targetCwd2, "allowed.txt")],
+      paths: [path15.join(targetCwd2, "allowed.txt")],
       delete_paths: [],
       case_insensitive: process.platform === "win32"
     })}
@@ -1111,12 +1125,12 @@ async function runSelfTest(scriptPathForSelf) {
     selfTestCheck(mismatch.result.failure_type === "identity_mismatch", `identity_mismatch: failure_type \u5B9E\u5F97 ${mismatch.result.failure_type}`);
     selfTestCheck(mismatch.result.identity?.verified === false, "identity_mismatch: identity.verified \u5E94\u4E3A false");
     selfTestCheck(mismatch.result.session?.resumable === false, "identity_mismatch: \u4E0D\u5E94 resumable");
-    selfTestCheck(existsSync12(path14.join(mismatch.outDir, "child-final.md")), "identity_mismatch: \u515C\u5E95 child-final.md \u7F3A\u5931");
+    selfTestCheck(existsSync13(path15.join(mismatch.outDir, "child-final.md")), "identity_mismatch: \u515C\u5E95 child-final.md \u7F3A\u5931");
     const timeout = await scenario("turn-timeout", { mode: "turn_timeout", turnTimeoutMs: 1500 });
     selfTestCheck(timeout.result.failure_type === "turn_timeout", `turn_timeout: failure_type \u5B9E\u5F97 ${timeout.result.failure_type}`);
     selfTestCheck(timeout.result.turn?.startAck === true, "turn_timeout: prompt ack \u5E94\u5DF2\u8BB0\u5F55");
-    selfTestCheck(existsSync12(path14.join(timeout.outDir, "child-final.md")), "turn_timeout: \u515C\u5E95 child-final.md \u7F3A\u5931");
-    const cancelFile = path14.join(root, "cancel-request.json");
+    selfTestCheck(existsSync13(path15.join(timeout.outDir, "child-final.md")), "turn_timeout: \u515C\u5E95 child-final.md \u7F3A\u5931");
+    const cancelFile = path15.join(root, "cancel-request.json");
     const cancelled = await scenario("external-cancel", {
       mode: "turn_timeout",
       extraArgs: ["--controlFile", cancelFile, "--attemptId", "attempt-1"],
@@ -1124,35 +1138,35 @@ async function runSelfTest(scriptPathForSelf) {
     });
     selfTestCheck(cancelled.run.code === 1 && cancelled.result.status === "cancelled", `external_cancel: \u9876\u5C42\u5E94\u4E3A cancelled,\u5B9E\u5F97 code=${cancelled.run.code} status=${cancelled.result.status}`);
     selfTestCheck(cancelled.result.cancellation?.graceful === true && cancelled.result.cancellation?.attempt_id === "attempt-1", "external_cancel: \u5E94\u8BC1\u660E\u5F53\u524D attempt \u5DF2\u4F18\u96C5\u6536\u5C3E");
-    selfTestCheck(cancelled.result.session?.resumable === true && existsSync12(cancelled.result.session.file), "external_cancel: settled/idle \u4E14\u5B58\u6863\u5B58\u5728\u65F6\u5E94\u53EF\u7EED\u8DD1");
+    selfTestCheck(cancelled.result.session?.resumable === true && existsSync13(cancelled.result.session.file), "external_cancel: settled/idle \u4E14\u5B58\u6863\u5B58\u5728\u65F6\u5E94\u53EF\u7EED\u8DD1");
     const cancelledBash = await scenario("external-cancel-bash", {
       mode: "cancel_bash",
-      extraArgs: ["--controlFile", path14.join(root, "cancel-bash.json"), "--attemptId", "attempt-bash"],
-      cancelRequest: { path: path14.join(root, "cancel-bash.json"), attemptId: "attempt-bash", reason: "stop running command", delayMs: 100 }
+      extraArgs: ["--controlFile", path15.join(root, "cancel-bash.json"), "--attemptId", "attempt-bash"],
+      cancelRequest: { path: path15.join(root, "cancel-bash.json"), attemptId: "attempt-bash", reason: "stop running command", delayMs: 100 }
     });
     selfTestCheck(cancelledBash.result.cancellation?.graceful === true && cancelledBash.result.session?.resumable === true, "cancel_bash: Bash \u4E2D\u6B62\u9519\u8BEF\u4E0D\u5E94\u5728\u6B63\u5E38 EOF \u6536\u5C3E\u524D\u5F3A\u6740 Pi");
     selfTestCheck(cancelledBash.result.cleanup?.steps?.includes("stdin_eof"), "cancel_bash: \u5E94\u8D70 EOF \u6536\u5C3E");
     const forcedShutdown = await scenario("external-cancel-ignore-eof", {
       mode: "cancel_ignore_eof",
-      extraArgs: ["--controlFile", path14.join(root, "cancel-ignore-eof.json"), "--attemptId", "attempt-eof"],
-      cancelRequest: { path: path14.join(root, "cancel-ignore-eof.json"), attemptId: "attempt-eof", reason: "stop ignored EOF" }
+      extraArgs: ["--controlFile", path15.join(root, "cancel-ignore-eof.json"), "--attemptId", "attempt-eof"],
+      cancelRequest: { path: path15.join(root, "cancel-ignore-eof.json"), attemptId: "attempt-eof", reason: "stop ignored EOF" }
     });
     selfTestCheck(forcedShutdown.result.cancellation?.graceful === false && forcedShutdown.result.session?.resumable === false, "cancel_ignore_eof: \u5DF2 settled \u4F46\u5173\u505C\u5347\u7EA7\u5230 SIGTERM \u65F6\u4E0D\u53EF\u5192\u62A5\u53EF\u7EED\u8DD1");
-    const lateCancelPath = path14.join(root, "late-cancel.json");
+    const lateCancelPath = path15.join(root, "late-cancel.json");
     const lateCancel = await scenario("late-cancel", {
       mode: "late_cancel",
       statsDelayMs: 33e3,
-      commandsOut: path14.join(root, "late-cancel.commands"),
+      commandsOut: path15.join(root, "late-cancel.commands"),
       extraArgs: ["--controlFile", lateCancelPath, "--attemptId", "attempt-late"],
       cancelRequest: { path: lateCancelPath, attemptId: "attempt-late", reason: "late request during stats", whenCommand: "get_session_stats" }
     });
-    const lateLive = JSON.parse(readFileSync10(path14.join(lateCancel.outDir, "child-task-live.json"), "utf8"));
+    const lateLive = JSON.parse(readFileSync10(path15.join(lateCancel.outDir, "child-task-live.json"), "utf8"));
     selfTestCheck(lateLive.attempt_id === "attempt-late" && lateLive.turn_completed === true, "late_cancel: \u5B8C\u6210\u8FB9\u754C\u672A\u7ED1\u5B9A\u5F53\u524D attempt");
-    selfTestCheck(existsSync12(lateCancelPath), "late_cancel: \u672A\u6CE8\u5165\u7EDF\u8BA1\u7A97\u53E3\u53D6\u6D88\u8BF7\u6C42");
+    selfTestCheck(existsSync13(lateCancelPath), "late_cancel: \u672A\u6CE8\u5165\u7EDF\u8BA1\u7A97\u53E3\u53D6\u6D88\u8BF7\u6C42");
     selfTestCheck(lateCancel.result.ok === true && lateCancel.result.cancellation?.requested !== true, "late_cancel: \u5DF2\u5B8C\u6210\u56DE\u5408\u4E0D\u80FD\u88AB\u6536\u5272\u9636\u6BB5\u8FDF\u5230\u53D6\u6D88\u8986\u76D6");
     const crash = await scenario("crash", { mode: "crash" });
     selfTestCheck(crash.result.failure_type === "transport_failed", `crash: failure_type \u5B9E\u5F97 ${crash.result.failure_type}`);
-    selfTestCheck(existsSync12(path14.join(crash.outDir, "child-final.md")), "crash: \u515C\u5E95 child-final.md \u7F3A\u5931");
+    selfTestCheck(existsSync13(path15.join(crash.outDir, "child-final.md")), "crash: \u515C\u5E95 child-final.md \u7F3A\u5931");
     const bashError = await scenario("bash-error", { mode: "bash_error" });
     selfTestCheck(bashError.result.mechanical_signals?.failedBashToolCalls === 1, "bash_error: \u672A\u8BB0\u5F55\u5931\u8D25 Bash \u5DE5\u5177");
     if (process.platform === "win32") {
@@ -1171,7 +1185,7 @@ async function runSelfTest(scriptPathForSelf) {
     selfTestCheck(aborted.result.ok === true, `aborted: \u56DE\u6267 aborted \u4E0D\u5F97\u5224\u6B7B,\u5B9E\u5F97 ok=${aborted.result.ok} failure_type=${aborted.result.failure_type}`);
     selfTestCheck(aborted.result.turns?.[0]?.stopReason === "aborted", "aborted: \u56DE\u6267 stopReason \u5E94\u539F\u6837\u7559\u5728 turns[]");
     selfTestCheck(aborted.result.diagnostics?.stop_reason === "aborted", "aborted: diagnostics.stop_reason \u5E94\u4E3A aborted");
-    selfTestCheck(Boolean(aborted.result.session?.file) && existsSync12(aborted.result.session.file), "aborted: \u5E94\u7559\u4E0B session \u6587\u4EF6");
+    selfTestCheck(Boolean(aborted.result.session?.file) && existsSync13(aborted.result.session.file), "aborted: \u5E94\u7559\u4E0B session \u6587\u4EF6");
     const midrun = await scenario("compaction-midrun", { mode: "compaction_midrun" });
     selfTestCheck(midrun.result.ok === true, `compaction_midrun: \u5E94\u5B8C\u6210,\u5B9E\u5F97 ok=${midrun.result.ok} failure_type=${midrun.result.failure_type} error=${midrun.result.error}`);
     selfTestCheck(midrun.result.failure_type === "none", `compaction_midrun: failure_type \u5B9E\u5F97 ${midrun.result.failure_type}`);
@@ -1179,7 +1193,7 @@ async function runSelfTest(scriptPathForSelf) {
     selfTestCheck(midrun.result.turns?.[0]?.stopReason === "error" && /aborted/.test(midrun.result.turns[0].errorMessage || ""), "compaction_midrun: \u9996\u6761\u56DE\u6267\u5E94\u4FDD\u7559 abort \u4E8B\u5B9E");
     selfTestCheck(midrun.result.turns?.[1]?.stopReason === "stop", "compaction_midrun: \u7EED\u8DD1\u56DE\u6267\u5E94\u4E3A stop");
     selfTestCheck(midrun.result.turn?.finalTextSource === "message_end", `compaction_midrun: \u6B63\u6587\u5E94\u6765\u81EA\u7EED\u8DD1 message_end,\u5B9E\u5F97 ${midrun.result.turn?.finalTextSource}`);
-    const noResumeCommands = path14.join(root, "commands-no-resume.txt");
+    const noResumeCommands = path15.join(root, "commands-no-resume.txt");
     const noResume = await scenario("compaction-no-resume", { mode: "compaction_no_resume", commandsOut: noResumeCommands });
     selfTestCheck(noResume.result.orchestration?.ok === true && noResume.result.turn?.completed === true, `compaction_no_resume: \u8FD0\u8F93\u5E94\u5B8C\u6210,\u5B9E\u5F97 orchestration.ok=${noResume.result.orchestration?.ok}`);
     selfTestCheck(noResume.result.failure_type === "task_status_missing" && noResume.result.ok === false, `compaction_no_resume: \u7A7A\u6B63\u6587\u53EA\u5728\u4E1A\u52A1\u5C42\u8BB0 task_status_missing,\u5B9E\u5F97 ok=${noResume.result.ok} failure_type=${noResume.result.failure_type}`);
@@ -1190,7 +1204,7 @@ async function runSelfTest(scriptPathForSelf) {
     selfTestCheck(noResume.result.turn?.finalization === void 0, "compaction_no_resume: result.turn \u4E0D\u518D\u6709 finalization \u6BB5");
     selfTestCheck(noResume.result.warnings.some((line) => line.includes("\u4EC5\u8BB0\u5F55\u89C2\u6D4B")), "compaction_no_resume: \u7F3A\u8282\u5E94\u4EE5 warning \u8BB0\u4E8B\u5B9E");
     selfTestCheck(noResume.result.session?.resumable === true, "compaction_no_resume: \u672A ok \u6536\u5C3E\u4E14\u8EAB\u4EFD\u6838\u8FC7\u5E94\u53EF\u7EED\u8DD1");
-    const errorIdleCommands = path14.join(root, "commands-error-idle.txt");
+    const errorIdleCommands = path15.join(root, "commands-error-idle.txt");
     const errorIdle = await scenario("error-then-idle", { mode: "error_then_idle", commandsOut: errorIdleCommands });
     selfTestCheck(errorIdle.result.orchestration?.ok === true && errorIdle.result.orchestration?.failure_type === "none", `error_then_idle: \u8FD0\u8F93\u4E0D\u5F97\u5224\u6B7B,\u5B9E\u5F97 orchestration=${JSON.stringify(errorIdle.result.orchestration)}`);
     selfTestCheck(errorIdle.result.failure_type !== "schema_missing" && errorIdle.result.failure_type !== "provider_error", `error_then_idle: failure_type \u5B9E\u5F97 ${errorIdle.result.failure_type}`);
@@ -1208,9 +1222,9 @@ async function runSelfTest(scriptPathForSelf) {
     const toolLoop2 = await scenario("tool-loop", { mode: "tool_loop_repeat" });
     selfTestCheck(toolLoop2.result.ok === true && !toolLoop2.result.tool_loop, "tool_loop: \u540C\u53C2\u6570\u8F6E\u8BE2\u4E0D\u5F97\u5F3A\u6740");
     selfTestCheck(toolLoop2.result.tool_progress_warning?.signatures?.[0]?.count === 20, "tool_loop: \u56DE\u6267\u5E94\u8BB0\u5F55\u544A\u8B66");
-    const toolLoopLive = JSON.parse(readFileSync10(path14.join(toolLoop2.outDir, "child-task-live.json"), "utf8"));
+    const toolLoopLive = JSON.parse(readFileSync10(path15.join(toolLoop2.outDir, "child-task-live.json"), "utf8"));
     selfTestCheck(toolLoopLive.tool_progress_warning?.signatures?.[0]?.count === 20, "tool_loop: live \u5E94\u8BB0\u5F55\u544A\u8B66");
-    const toolLoopEvents = readFileSync10(path14.join(toolLoop2.outDir, "child-task-events.jsonl"), "utf8");
+    const toolLoopEvents = readFileSync10(path15.join(toolLoop2.outDir, "child-task-events.jsonl"), "utf8");
     selfTestCheck(toolLoopEvents.includes('"tool_progress_warning"'), "tool_loop: \u4E8B\u4EF6\u5E94\u8BB0\u5F55\u544A\u8B66");
     const toolLoopAlternate = await scenario("tool-loop-alternate", { mode: "tool_loop_alternate" });
     selfTestCheck(toolLoopAlternate.result.ok === true && !toolLoopAlternate.result.tool_loop && toolLoopAlternate.result.tool_progress_warning?.signatures?.length === 2, "tool_loop_alternate: A/B \u4EA4\u66FF\u5E94\u7EE7\u7EED");
@@ -1232,7 +1246,7 @@ async function runSelfTest(scriptPathForSelf) {
     selfTestCheck(toolLoopPsRead.result.ok === true && toolLoopPsRead.result.failure_type === "none" && !toolLoopPsRead.result.tool_loop, `tool_loop_ps_read: 8 \u6B21\u5B50\u8868\u8FBE\u5F0F\u8BFB\u53D6\u4E0D\u5E94\u5224\u7A7A\u8F6C,\u5B9E\u5F97 ${toolLoopPsRead.result.failure_type} ${JSON.stringify(toolLoopPsRead.result.tool_loop)}`);
     const budget = await scenario("budget-during-grace", { mode: "ok", turnTimeoutMs: 1200 });
     selfTestCheck(budget.result.failure_type === "turn_timeout", `budget_during_grace: \u9759\u9ED8\u7A97\u8D8A\u8FC7 turn \u9884\u7B97\u5E94\u5224 turn_timeout,\u5B9E\u5F97 ${budget.result.failure_type}`);
-    const commandsOut = path14.join(root, "commands-resume.txt");
+    const commandsOut = path15.join(root, "commands-resume.txt");
     const resumed = await scenario("resume", {
       mode: "ok",
       extraArgs: ["--resumeSession", aborted.result.session.file],
@@ -1253,7 +1267,7 @@ async function runSelfTest(scriptPathForSelf) {
 }
 var BACKEND, RUNNER_NAME, PI_STUB_DEFAULT_FINAL_TEXT;
 var init_run_pi_task_selftest = __esm({
-  "ops/tools/run-pi-task.selftest.mjs"() {
+  async "ops/tools/run-pi-task.selftest.mjs"() {
     init_child_task_contract();
     init_stdio_jsonrpc();
     BACKEND = "pi-rpc";
@@ -1272,14 +1286,17 @@ var init_run_pi_task_selftest = __esm({
       "## \u8FB9\u754C",
       "- stub \u4E0D\u6267\u884C\u771F\u5B9E\u4EFB\u52A1"
     ].join("\n");
+    if (process.argv[1] && path15.basename(process.argv[1]) === "run-pi-task.selftest.mjs" && path15.resolve(process.argv[1]) === fileURLToPath4(import.meta.url)) {
+      await runSelfTest(fileURLToPath4(new URL("./run-pi-task.mjs", import.meta.url)));
+    }
   }
 });
 
 // ops/tools/run-pi-task.mjs
 import { spawn as spawn4 } from "node:child_process";
-import { existsSync as existsSync13, readdirSync as readdirSync2, readFileSync as readFileSync11, rmSync as rmSync4, statSync as statSync5, writeFileSync as writeFileSync9 } from "node:fs";
-import path15 from "node:path";
-import { fileURLToPath as fileURLToPath4 } from "node:url";
+import { existsSync as existsSync14, readdirSync as readdirSync2, readFileSync as readFileSync11, rmSync as rmSync4, statSync as statSync5, writeFileSync as writeFileSync9 } from "node:fs";
+import path16 from "node:path";
+import { fileURLToPath as fileURLToPath5 } from "node:url";
 
 // ops/node_modules/smol-toml/dist/error.js
 function getLineColFromPtr(string, ptr) {
@@ -4911,9 +4928,25 @@ var TRANSIENT_RETRY_EXTENSION_NAMES = Object.freeze([
   "pi_transient_retry.bundle.mjs"
 ]);
 
+// ops/tools/pi_fast_mode.mjs
+import { existsSync as existsSync12 } from "node:fs";
+import path12 from "node:path";
+var FAST_MODE_EXTENSION_NAMES = Object.freeze([
+  "pi_fast_mode.mjs",
+  "pi_fast_mode.bundle.mjs"
+]);
+var FAST_MODE_MODELS = Object.freeze({ "grok-4.7": "grok-4.7-build-fast" });
+function fastModeExtensionPath(dir, exists = existsSync12) {
+  for (const name of FAST_MODE_EXTENSION_NAMES) {
+    const candidate = path12.join(dir, name);
+    if (exists(candidate)) return candidate;
+  }
+  return null;
+}
+
 // ops/tools/pi_task_result_extension.mjs
 import { mkdirSync as mkdirSync9, readFileSync as readFileSync8, writeFileSync as writeFileSync6 } from "node:fs";
-import path12 from "node:path";
+import path13 from "node:path";
 function taskPackageFromFile(taskPackagePath) {
   const parsed = JSON.parse(readFileSync8(taskPackagePath, "utf8"));
   const body = parsed && typeof parsed === "object" && parsed.task_package && typeof parsed.task_package === "object" ? parsed.task_package : parsed;
@@ -4930,7 +4963,7 @@ function prepareTaskResultArguments(raw, taskPackage = null, cwd2 = process.cwd(
     if (Object.keys(inline).length) {
       throw new Error(`submit_task_result input error: pass payload_path alone; also received ${Object.keys(inline).slice(0, 8).join(", ")}.`);
     }
-    const file = path12.resolve(cwd2, payloadFile.trim());
+    const file = path13.resolve(cwd2, payloadFile.trim());
     let text3;
     try {
       text3 = readFileSync8(file, "utf8");
@@ -5031,7 +5064,7 @@ function submitTaskResult({ raw, taskPackagePath, reportPath, handoffPath, paylo
     scope_validation: writeScopeValidation,
     result: written.result
   };
-  mkdirSync9(path12.dirname(payloadPath), { recursive: true });
+  mkdirSync9(path13.dirname(payloadPath), { recursive: true });
   writeFileSync6(payloadPath, `${JSON.stringify(record2, null, 2)}
 `, "utf8");
   if (handoffCheck.checked && !["pass", "error"].includes(handoffCheck.status)) {
@@ -5074,8 +5107,8 @@ var RUNTIME_NAME = "pi";
 var BACKEND2 = "pi-rpc";
 var RUNNER_NAME2 = "run-pi-task";
 var PI_CHILD_SYSTEM_PROMPT_PROFILE = "pi-child-worker-system/v1";
-var DEFAULT_PI_CLI = path15.join(
-  process.env.APPDATA || path15.join(process.env.USERPROFILE || "", "AppData", "Roaming"),
+var DEFAULT_PI_CLI = path16.join(
+  process.env.APPDATA || path16.join(process.env.USERPROFILE || "", "AppData", "Roaming"),
   "npm",
   "node_modules",
   "@earendil-works",
@@ -5155,7 +5188,7 @@ function resolveModelConfigForEffort({ explicitRuntimeRoot = null, opsRoot = nul
   if (explicitRuntimeRoot) candidates.push({ root: explicitRuntimeRoot, source: "runtime_root" });
   const envRoot = String(process.env.SUBAGENT_CONTROL_REPO_ROOT || "").trim();
   if (envRoot) candidates.push({ root: envRoot, source: "SUBAGENT_CONTROL_REPO_ROOT" });
-  if (!envRoot && opsRoot) candidates.push({ root: path15.dirname(opsRoot), source: "script_root" });
+  if (!envRoot && opsRoot) candidates.push({ root: path16.dirname(opsRoot), source: "script_root" });
   return resolveModelConfigSources({ roots: candidates, projectRoot: projectRoot2 });
 }
 function checkFrozenEffort(frozen, model2, effort2) {
@@ -5508,10 +5541,10 @@ var PiRpcClient = class {
     });
   }
 };
-var scriptPath = fileURLToPath4(import.meta.url);
+var scriptPath = fileURLToPath5(import.meta.url);
 if (selfTestRequested) {
   try {
-    const { runSelfTest: runSelfTest2 } = await Promise.resolve().then(() => (init_run_pi_task_selftest(), run_pi_task_selftest_exports));
+    const { runSelfTest: runSelfTest2 } = await init_run_pi_task_selftest().then(() => run_pi_task_selftest_exports);
     await runSelfTest2(scriptPath);
     process.exit(0);
   } catch (error) {
@@ -5519,45 +5552,45 @@ if (selfTestRequested) {
     process.exit(1);
   }
 }
-var skillRoot = path15.dirname(path15.dirname(scriptPath));
-var runtimeRoot2 = path15.resolve(
-  stringArg(args, "runtimeRoot", process.env.SUBAGENT_RUNTIME_ROOT || path15.dirname(skillRoot))
+var skillRoot = path16.dirname(path16.dirname(scriptPath));
+var runtimeRoot2 = path16.resolve(
+  stringArg(args, "runtimeRoot", process.env.SUBAGENT_RUNTIME_ROOT || path16.dirname(skillRoot))
 );
 var runStamp = stampForPath();
 var runId = `pi-child-task-${runStamp}`;
-var controlHome = path15.resolve(
+var controlHome = path16.resolve(
   stringArg(args, "controlHome", process.env.PI_CONTROL_HOME || defaultControlHome())
 );
 var contextMode = stringArg(args, "contextMode", "isolated");
 var legacyCwdArg = stringArg(args, "cwd", "");
 var targetCwdSource = args.targetCwd !== void 0 ? "targetCwd" : legacyCwdArg ? "legacy-cwd" : "process-cwd";
-var targetCwd = path15.resolve(stringArg(args, "targetCwd", legacyCwdArg || process.cwd()));
+var targetCwd = path16.resolve(stringArg(args, "targetCwd", legacyCwdArg || process.cwd()));
 var childCwdArg = stringArg(args, "childCwd", "");
-var childCwdDefault = contextMode === "project-aware" ? targetCwd : path15.join(controlHome, "workspaces", runId);
+var childCwdDefault = contextMode === "project-aware" ? targetCwd : path16.join(controlHome, "workspaces", runId);
 var childCwdSource = childCwdArg ? "childCwd" : contextMode === "project-aware" ? "targetCwd-project-aware" : "controlHome-isolated-workspace";
-var childCwd = path15.resolve(childCwdArg || childCwdDefault);
+var childCwd = path16.resolve(childCwdArg || childCwdDefault);
 var cwd = childCwd;
-var outDir = path15.resolve(stringArg(args, "outDir", path15.join(controlHome, "runs", runId)));
-var artifactsDir = path15.resolve(stringArg(args, "artifactsDir", path15.join(controlHome, "artifacts", runId)));
-var livePath = path15.join(outDir, "child-task-live.json");
-var liveEventsPath = path15.join(outDir, "child-task-events.jsonl");
-var reviewResultPath = path15.join(outDir, "review-result.json");
-var reviewTaskPackagePath = path15.join(outDir, "review-task-package.json");
-var taskResultPayloadPath = path15.join(outDir, "task-result.json");
-var taskResultDraftPath = path15.join(artifactsDir, "task-result-payload.json");
-var writeDomainAuditPath = path15.join(outDir, "write-domain-events.jsonl");
-var identityPath = path15.join(outDir, "child-task-identity.json");
-var sessionDir = path15.join(outDir, "pi-session");
-var stderrPath = path15.join(outDir, "pi-stderr.log");
-var targetAgentsPath = path15.join(targetCwd, "AGENTS.md");
-var workerSystemPromptPath = path15.join(runtimeRoot2, "ops", "templates", "worker-system-prompt.md");
+var outDir = path16.resolve(stringArg(args, "outDir", path16.join(controlHome, "runs", runId)));
+var artifactsDir = path16.resolve(stringArg(args, "artifactsDir", path16.join(controlHome, "artifacts", runId)));
+var livePath = path16.join(outDir, "child-task-live.json");
+var liveEventsPath = path16.join(outDir, "child-task-events.jsonl");
+var reviewResultPath = path16.join(outDir, "review-result.json");
+var reviewTaskPackagePath = path16.join(outDir, "review-task-package.json");
+var taskResultPayloadPath = path16.join(outDir, "task-result.json");
+var taskResultDraftPath = path16.join(artifactsDir, "task-result-payload.json");
+var writeDomainAuditPath = path16.join(outDir, "write-domain-events.jsonl");
+var identityPath = path16.join(outDir, "child-task-identity.json");
+var sessionDir = path16.join(outDir, "pi-session");
+var stderrPath = path16.join(outDir, "pi-stderr.log");
+var targetAgentsPath = path16.join(targetCwd, "AGENTS.md");
+var workerSystemPromptPath = path16.join(runtimeRoot2, "ops", "templates", "worker-system-prompt.md");
 var modelFromArg = stringArg(args, "model", "");
 var effortFromArg = stringArg(args, "effort", "");
 var selectionFileArg = stringArg(args, "selectionFile", "");
-var selectionFile = selectionFileArg ? path15.resolve(selectionFileArg) : null;
+var selectionFile = selectionFileArg ? path16.resolve(selectionFileArg) : null;
 var frozenSelection = null;
 if (selectionFile) {
-  if (!existsSync13(selectionFile)) {
+  if (!existsSync14(selectionFile)) {
     throw new Error(`selection file does not exist: ${selectionFile}`);
   }
   frozenSelection = JSON.parse(readFileSync11(selectionFile, "utf8"));
@@ -5573,8 +5606,8 @@ var modelSource = modelFromArg ? "argument" : modelFromEnv ? "env" : "missing";
 var effortSource = effortFromArg ? "argument" : effortFromEnv ? "env" : "missing";
 var modelRef = parseModelRef(model);
 var explicitExtensionPaths = collectRepeated(rawArgv, "--ext");
-var bashProcessTreeExtensionPath = path15.join(outDir, "pi-child-bash-process-tree.mjs");
-var workerToolsSnapshotPath = path15.join(outDir, "worker-tools.json");
+var bashProcessTreeExtensionPath = path16.join(outDir, "pi-child-bash-process-tree.mjs");
+var workerToolsSnapshotPath = path16.join(outDir, "worker-tools.json");
 var toolRuntimeExtensionPaths = String(process.env.PI_CONTROL_PI || "").trim() ? [] : [bashProcessTreeExtensionPath];
 var extensionPaths = [.../* @__PURE__ */ new Set([
   ...toolRuntimeExtensionPaths,
@@ -5599,12 +5632,12 @@ var taskArg = stringArg(args, "task", "");
 var taskPackageFile = stringArg(args, "taskPackageFile", "");
 var resumeSession = stringArg(args, "resumeSession", "");
 var controlFileArg = stringArg(args, "controlFile", "");
-var controlFile = controlFileArg ? path15.resolve(controlFileArg) : null;
+var controlFile = controlFileArg ? path16.resolve(controlFileArg) : null;
 var attemptId = stringArg(args, "attemptId", "");
-var bashCleanupPath = path15.join(outDir, `bash-tree-cleanup.${path15.basename(attemptId || runId)}.jsonl`);
-var commandJobsRoot = path15.join(outDir, `command-jobs.${path15.basename(attemptId || runId)}`);
+var bashCleanupPath = path16.join(outDir, `bash-tree-cleanup.${path16.basename(attemptId || runId)}.jsonl`);
+var commandJobsRoot = path16.join(outDir, `command-jobs.${path16.basename(attemptId || runId)}`);
 var writeDomainSpecArg = stringArg(args, "writeDomainSpec", "");
-var writeDomainSpecPath = writeDomainSpecArg ? path15.resolve(writeDomainSpecArg) : null;
+var writeDomainSpecPath = writeDomainSpecArg ? path16.resolve(writeDomainSpecArg) : null;
 var piCli = process.env.PI_CONTROL_PI?.trim() || DEFAULT_PI_CLI;
 var toolAllowlist = null;
 var startedAtMs = Date.now();
@@ -5684,8 +5717,8 @@ function failureFinalDoc(failureType, message) {
   ].join("\n");
 }
 function ensureFailureFinal(target, failureType, message) {
-  const finalPath = path15.join(outDir, "child-final.md");
-  if (existsSync13(finalPath)) {
+  const finalPath = path16.join(outDir, "child-final.md");
+  if (existsSync14(finalPath)) {
     return finalPath;
   }
   ensureDir(outDir);
@@ -5841,10 +5874,10 @@ var result = {
 if (!["isolated", "project-aware"].includes(contextMode)) {
   failEarly(result, "invalid_context_mode", "\u65E0\u6548 contextMode\u3002\u53EF\u7528\u503C\u4E3A isolated \u6216 project-aware\u3002");
 }
-if (!existsSync13(targetCwd)) {
+if (!existsSync14(targetCwd)) {
   failEarly(result, "target_cwd_missing", `\u4EFB\u52A1\u76EE\u6807\u5DE5\u4F5C\u533A\u4E0D\u5B58\u5728:${targetCwd}`);
 }
-if (!existsSync13(workerSystemPromptPath)) {
+if (!existsSync14(workerSystemPromptPath)) {
   failEarly(
     result,
     "transport_failed",
@@ -5861,7 +5894,7 @@ var taskText = readTaskText({ taskFile, task: taskArg });
 if (!taskText) {
   failEarly(result, "child_task_failed", "\u7F3A\u5C11\u4EFB\u52A1\u6587\u672C\u3002\u8BF7\u63D0\u4F9B --task \u6216 --taskFile\u3002");
 }
-if (resumeSession && !existsSync13(resumeSession)) {
+if (resumeSession && !existsSync14(resumeSession)) {
   failEarly(result, "session_missing", `resumeSession \u4E0D\u5B58\u5728:${resumeSession}`);
 }
 ensureDir(outDir);
@@ -5924,7 +5957,7 @@ try {
 }
 var roleConfigFile = modelConfigSources.roleConfigPath(roleResolution.role);
 result.selection.model_config.role_file = roleConfigFile;
-if (!existsSync13(roleConfigFile)) failEarly(result, "invalid_model_effort", `\u7F3A\u5C11\u89D2\u8272\u914D\u7F6E:${roleConfigFile}\u3002`);
+if (!existsSync14(roleConfigFile)) failEarly(result, "invalid_model_effort", `\u7F3A\u5C11\u89D2\u8272\u914D\u7F6E:${roleConfigFile}\u3002`);
 if (!model || !effort) {
   failEarly(result, "invalid_model_effort", "\u5FC5\u987B\u540C\u65F6\u63D0\u4F9B --model \u4E0E --effort\uFF1A\u6863\u4F4D\u6309\u6A21\u578B\u53EF\u9009\u6863\u4F4D\u6821\u9A8C\uFF0C\u4E0D\u4EA4\u7ED9 Pi \u81EA\u9009\u9ED8\u8BA4\u3002");
 }
@@ -5960,7 +5993,7 @@ if (!workerResourceSpec) {
 }
 workerResourceSpec ??= { extensions: [], skills: [], project_skills: "none" };
 var effectiveToolAllowlist = evidenceOnlyTask ? [] : declaredToolSelection.tools ?? recoveredTools;
-var workerResourcesConfigPath = path15.join(runtimeRoot2, "ops", "templates", "worker-resources.json");
+var workerResourcesConfigPath = path16.join(runtimeRoot2, "ops", "templates", "worker-resources.json");
 var workerImports;
 try {
   workerImports = loadWorkerResourcesConfig(workerResourcesConfigPath);
@@ -6025,6 +6058,12 @@ if (transientRetryPath && !extensionPaths.includes(transientRetryPath)) extensio
 else if (!transientRetryPath) {
   result.warnings.push("\u77AC\u65F6\u670D\u52A1\u9519\u8BEF\u5206\u7C7B\u6269\u5C55\u4E0D\u5728\u8FD0\u884C\u76EE\u5F55\uFF1B\u672C\u6B21\u4E0D\u8FFD\u52A0\u539F\u751F\u91CD\u8BD5\u63D0\u793A\u3002");
 }
+if (reviewTaskPackage?.runtime_context?.fast === true) {
+  const fastModePath = fastModeExtensionPath(path16.dirname(fileURLToPath5(import.meta.url)));
+  if (!fastModePath) failEarly(result, "transport_failed", "Missing pi_fast_mode beside runner; rebuild/deploy the runner.");
+  if (!extensionPaths.includes(fastModePath)) extensionPaths.push(fastModePath);
+  result.selection.fast = true;
+}
 var writeDomainSpec = null;
 if (writeDomainSpecPath) {
   try {
@@ -6042,7 +6081,7 @@ if (writeDomainSpecPath) {
       deleteAllowed: Array.isArray(input.delete_paths) ? input.delete_paths : [],
       // 与提示词口径一致:产物目录与本次证据目录都可写；运行包只读，任何任务都不因 marker/链接自动扩权。
       roots: [artifactsDir, outDir],
-      runtimeRoot: existsSync13(path15.join(runtimeRoot2, "consumer-release-manifest.json")) ? runtimeRoot2 : null,
+      runtimeRoot: existsSync14(path16.join(runtimeRoot2, "consumer-release-manifest.json")) ? runtimeRoot2 : null,
       log: writeDomainAuditPath,
       caseInsensitive: input.case_insensitive === true
     }), { baseDir: targetCwd });
@@ -6072,10 +6111,10 @@ result.write_domain = {
 };
 result.permission.write_domain_guard = writeDomainSpec ? { profile: PI_CHILD_WRITE_DOMAIN_PROFILE, guarded_tools: guardedDirectTools, command_write_enforced: false } : null;
 function resolveSiblingExtension(names) {
-  const selfDir = path15.dirname(fileURLToPath4(import.meta.url));
+  const selfDir = path16.dirname(fileURLToPath5(import.meta.url));
   for (const name of names) {
-    const candidate = path15.join(selfDir, name);
-    if (existsSync13(candidate)) return candidate;
+    const candidate = path16.join(selfDir, name);
+    if (existsSync14(candidate)) return candidate;
   }
   return null;
 }
@@ -6111,7 +6150,7 @@ result.permission.structured_review_write_tool = structuredReviewWriteTool;
 result.permission.evidence_only_no_tools = evidenceOnlyTask && !reviewResultToolEnabled;
 result.permission.review_result_tool = reviewResultToolEnabled;
 result.permission.task_result_tool = taskResultToolEnabled;
-var templatePath = path15.join(
+var templatePath = path16.join(
   runtimeRoot2,
   "ops",
   "templates",
@@ -6142,7 +6181,7 @@ var handoffPrompt = fillTemplate(template, taskText, {
   runtimeName: RUNTIME_NAME,
   taskReminder: taskHeadline ? `\u518D\u6B21\u786E\u8BA4\uFF1A\u672C\u6B21\u4EFB\u52A1\u662F\u300C${taskHeadline}\u300D\u3002\u6309\u4EFB\u52A1\u5361\u7684\u5B8C\u6210\u6761\u4EF6\u5168\u90E8\u505A\u5B8C\u518D\u4EA4\u4ED8\u3002` : ""
 });
-writeFileSync9(path15.join(outDir, "child-handoff.md"), handoffPrompt, "utf8");
+writeFileSync9(path16.join(outDir, "child-handoff.md"), handoffPrompt, "utf8");
 writeLive({ status: "starting", phase: "handoff_prompt_prepared", event: "handoff_prompt_prepared" });
 var promptMessage = resumeSession ? CONTINUE_INTERRUPTED_PROMPT : simProfile ? `${simulationProfilePrompt(simProfile)}
 
@@ -6150,7 +6189,7 @@ ${handoffPrompt}` : handoffPrompt;
 var roleInstructions = String(
   parse(readFileSync11(modelConfigSources.roleConfigPath(roleResolution.role), "utf8")).developer_instructions || ""
 ).trim();
-var taskSystemPromptPath = path15.join(outDir, "worker-system.md");
+var taskSystemPromptPath = path16.join(outDir, "worker-system.md");
 writeFileSync9(
   taskSystemPromptPath,
   `${readFileSync11(workerSystemPromptPath, "utf8").trimEnd()}
@@ -6219,7 +6258,7 @@ function submittedTaskStatus(taskResult) {
 }
 function readTaskResultSubmission() {
   if (!taskResultToolEnabled) return { enabled: false, submitted: false };
-  if (!existsSync13(taskResultPayloadPath)) {
+  if (!existsSync14(taskResultPayloadPath)) {
     return { enabled: true, submitted: false, payload_path: taskResultPayloadPath };
   }
   try {
@@ -6245,7 +6284,7 @@ function readTaskResultSubmission() {
 }
 var TASK_RESULT_DRAFT_FIX_ROUNDS = 2;
 function ingestTaskResultDraft(trigger) {
-  if (!taskResultToolEnabled || !existsSync13(taskResultDraftPath)) return null;
+  if (!taskResultToolEnabled || !existsSync14(taskResultDraftPath)) return null;
   if (submittedTaskStatus(readTaskResultSubmission())) return null;
   const outcome = submitTaskResult({
     raw: { payload_path: taskResultDraftPath },
@@ -6627,7 +6666,7 @@ function sendExternalAbort() {
 }
 var cancellationReadErrors = /* @__PURE__ */ new Set();
 function inspectCancellationRequest() {
-  if (!controlFile || !attemptId || externalCancellation.requested && externalCancellation.type !== "pause" || settledIdleConfirmed && !promptStarted || !existsSync13(controlFile)) return false;
+  if (!controlFile || !attemptId || externalCancellation.requested && externalCancellation.type !== "pause" || settledIdleConfirmed && !promptStarted || !existsSync14(controlFile)) return false;
   let request;
   try {
     request = JSON.parse(readFileSync11(controlFile, "utf8"));
@@ -6895,13 +6934,13 @@ async function readAssistantText() {
   return typeof data?.text === "string" ? data.text : "";
 }
 function resolveSessionFile(preferred) {
-  if (preferred && existsSync13(preferred)) return { file: preferred, readError: null };
-  if (!existsSync13(sessionDir)) return { file: null, readError: null };
+  if (preferred && existsSync14(preferred)) return { file: preferred, readError: null };
+  if (!existsSync14(sessionDir)) return { file: null, readError: null };
   try {
     const names = readdirSync2(sessionDir).filter((name) => name.endsWith(".jsonl"));
     if (names.length === 0) return { file: null, readError: null };
     names.sort();
-    return { file: path15.join(sessionDir, names[names.length - 1]), readError: null };
+    return { file: path16.join(sessionDir, names[names.length - 1]), readError: null };
   } catch (error) {
     return { file: null, readError: String(error?.message ?? error) };
   }
@@ -7118,7 +7157,7 @@ try {
     finalTextSource = finalText ? "get_last_assistant_text" : "empty";
   }
   const headingOptions = { conclusionStatusRequired: !structuredReviewTask };
-  const finalPath = path15.join(outDir, "child-final.md");
+  const finalPath = path16.join(outDir, "child-final.md");
   writeFileSync9(finalPath, finalText, "utf8");
   const stats = await client.call("get_session_stats", {}, { timeoutMs: Math.max(1, Math.min(COMMAND_TIMEOUT_MS, remainingGlobalMs())) }).catch(() => null);
   result.session = { ...result.session ?? {}, stats: compactSessionStats(stats) };
@@ -7243,7 +7282,7 @@ ${finalText}` : finalText, {
   const bashCleanup = /* @__PURE__ */ new Map();
   let cleanupLogValid = true;
   try {
-    if (existsSync13(bashCleanupPath)) {
+    if (existsSync14(bashCleanupPath)) {
       for (const line of readFileSync11(bashCleanupPath, "utf8").split("\n").filter(Boolean)) {
         const record2 = JSON.parse(line);
         bashCleanup.set(record2.tool_call_id, record2);
@@ -7297,7 +7336,7 @@ ${finalText}` : finalText, {
   }
   result.cleanup.tree_confirmed = treeConfirmed;
   result.cleanup.remaining_pids = [...remainingPids];
-  result.cleanup.bash_evidence_path = existsSync13(bashCleanupPath) ? bashCleanupPath : null;
+  result.cleanup.bash_evidence_path = existsSync14(bashCleanupPath) ? bashCleanupPath : null;
   if (externalCancellation.requested) {
     externalCancellation.graceful = settledIdleConfirmed && treeConfirmed && bashStopsProven && result.cleanup.exitInfo?.code === 0 && !result.cleanup.exitInfo?.signal && !(result.cleanup.steps ?? []).some((step) => ["sigterm", "kill"].includes(step));
   }
@@ -7346,13 +7385,13 @@ ${finalText}` : finalText, {
     }
   }
   if (saveRawEvidence) {
-    const rawPath = path15.join(outDir, "pi-rpc-raw.jsonl");
+    const rawPath = path16.join(outDir, "pi-rpc-raw.jsonl");
     writeFileSync9(rawPath, `${client.rawRecords.map((record2) => JSON.stringify(record2)).join("\n")}
 `, "utf8");
     result.evidence = { rawJsonl: rawPath, records: client.rawRecords.length };
   }
   try {
-    const sessionFiles = existsSync13(sessionDir) ? statSync5(sessionDir).isDirectory() : false;
+    const sessionFiles = existsSync14(sessionDir) ? statSync5(sessionDir).isDirectory() : false;
     result.session = { ...result.session ?? {}, sessionDir, sessionDirExists: sessionFiles };
   } catch {
     result.session = { ...result.session ?? {}, sessionDir, sessionDirExists: false };
@@ -7378,7 +7417,7 @@ ${finalText}` : finalText, {
   }
   writeIdentitySnapshot();
 }
-var resultPath = path15.join(outDir, "child-task-result.json");
+var resultPath = path16.join(outDir, "child-task-result.json");
 result.outputPath = resultPath;
 writeFileSync9(resultPath, JSON.stringify(result, null, 2), "utf8");
 writeLive({

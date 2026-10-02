@@ -27951,6 +27951,20 @@ function selectionSummary(selection) {
   return `${selection.resolved_model}@${selection.resolved_effort} \xB7 ${source} \xB7 \u6388\u6743\u89E3\u9664:${applied}`;
 }
 
+// ops/tools/pi_fast_mode.mjs
+var FAST_MODE_EXTENSION_NAMES = Object.freeze([
+  "pi_fast_mode.mjs",
+  "pi_fast_mode.bundle.mjs"
+]);
+var FAST_MODE_DESCRIPTION = "\u8BF7\u6C42\u66F4\u5FEB\u63A8\u7406\uFF1AOpenAI \u7CFB\u7EA6 2.5 \u500D\u989D\u5EA6\u3001grok 2 \u500D\u4EF7\u683C\uFF1B\u7701\u7565\u65F6 MCP \u8C03\u7528\u4E3A\u5173\uFF0CPi \u4E3B\u4EE3\u7406\u6CBF\u7528\u5176\u4F1A\u8BDD\u5F53\u524D\u5FEB\u901F\u72B6\u6001\u3002";
+var FAST_MODE_MODELS = Object.freeze({ "grok-4.7": "grok-4.7-build-fast" });
+function fastModeSeed(seed, fast) {
+  const runtime = { ...seed.runtime_context };
+  if (fast === true) runtime.fast = true;
+  else delete runtime.fast;
+  return { ...seed, runtime_context: runtime };
+}
+
 // ops/tools/pause-surface.mjs
 var PAUSE_TOOL_DESCRIPTION = "\u4EE5\u5F53\u524Drevision\u6267\u884CCAS\uFF0C\u534F\u4F5C\u6682\u505C\u6392\u961F\u6216\u8FD0\u884C\u4E2D\u7684\u4EFB\u52A1\uFF0C\u4FDD\u5B58\u5DF2\u6709\u4F1A\u8BDD\u4F9B\u7EED\u63A5\uFF0C\u4E0D\u81EA\u52A8\u5F3A\u6740\u3002paused\u8868\u793A\u6267\u884C\u5DF2\u505C\u6B62\uFF0C\u4E0D\u8868\u793A\u4E1A\u52A1\u5B8C\u6210\uFF1B\u672A\u786E\u8BA4\u505C\u6B62\u65F6\u4FDD\u7559\u5B9E\u9645\u72B6\u6001\u548C\u5199\u57DF\u3002\u91CD\u590D\u6682\u505C\u5DF2\u6682\u505C\u4EFB\u52A1\u4E3A\u5E42\u7B49\u6210\u529F\uFF0C\u5DF2\u6709\u5B8C\u6210\u6216\u53D6\u6D88\u7EC8\u6001\u4FDD\u6301\u4E0D\u53D8\u3002";
 var RESUME_TOOL_DESCRIPTION = "\u6062\u590Dpaused\u4EFB\u52A1\u6216\u5177\u5907\u53EF\u6062\u590DPi\u4F1A\u8BDD\u7684\u7EC8\u6001\u4EFB\u52A1\uFF0C\u6CBF\u539Ftask\u5F00\u542F\u65B0attempt\u3002resume_mode=session\u8F7D\u5165\u539F\u4F1A\u8BDD\uFF1Bstart\u542F\u52A8\u5C1A\u672A\u5F00\u59CB\u7684\u539F\u4EFB\u52A1\u3002\u7528\u6237\u8981\u6C42\u505C\u6B62\u540E\uFF0C\u987B\u53D6\u5F97\u65B0\u7684\u7EE7\u7EED\u6307\u4EE4\u3002\u4F7F\u7528subagent_get\u8FD4\u56DE\u7684\u5F53\u524Drevision\u6267\u884CCAS\u3002";
@@ -29334,7 +29348,7 @@ function isTrustedRunnerPath(options, runnerPath) {
 init_runtime();
 var SERVER_NAME = "async-subagent";
 var SERVER_VERSION = "1.0.0";
-var BUILD_ID = true ? "543d00856cfd8b27" : "dev";
+var BUILD_ID = true ? "4b56503931d4522a" : "dev";
 var PUBLIC_TOOL_NAMES = Object.freeze([
   "subagent_prepare",
   "subagent_dispatch",
@@ -29502,7 +29516,8 @@ var dispatchOutputSchema = external_exports.object({
   task_id: taskIdSchema,
   status: external_exports.string(),
   display_title: external_exports.string().nullable(),
-  selection_summary: external_exports.string().nullable()
+  selection_summary: external_exports.string().nullable(),
+  fast: external_exports.boolean()
 }).strict();
 var submitOutputSchema = external_exports.object({
   ...modelDisplayShape,
@@ -29692,7 +29707,8 @@ function runDispatchPrepare(args, seedJson, projectRoot, { raw = false } = {}) {
   });
 }
 async function dispatchSeed(service, input) {
-  const seed = input.display_title ? { ...input.seed, title: input.display_title } : input.seed;
+  const projected = fastModeSeed(input.seed, input.fast);
+  const seed = input.display_title ? { ...projected, title: input.display_title } : projected;
   const args = dispatchPrepareSeedArgs(dispatchPreparePath(), "prepare", input);
   const prepared = await runDispatchPrepare(args, `${JSON.stringify(seed)}
 `, mcpProjectRoot(input.project_root));
@@ -29713,6 +29729,7 @@ async function dispatchSeed(service, input) {
   return {
     task_id: receipt.task_id,
     status: receipt.state,
+    fast: prepared.fast === true,
     display_title: receipt.display_title ?? prepared.display_title ?? null,
     selection_summary: prepared.async_model_selection?.selection ? selectionSummary(prepared.async_model_selection.selection) : null
   };
@@ -29772,6 +29789,7 @@ function registerPublicTools(server, service) {
       pick: external_exports.string().min(1).optional(),
       model: external_exports.string().min(1).optional(),
       effort: external_exports.enum(DISPATCH_EFFORTS).optional(),
+      fast: external_exports.boolean().optional().describe(FAST_MODE_DESCRIPTION),
       authorization: external_exports.object({ quote: external_exports.string().min(1), overrides: external_exports.array(external_exports.enum(AUTHORIZATION_OVERRIDES)) }).strict().optional(),
       target_cwd: external_exports.string().min(1).optional(),
       execution_profile: external_exports.enum(["standard", "simulation"]).optional(),

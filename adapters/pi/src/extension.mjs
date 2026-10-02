@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { isFastPayload } from "../../../ops/tools/pi_fast_mode.mjs";
 import { summarizeTaskOutcome } from "../../../ops/tools/task-outcome.mjs";
 import { createFleetCore } from "../../../ops/tools/fleet-tools-core.mjs";
 import { installDelegateWork } from "./delegate-work-extension.mjs";
@@ -374,6 +375,7 @@ export default function controlDelegateExtension(pi, {
   const deliveredRecoveryKeys = new Set();
   const notifiedRecoveryFaults = new Set();
   let sessionContext = null;
+  let sessionFast = false;
   let branchBinding = null;
   let livenessLease = null;
   const releaseSessionLiveness = () => {
@@ -612,6 +614,7 @@ export default function controlDelegateExtension(pi, {
   const startSession = async (_event, ctx) => {
     releaseSessionLiveness();
     sessionContext = ctx ?? {};
+    sessionFast = false;
     branchBinding = workBranchBinding(sessionIdFrom(ctx)) ?? null;
     branchBinding?.attachServices({ asyncService: durableAsyncService, fleetCore: resolvedFleetCore });
     completionDelivery.reset();
@@ -669,6 +672,10 @@ export default function controlDelegateExtension(pi, {
     runtimeRoot, projectRoot, mode, manifest, ...delegateWorkOptions,
   }) : null;
 
+  pi.on("before_provider_request", (event) => {
+    sessionFast = isFastPayload(event.payload);
+    return undefined;
+  });
   pi.on("session_start", startSession);
   pi.on("agent_settled", () => completionDelivery.schedule());
   pi.on("message_end", (event, ctx) => {
@@ -684,6 +691,7 @@ export default function controlDelegateExtension(pi, {
       service: durableAsyncService,
       ...(dispatchCompiler ? { compiler: dispatchCompiler } : {}),
       onSubmitted: handleSubmitted,
+      currentFast: () => sessionFast,
     }));
   }
   for (const lifecycleTool of lifecycleTools) {

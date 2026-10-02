@@ -6210,7 +6210,9 @@ function renderTemplate(routeId2) {
     ...Object.entries(card.input_defaults ?? {}).map(([key, value]) => `# \u7F3A\u7701: ${key} = ${pyJsonDumps(value)}`),
     "# \u5176\u4F59\u5B57\u6BB5\u5168\u90E8\u7531\u5DE5\u5177\u6309\u5DEE\u5F02\u5361\u9ED8\u8BA4\uFF1Bscope.write \u81EA\u52A8\u542B\u9884\u671F\u8F93\u51FA\u548C handoff\uFF0C\u4E1A\u52A1\u5199\u5165\u7528 scope.write_extra \u6DFB\u52A0\u3002",
     "# <\u53EF\u9009> \u5B57\u6BB5\u4E0D\u9700\u8981\u65F6\u6574\u884C\u5220\u9664\u3002CLI flag \u4E0E Pi \u6269\u5C55\u5DE5\u5177\u53C2\u6570\u4E0D\u53EF\u6DF7\u7528\u3002",
-    "# \u914D\u7F6E\u5F52\u5C5E\u53D1\u8D77\u9879\u76EE\uFF1Btarget_cwd \u6307\u5B9A\u5B50\u4EE3\u7406\u6267\u884C\u76EE\u5F55\u548C\u5199\u57DF\u6821\u9A8C\u7684\u76EE\u6807\u4ED3\uFF0C\u5177\u4F53\u5199\u5165\u4ECD\u7531 scope \u6388\u6743\u3002"
+    "# \u914D\u7F6E\u5F52\u5C5E\u53D1\u8D77\u9879\u76EE\uFF1Btarget_cwd \u6307\u5B9A\u5B50\u4EE3\u7406\u6267\u884C\u76EE\u5F55\u548C\u5199\u57DF\u6821\u9A8C\u7684\u76EE\u6807\u4ED3\uFF0C\u5177\u4F53\u5199\u5165\u4ECD\u7531 scope \u6388\u6743\u3002",
+    "# scope.read \u4ED3\u5916\u53EA\u8BFB\u7528\u5DF2\u5B58\u5728\u7684\u771F\u5B9E\u7EDD\u5BF9\u8DEF\u5F84\uFF1B\u76F8\u5BF9\u8DEF\u5F84\u7ECF junction/symlink \u6307\u5411\u4ED3\u5916\u65F6\uFF0C\u6362\u6210\u62A5\u9519\u7ED9\u51FA\u7684\u771F\u5B9E\u7EDD\u5BF9\u8DEF\u5F84\u540E\u91CD\u8BD5 preview\u3002",
+    "# \u8BE5\u8BFB\u53D6\u8BB8\u53EF\u4E0D\u6269\u5C55 scope.write/write_extra/delete\uFF1B\u4E1A\u52A1\u5199\u5165\u4ECD\u9650\u4ED3\u6839\u6216\u5DF2\u6388\u6743\u76EE\u6807\u4ED3\uFF0Cdelete \u4FDD\u6301\u539F\u8FB9\u754C\u3002"
   ];
   return `${header.join("\n")}
 ${JSON.stringify(body, null, 2)}`;
@@ -6681,7 +6683,12 @@ function pathScopeIssue(value, { base, rootLabel, allowAbsoluteOutside = false, 
   if (isAbsoluteLikePython(value) && allowAbsoluteOutside) return null;
   if (allowRuntime && pyRelativeTo(lexicalAbsolute(pathlibJoin(base, value)), resolveLikePython(base)) !== null && isSameOrInside(resolved, RUNTIME_ROOT)) return null;
   if (pyRelativeTo(resolved, resolveLikePython(base)) === null) {
-    return `path is outside ${rootLabel} scope: ${value}`;
+    const issue = `path is outside ${rootLabel} scope: ${value}`;
+    if (allowAbsoluteOutside) {
+      const retry = existsSync6(resolved) ? `replace this scope.read entry with ${JSON.stringify(resolved)} and retry preview` : "set scope.read to an existing real absolute path for external read and retry preview";
+      return `${issue}; resolved path: ${resolved}; ${retry} (read only; write/delete boundaries unchanged)`;
+    }
+    return issue;
   }
   return null;
 }
@@ -9113,8 +9120,15 @@ function resolveAsyncRuntimeOptions(taskPackage, options = {}) {
     targetCwd = "",
     executionProfile = "",
     stallSilenceMs = null,
-    catalogCacheWrite = false
+    catalogCacheWrite = false,
+    fast = taskPackage?.runtime_context?.fast === true
   } = options;
+  if (fast === true) {
+    taskPackage.runtime_context ??= {};
+    taskPackage.runtime_context.fast = true;
+  } else if (taskPackage.runtime_context) {
+    delete taskPackage.runtime_context.fast;
+  }
   const agent = isRecord(taskPackage?.agent) ? taskPackage.agent : {};
   const resolvedToolAllowlist = taskToolAllowlist(taskPackage);
   const warnings = [];
@@ -9205,6 +9219,7 @@ function resolveAsyncRuntimeOptions(taskPackage, options = {}) {
   return {
     agent_type: pyStr(pyTruthy(agent.runtime_role) ? agent.runtime_role : pyTruthy(agent.role) ? agent.role : ""),
     executor: "pi",
+    fast: fast === true,
     execution_profile: effectiveExecutionProfile,
     context_mode: evidenceOnly ? "isolated" : pyTruthy(contextMode) ? contextMode : "project-aware",
     runner_path: effectiveRunnerPath,
@@ -9249,6 +9264,7 @@ function prepareAsyncSubagent(pkg, options = {}) {
     displayTitle = "",
     action = "submit",
     originId = "",
+    fast = void 0,
     reviewEvidenceBuilder = null,
     budget = null
   } = options;
@@ -9293,7 +9309,8 @@ function prepareAsyncSubagent(pkg, options = {}) {
       targetCwd,
       executionProfile,
       stallSilenceMs,
-      catalogCacheWrite
+      catalogCacheWrite,
+      fast
     });
   }
   const stableSelection = isRecord(opts.model_selection) ? opts.model_selection : {};
@@ -9360,7 +9377,8 @@ function prepareAsyncSubagent(pkg, options = {}) {
       executionProfile,
       stallSilenceMs,
       // 该回调只在 prepare/submit 路径执行：允许文件层落盘。
-      catalogCacheWrite: true
+      catalogCacheWrite: true,
+      fast
     });
     lintOrFail(pkg);
     dispatchEnvelope = dispatchEnvelopeFor(opts);
@@ -9448,7 +9466,8 @@ function prepareAsyncSubagent(pkg, options = {}) {
     async_model_selection: modelSelection,
     ...opts.warnings?.length ? { warnings: opts.warnings } : {},
     model: primaryModel,
-    effort: primaryEffort
+    effort: primaryEffort,
+    fast: taskPackage.runtime_context?.fast === true
   };
   if (normalizedAction === "prepare") baseResult.state = "prepared";
   if (reviewHolder.value !== void 0 && reviewHolder.value !== null) {
@@ -9529,6 +9548,7 @@ function prepareDryRun(pkg, delivery, resolvedDelivery, readiness, resolvedOptio
     const selection = isRecord(resolvedOptions.model_selection) ? resolvedOptions.model_selection : {};
     result.async_preview = {
       executor: resolvedOptions.executor ?? null,
+      fast: resolvedOptions.fast === true,
       runner_path: pyStr(pyTruthy(resolvedOptions.runner_path) ? resolvedOptions.runner_path : "") || null,
       model: pyStr(pyTruthy(selection.primary_model) ? selection.primary_model : "") || null,
       effort: pyStr(pyTruthy(selection.primary_effort) ? selection.primary_effort : "") || null,
@@ -9555,6 +9575,7 @@ function prepareDispatch(seed, delivery, options = {}) {
     action = "",
     asyncModel = "",
     asyncEffort = "",
+    fast = void 0,
     asyncPick = "",
     asyncAuthorization = null,
     asyncContextMode = "",
@@ -9616,6 +9637,7 @@ function prepareDispatch(seed, delivery, options = {}) {
     resolvedAsyncOptions = resolveAsyncRuntimeOptions(pyGetItem(pkg, "task_package"), {
       model: asyncModel,
       effort: asyncEffort,
+      fast,
       pick: asyncPick,
       authorization: asyncAuthorization,
       contextMode: asyncContextMode,
@@ -9651,6 +9673,7 @@ function prepareDispatch(seed, delivery, options = {}) {
     if (!Object.hasOwn(result2, "action")) result2.action = normalizedAction;
     result2.scope_preflight = scopePreflight;
     result2.business_output = taskPackageOutputSummary(pyGetItem(pkg, "task_package"));
+    result2.fast = pyGetItem(pkg, "task_package").runtime_context?.fast === true;
     const warnings = [...new Set([
       ...scopeDiagnostics,
       ...result2.warnings || [],
@@ -9683,6 +9706,7 @@ function prepareDispatch(seed, delivery, options = {}) {
     result = prepareAsyncSubagent(pkg, {
       model: asyncModel,
       effort: asyncEffort,
+      fast,
       pick: asyncPick,
       authorization: asyncAuthorization,
       contextMode: asyncContextMode,

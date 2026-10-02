@@ -78,10 +78,12 @@
 
 | 字段 | 含义 |
 | --- | --- |
-| `scope.read` | 允许读取的文件、目录、URL 或对象。 |
+| `scope.read` | 允许读取的文件、目录、URL 或对象；仓外只读输入使用已存在的真实绝对路径。 |
 | `scope.write` | 允许写入的文件或目录；只读任务写 `[]`。 |
 | `scope.delete` | 允许删除的文件或目录；无则写 `[]`。 |
 | `scope.out_of_scope` | 明确禁止碰的路径、对象或行为。 |
+
+相对读取路径按目标仓解析；相对路径经 junction/symlink 解析到仓外时仍拒绝（已有运行包只读挂载许可保持不变）。读取错误给出实际解析路径；把被拒的 `scope.read` 条目替换为该已有文件或目录的真实绝对路径后重试 preview。此许可仅供读取，`scope.write` / `scope.delete` 的仓外边界保持不变；业务写入仍需在仓根或目标仓内显式授权，不新增授权字段。
 
 实际回执中的 `scope_actual` 是事实记录。结构化语义审查在 `review_result_v1.scope.actual_reads` 声明实际消费的输入；完整消费时可用 `$scope_read`，runner 展开后再生成 `scope_actual.read`。
 
@@ -173,6 +175,7 @@ hook、notification 和运行提示不是完成证明。
 | `target_repo` | 可选跨仓目标绝对路径；扫描任务只影响扫描对象和相对读取路径；执行任务可在 `scope.write` 显式列出的 `target_repo` 子路径写入。 |
 | `target_repo_create_allowed` | 目标仓尚不存在且本任务被授权创建时写 `true`；未授权创建目标仓时写 `false` 或省略。该字段只解除 `target_repo` 存在性检查，不放开任意外部路径。 |
 | `network_needed` | 本任务的联网声明；yes时编译器生成network_allowed=true投影。 |
+| `fast` | 可选，仅开启时写 `true`；主代理写，Pi 运行器读并加载加速扩展。派单参数省略时 Claude Code 为关，Pi 主代理沿用最近请求的快速状态；显式布尔值优先。 |
 | `scope_exists` | scope 是否存在。 |
 | `environment_snapshot` | 本机环境和工具基线。 |
 | `network_snapshot` | 网络目标、可达性和授权快照。 |

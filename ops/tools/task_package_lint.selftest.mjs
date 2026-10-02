@@ -2,7 +2,7 @@
 // task_package_lint --self-test 的机械用例集（ops/tools/task_package_lint_selftest.py 的移植），
 // 经 node ops/tools/task_package_lint.mjs --self-test 调用。Python 侧无 checks 字典：
 // 用例逐条断言，失败即抛 ToolError；本移植保持同一结构（selfTest() 成功时无返回值）。
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -85,6 +85,32 @@ export function selfTest() {
     externalPkg.handoff_contract.resolved_handoff_file = String(path.resolve(path.join(ROOT, "notes/handoffs/external.yaml")));
     let issues = lintPackage(externalScope);
     if (issues.length) throw new ToolError(`self-test expected target_repo scope to pass: ${issues.join("; ")}`);
+
+    withTempDir("task-package-external-sdk-", (sdk) => {
+      const file = path.join(sdk, "model-runtime.d.ts");
+      writeFileSync(file, "export interface ModelRuntime {}\n", "utf8");
+      const realFile = realpathSync.native(file);
+      symlinkSync(sdk, path.join(target, "sdk"), process.platform === "win32" ? "junction" : "dir");
+      const junctionScope = structuredClone(externalScope);
+      junctionScope.task_package.scope.read = ["sdk/model-runtime.d.ts"];
+      const rejected = lintPackage(junctionScope);
+      if (!rejected.some((issue) => issue.includes("outside target_repo scope") &&
+          issue.includes(JSON.stringify(realFile)) && issue.includes("scope.read") && issue.includes("retry preview"))) {
+        throw new ToolError(`self-test expected relative junction read rejection with real path retry: ${rejected.join("; ")}`);
+      }
+      junctionScope.task_package.scope.read = [realFile];
+      const accepted = lintPackage(junctionScope);
+      if (accepted.length) throw new ToolError(`self-test expected real absolute external read to pass: ${accepted.join("; ")}`);
+      for (const key of ["write", "delete"]) {
+        const outside = structuredClone(junctionScope);
+        outside.task_package.scope[key].push(realFile);
+        const denied = lintPackage(outside);
+        if (!denied.some((issue) => issue.includes("outside repository scope")) ||
+            denied.some((issue) => issue.includes("retry preview"))) {
+          throw new ToolError(`self-test expected external ${key} rejection without read retry: ${denied.join("; ")}`);
+        }
+      }
+    });
 
     const externalWriteScope = buildPackage(sampleSeed("executor-agent__scoped-execution"));
     const externalWritePkg = externalWriteScope.task_package;

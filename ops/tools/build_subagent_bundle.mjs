@@ -47,6 +47,7 @@ const consumerBundles = [
   ["dispatch_prepare_bundle", "dispatch_prepare.mjs", "dispatch_prepare.bundle.mjs"],
   ["delegate_work_selection_bundle", "delegate_work_selection.mjs", "delegate_work_selection.bundle.mjs"],
   ["transient_retry_extension_bundle", "pi_transient_retry.mjs", "pi_transient_retry.bundle.mjs"],
+  ["fast_mode_extension_bundle", "pi_fast_mode.mjs", "pi_fast_mode.bundle.mjs"],
   ["agent_panel_launcher_bundle", "agent_panel_launcher.mjs", "agent_panel_launcher.bundle.mjs"],
   ["fleet_scheduler_bundle", "fleet_scheduler.mjs", "fleet_scheduler.bundle.mjs"],
   ["fleet_manifest_check_bundle", "fleet_manifest_check.mjs", "fleet_manifest_check.bundle.mjs"],

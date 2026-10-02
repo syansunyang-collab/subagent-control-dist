@@ -769,6 +769,8 @@ export function renderTemplate(routeId) {
     "# 其余字段全部由工具按差异卡默认；scope.write 自动含预期输出和 handoff，业务写入用 scope.write_extra 添加。",
     "# <可选> 字段不需要时整行删除。CLI flag 与 Pi 扩展工具参数不可混用。",
     "# 配置归属发起项目；target_cwd 指定子代理执行目录和写域校验的目标仓，具体写入仍由 scope 授权。",
+    "# scope.read 仓外只读用已存在的真实绝对路径；相对路径经 junction/symlink 指向仓外时，换成报错给出的真实绝对路径后重试 preview。",
+    "# 该读取许可不扩展 scope.write/write_extra/delete；业务写入仍限仓根或已授权目标仓，delete 保持原边界。",
   ];
   return `${header.join("\n")}\n${JSON.stringify(body, null, 2)}`;
 }

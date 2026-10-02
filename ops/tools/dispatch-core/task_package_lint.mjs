@@ -137,7 +137,14 @@ export function pathScopeIssue(value, { base, rootLabel, allowAbsoluteOutside = 
   if (allowRuntime && pyRelativeTo(lexicalAbsolute(pyPathJoin(base, value)), resolveLikePython(base)) !== null
       && isSameOrInside(resolved, RUNTIME_ROOT)) return null;
   if (pyRelativeTo(resolved, resolveLikePython(base)) === null) {
-    return `path is outside ${rootLabel} scope: ${value}`;
+    const issue = `path is outside ${rootLabel} scope: ${value}`;
+    if (allowAbsoluteOutside) {
+      const retry = existsSync(resolved)
+        ? `replace this scope.read entry with ${JSON.stringify(resolved)} and retry preview`
+        : "set scope.read to an existing real absolute path for external read and retry preview";
+      return `${issue}; resolved path: ${resolved}; ${retry} (read only; write/delete boundaries unchanged)`;
+    }
+    return issue;
   }
   return null;
 }

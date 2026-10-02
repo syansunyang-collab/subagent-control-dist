@@ -30,7 +30,7 @@ effort_max = "max"
 [[picks]]
 id = "relation"
 when = "关系调查"
-model = "openai-codex/gpt-6-sol"
+model = "openai-codex/gpt-6.1-sol"
 effort = "high"
 effort_min = "high"
 effort_max = "max"

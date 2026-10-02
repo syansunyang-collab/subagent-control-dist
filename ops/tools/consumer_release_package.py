@@ -40,6 +40,7 @@ REQUIRED_BUNDLES = (
     "ops/dist/agent_panel_aggregation_worker.bundle.mjs",
     "ops/dist/agent_panel_config_worker.bundle.mjs",
     "ops/dist/dispatch_prepare.bundle.mjs",
+    "ops/dist/pi_fast_mode.bundle.mjs",
     "ops/dist/fleet_manifest_check.bundle.mjs",
     "ops/dist/fleet_scheduler.bundle.mjs",
     "ops/dist/review_evidence.bundle.mjs",
@@ -62,6 +63,7 @@ APPROVED_RUNTIME_MODULES = (
     "ops/tools/pause-surface.mjs",
     "ops/tools/task-outcome.mjs",
     "ops/tools/pi_transient_retry.mjs",
+    "ops/tools/pi_fast_mode.mjs",
     "ops/tools/async-core",
 )
 

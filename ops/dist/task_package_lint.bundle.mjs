@@ -1304,7 +1304,12 @@ function pathScopeIssue(value, { base, rootLabel, allowAbsoluteOutside = false, 
   if (isAbsoluteLikePython(value) && allowAbsoluteOutside) return null;
   if (allowRuntime && pyRelativeTo(lexicalAbsolute(pathlibJoin(base, value)), resolveLikePython(base)) !== null && isSameOrInside(resolved, RUNTIME_ROOT)) return null;
   if (pyRelativeTo(resolved, resolveLikePython(base)) === null) {
-    return `path is outside ${rootLabel} scope: ${value}`;
+    const issue = `path is outside ${rootLabel} scope: ${value}`;
+    if (allowAbsoluteOutside) {
+      const retry = existsSync4(resolved) ? `replace this scope.read entry with ${JSON.stringify(resolved)} and retry preview` : "set scope.read to an existing real absolute path for external read and retry preview";
+      return `${issue}; resolved path: ${resolved}; ${retry} (read only; write/delete boundaries unchanged)`;
+    }
+    return issue;
   }
   return null;
 }
@@ -1538,7 +1543,7 @@ function lintPackage(root, { compiled = false } = {}) {
 }
 
 // ops/tools/task_package_lint.selftest.mjs
-import { mkdirSync as mkdirSync3, mkdtempSync, rmSync, writeFileSync as writeFileSync2 } from "node:fs";
+import { mkdirSync as mkdirSync3, mkdtempSync, realpathSync as realpathSync2, rmSync, symlinkSync, writeFileSync as writeFileSync2 } from "node:fs";
 import os from "node:os";
 import path5 from "node:path";
 import { pathToFileURL } from "node:url";
@@ -1611,6 +1616,29 @@ function selfTest() {
     externalPkg.handoff_contract.resolved_handoff_file = String(path5.resolve(path5.join(ROOT, "notes/handoffs/external.yaml")));
     let issues = lintPackage(externalScope);
     if (issues.length) throw new ToolError(`self-test expected target_repo scope to pass: ${issues.join("; ")}`);
+    withTempDir("task-package-external-sdk-", (sdk) => {
+      const file = path5.join(sdk, "model-runtime.d.ts");
+      writeFileSync2(file, "export interface ModelRuntime {}\n", "utf8");
+      const realFile = realpathSync2.native(file);
+      symlinkSync(sdk, path5.join(target, "sdk"), process.platform === "win32" ? "junction" : "dir");
+      const junctionScope = structuredClone(externalScope);
+      junctionScope.task_package.scope.read = ["sdk/model-runtime.d.ts"];
+      const rejected = lintPackage(junctionScope);
+      if (!rejected.some((issue) => issue.includes("outside target_repo scope") && issue.includes(JSON.stringify(realFile)) && issue.includes("scope.read") && issue.includes("retry preview"))) {
+        throw new ToolError(`self-test expected relative junction read rejection with real path retry: ${rejected.join("; ")}`);
+      }
+      junctionScope.task_package.scope.read = [realFile];
+      const accepted = lintPackage(junctionScope);
+      if (accepted.length) throw new ToolError(`self-test expected real absolute external read to pass: ${accepted.join("; ")}`);
+      for (const key of ["write", "delete"]) {
+        const outside = structuredClone(junctionScope);
+        outside.task_package.scope[key].push(realFile);
+        const denied = lintPackage(outside);
+        if (!denied.some((issue) => issue.includes("outside repository scope")) || denied.some((issue) => issue.includes("retry preview"))) {
+          throw new ToolError(`self-test expected external ${key} rejection without read retry: ${denied.join("; ")}`);
+        }
+      }
+    });
     const externalWriteScope = buildPackage(sampleSeed("executor-agent__scoped-execution"));
     const externalWritePkg = externalWriteScope.task_package;
     externalWritePkg.runtime_context.target_repo = path5.join(target, "new-target");

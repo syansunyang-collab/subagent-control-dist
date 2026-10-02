@@ -21,7 +21,7 @@ effort_max = "max"
 [[picks]]
 id = "sol_high"
 when = "Sol 500K high"
-model = "openai-codex/gpt-6-sol-500k"
+model = "openai-codex/gpt-6.1-sol-500k"
 effort = "high"
 effort_min = "high"
 effort_max = "max"

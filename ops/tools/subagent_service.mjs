@@ -9,6 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { selectionSummary } from "./dispatch-core/model_selection_guidance.mjs";
+import { FAST_MODE_DESCRIPTION, fastModeSeed } from "./pi_fast_mode.mjs";
 import { normalizePauseReceipt, pauseRejection, PAUSE_TOOL_DESCRIPTION, RESUME_TOOL_DESCRIPTION } from "./pause-surface.mjs";
 import {
   AUTHORIZATION_OVERRIDES,
@@ -240,6 +241,7 @@ const dispatchOutputSchema = z.object({
   status: z.string(),
   display_title: z.string().nullable(),
   selection_summary: z.string().nullable(),
+  fast: z.boolean(),
 }).strict();
 const submitOutputSchema = z.object({
   ...modelDisplayShape,
@@ -430,7 +432,8 @@ function runDispatchPrepare(args, seedJson, projectRoot, { raw = false } = {}) {
 }
 
 async function dispatchSeed(service, input) {
-  const seed = input.display_title ? { ...input.seed, title: input.display_title } : input.seed;
+  const projected = fastModeSeed(input.seed, input.fast);
+  const seed = input.display_title ? { ...projected, title: input.display_title } : projected;
   // 覆盖项闭集与 flag 映射跟 Pi 扩展工具同源；origin_id 需要会话来源，这条入口没有，留空即不出现。
   const args = dispatchPrepareSeedArgs(dispatchPreparePath(), "prepare", input);
   const prepared = await runDispatchPrepare(args, `${JSON.stringify(seed)}\n`, mcpProjectRoot(input.project_root));
@@ -452,6 +455,7 @@ async function dispatchSeed(service, input) {
   return {
     task_id: receipt.task_id,
     status: receipt.state,
+    fast: prepared.fast === true,
     display_title: receipt.display_title ?? prepared.display_title ?? null,
     selection_summary: prepared.async_model_selection?.selection ? selectionSummary(prepared.async_model_selection.selection) : null,
   };
@@ -531,6 +535,7 @@ function registerPublicTools(server, service) {
       pick: z.string().min(1).optional(),
       model: z.string().min(1).optional(),
       effort: z.enum(DISPATCH_EFFORTS).optional(),
+      fast: z.boolean().optional().describe(FAST_MODE_DESCRIPTION),
       authorization: z.object({ quote: z.string().min(1), overrides: z.array(z.enum(AUTHORIZATION_OVERRIDES)) }).strict().optional(),
       target_cwd: z.string().min(1).optional(),
       execution_profile: z.enum(["standard", "simulation"]).optional(),

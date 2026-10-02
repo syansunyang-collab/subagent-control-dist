@@ -316,6 +316,7 @@ def publish_release(manifest: dict[str, Any], artifacts: dict[str, Path]) -> Pat
         release / "ops" / "tools" / "pi_worker_tools_extension.mjs",
         release / "ops" / "tools" / "pi_search_extension.mjs",
         release / "ops" / "tools" / "pi_transient_retry.mjs",
+        release / "ops" / "tools" / "pi_fast_mode.mjs",
         *(release / "ops" / "templates" / name for name in RUNTIME_TEMPLATE_NAMES),
         *(release / name for name in RUNTIME_CONFIG_FILES),
         *(release / name for name in compiler_files(manifest)),
@@ -344,6 +345,7 @@ def publish_release(manifest: dict[str, Any], artifacts: dict[str, Path]) -> Pat
         shutil.copy2(artifacts["worker_tools_extension_bundle"], staging / "ops" / "tools" / "pi_worker_tools_extension.mjs")
         shutil.copy2(artifacts["search_extension_bundle"], staging / "ops" / "tools" / "pi_search_extension.mjs")
         shutil.copy2(artifacts["transient_retry_extension_bundle"], staging / "ops" / "tools" / "pi_transient_retry.mjs")
+        shutil.copy2(artifacts["fast_mode_extension_bundle"], staging / "ops" / "tools" / "pi_fast_mode.mjs")
         shutil.copy2(artifacts["handoff_check_bundle"], staging / "ops" / "tools" / "subagent_handoff_check.bundle.mjs")
         for name in RUNTIME_TEMPLATE_NAMES:
             shutil.copy2(OPS_DIR / "templates" / name, staging / "ops" / "templates" / name)
@@ -656,6 +658,7 @@ def verify_release(release: Path, manifest: dict[str, Any], server: dict[str, An
         release / "ops" / "tools" / "pi_worker_tools_extension.mjs",
         release / "ops" / "tools" / "pi_search_extension.mjs",
         release / "ops" / "tools" / "pi_transient_retry.mjs",
+        release / "ops" / "tools" / "pi_fast_mode.mjs",
         *(release / "ops" / "templates" / name for name in RUNTIME_TEMPLATE_NAMES),
         *(release / name for name in RUNTIME_CONFIG_FILES),
         *(release / name for name in compiler_files(manifest)),

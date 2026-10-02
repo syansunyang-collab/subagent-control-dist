@@ -5,7 +5,7 @@
 
 version = 1
 
-[notes."openai-codex/gpt-6-sol"]
+[notes."openai-codex/gpt-6.1-sol"]
 tag = "工程实现/视觉/审查"
 supports_vision = true
 efforts = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]

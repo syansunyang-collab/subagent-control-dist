@@ -14,6 +14,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { writeStdoutSync } from "./_child-task-contract.mjs";
 import { ensureDir } from "./_stdio-jsonrpc.mjs";
 
@@ -321,7 +322,7 @@ export async function runSelfTest(scriptPathForSelf) {
       skills: {},
       required_tools: ["submit_task_result", "submit_review_result"],
     }), "utf8");
-    const fixtureTask = { task_package: { package_id: "fixture-selftest", agent: { role: "fixture-agent" }, expected_output: { mode: "none" } } };
+    const fixtureTask = { task_package: { package_id: "fixture-selftest", agent: { role: "fixture-agent", capability: { name: "fixture" } }, expected_output: { mode: "none" } } };
     writeFileSync(taskPath, "输出 PI_STUB_OK 并按标题合同写结论。", "utf8");
     const taskPackagePath = path.join(root, "task-package.json");
     writeFileSync(taskPackagePath, JSON.stringify(fixtureTask), "utf8");
@@ -437,6 +438,20 @@ export async function runSelfTest(scriptPathForSelf) {
     selfTestCheck(okResult.context?.globalAppendSystemSuppressed === true, "ok: child 未回显全局 APPEND 抑制状态");
     selfTestCheck(!stubArgv.includes("-t") && !stubArgv.includes("--no-tools"), "ok: 缺省任务不应传工具白名单");
     selfTestCheck(okResult.selection?.effort_check?.source === "model_notes", "ok: 无冻结选型时按模型档位校验 effort");
+
+    // 快速模式只按任务包启用，不向 pi 传扩展自定义布尔 flag。
+    selfTestCheck(okResult.selection.fast === undefined, "ok: 默认任务不应启用 fast");
+    selfTestCheck(!stubArgv.some(value => /pi_fast_mode(?:\.bundle)?\.mjs$/.test(value)), "ok: 默认任务不加载 fast 扩展");
+    const fastPackagePath = path.join(root, "task-package-fast.json");
+    writeFileSync(fastPackagePath, JSON.stringify({ task_package: {
+      ...fixtureTask.task_package, runtime_context: { fast: true },
+    } }), "utf8");
+    const fastCase = await scenario("fast", { mode: "ok", extraArgs: ["--taskPackageFile", fastPackagePath] });
+    selfTestCheck(fastCase.run.code === 0 && fastCase.result.selection.fast === true, "fast: 快速任务应完成且记入 selection");
+    const fastExtension = fastCase.result.selection.extensions.find(value => /pi_fast_mode(?:\.bundle)?\.mjs$/.test(value));
+    const fastArgv = JSON.parse(readFileSync(fastCase.argvOut, "utf8"));
+    selfTestCheck(Boolean(fastExtension) && existsSync(fastExtension) && fastArgv.includes(fastExtension), "fast: 同目录扩展应进 pi -e");
+    selfTestCheck(!fastArgv.includes("--fast"), "fast: 不传扩展布尔 flag");
 
     // 档位：不在模型可选档位内直接拒发；冻结选型越出行范围且没有 effort_range 授权时拒发，有授权时放行。
     const outsideModel = await scenario("effort-outside-model", { mode: "ok", extraArgs: ["--effort", "high"] });
@@ -715,4 +730,9 @@ export async function runSelfTest(scriptPathForSelf) {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+}
+
+if (process.argv[1] && path.basename(process.argv[1]) === "run-pi-task.selftest.mjs"
+  && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await runSelfTest(fileURLToPath(new URL("./run-pi-task.mjs", import.meta.url)));
 }

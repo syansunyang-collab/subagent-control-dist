@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { FAST_MODE_DESCRIPTION, fastModeSeed } from "../../../ops/tools/pi_fast_mode.mjs";
 import {
   resolveDeclaredEntrypointByNames,
   resolveProjectRoot,
@@ -61,7 +62,7 @@ export function routeIndexLines(runtimeRoot) {
 const SEED_TEMPLATE_HINT = "render the skeleton with action=template";
 const seedFieldDescriptions = {
   goal: "Task objective. Supply it for routes that require goal; action=template shows required fields and defaults.",
-  scope: "Use read for inputs. Minimal route seeds use write_extra for task writes; full package_seed bodies use write. target_paths alone grants no access. Compiler-owned transport files are not task writes.",
+  scope: "Use read for inputs; external read-only inputs use existing real absolute paths. If a relative path crosses a junction/symlink outside the repository, replace that scope.read entry with the real absolute path from the error and retry preview. This read permission does not extend write/delete boundaries. Minimal route seeds use write_extra for task writes; full package_seed bodies use write. target_paths alone grants no access. Compiler-owned transport files are not task writes.",
   contract: "Route-specific work and deliverable requirements. Use the fields and enum values from action=template; model pick names are not contract values. Omit optional fields to use defaults.",
   known_facts: "Relevant facts supplied directly to the worker, rather than separate transport instructions.",
 };
@@ -100,6 +101,7 @@ export const DISPATCH_PREPARE_SCHEMA = Object.freeze({
     model: { type: "string", minLength: 1, description: "Pi 模型全名；与 pick 至多给一个。省略 effort 时沿用本能力适用的同模型推荐行" },
     authorization: { type: "object", required: ["quote", "overrides"], properties: { quote: { type: "string", minLength: 1 }, overrides: { type: "array", items: { type: "string", enum: [...AUTHORIZATION_OVERRIDES] } } }, additionalProperties: false, description: "用户本轮原话与本次解除项：effort_range（显式档位越出所在行范围）、outside_pool（模型不在本角色推荐行里）；须显式给 effort，只对本次 model + effort 生效" },
     effort: { type: "string", enum: [...EFFORTS], description: "请求档位；省略时用所选推荐行的档位。必须在模型可选档位内，越出所在行 [min–max] 需授权 effort_range。" },
+    fast: { type: "boolean", description: FAST_MODE_DESCRIPTION },
     target_cwd: { type: "string", minLength: 1, description: "Worker working directory and target repository for scope validation; defaults to the current repository. Explicit scope.write/write_extra still defines task writes." },
     execution_profile: { type: "string", enum: ["standard", "simulation"], description: "standard runs the task normally; simulation uses the target-project acceptance profile." },
   },
@@ -212,6 +214,9 @@ function sessionOrigin(ctx) {
 
 function validateRequest(params) {
   if (!isRecord(params)) throw new TypeError("dispatch_prepare requires an object request");
+  if (params.fast !== undefined && typeof params.fast !== "boolean") {
+    throw new TypeError("dispatch_prepare fast must be a boolean");
+  }
   const action = String(params.action || "");
   if (!DISPATCH_PREPARE_ACTIONS.includes(action)) {
     throw new TypeError(`dispatch_prepare action must be one of ${DISPATCH_PREPARE_ACTIONS.join(", ")}`);
@@ -482,7 +487,9 @@ export function createDispatchPrepareCompiler({
           normalized.action === "submit" ? "prepare" : "preview",
           normalized,
         );
-        input = `${JSON.stringify(normalized.input)}\n`;
+        const seeds = Array.isArray(normalized.input) ? normalized.input : [normalized.input];
+        const projected = seeds.map(seed => fastModeSeed(seed, normalized.fast));
+        input = `${JSON.stringify(Array.isArray(normalized.input) ? projected : projected[0])}\n`;
       }
       const result = await run(nodePath, args, { cwd: roots.projectRoot, env: spawnEnv, input, signal, timeoutMs });
       if (normalized.action === "list" && listFormat === "text") {
@@ -608,6 +615,7 @@ function compactPreview(preparation) {
     delivery_mode: preparation?.would_delivery_mode ?? preparation?.resolved_delivery ?? null,
     model: asyncPreview.model ?? null,
     effort: asyncPreview.effort ?? null,
+    fast: preparation?.fast === true,
     selection: asyncPreview.selection ?? null,
     selection_summary: preparation?.selection_summary ?? null,
     ...pathPointers(preparation),
@@ -626,6 +634,7 @@ function compactSubmitted(entry, receipt) {
     revision: receipt?.revision ?? null,
     model: receipt?.model ?? null,
     effort: receipt?.effort ?? null,
+    fast: entry?.fast === true,
     model_source: receipt?.model_source ?? "unknown",
     effort_source: receipt?.effort_source ?? "unknown",
     selection: entry?.async_model_selection?.selection ?? receipt?.selection ?? null,
@@ -730,6 +739,7 @@ export function createDispatchPrepareTool({
   service,
   compiler = createDispatchPrepareCompiler(),
   onSubmitted = null,
+  currentFast = () => false,
 } = {}) {
   if (!service || typeof service.submitPrepared !== "function") {
     throw new TypeError("createDispatchPrepareTool requires an AsyncTaskService");
@@ -751,6 +761,9 @@ export function createDispatchPrepareTool({
     executionMode: "sequential",
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const request = validateRequest(params);
+      if (["preview", "submit"].includes(request.action) && request.fast === undefined) {
+        request.fast = currentFast();
+      }
       if (request.action === "list" && request.format === undefined) request.format = "text";
       const originId = sessionOrigin(ctx);
       const preparation = await compiler.execute(

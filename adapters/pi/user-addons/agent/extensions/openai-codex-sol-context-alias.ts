@@ -3,7 +3,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 /** Local selector IDs that Codex does not accept, mapped to the upstream model and request tier. */
 const ALIASES: Record<string, { upstream: string; serviceTier?: string }> = {
   "gpt-5.6-sol-500k": { upstream: "gpt-5.6-sol" },
-  "gpt-6-sol-500k": { upstream: "gpt-6-sol" },
+  "gpt-6.1-sol-500k": { upstream: "gpt-6.1-sol" },
   "gpt-6-astra-500k": { upstream: "gpt-6-astra" },
   "gpt-6-luna-fast-700k": { upstream: "gpt-6-luna", serviceTier: "priority" },
 };

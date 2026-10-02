@@ -142,6 +142,12 @@
       "role": "consumer-tool"
     },
     {
+      "source": "ops/tools/pi_fast_mode.mjs",
+      "target": "ops/tools/pi_fast_mode.mjs",
+      "role": "consumer-tool",
+      "comment": "快速请求变换与 Pi 主会话快速状态判定；child runner 按任务包显式加载。"
+    },
+    {
       "source": "ops/tools/pi_transient_retry.mjs",
       "target": "ops/tools/pi_transient_retry.mjs",
       "role": "consumer-tool",
@@ -314,6 +320,7 @@
     "pi_search_extension": "ops/dist/pi_search_extension.bundle.mjs",
     "pi_task_result_extension": "ops/dist/pi_task_result_extension.bundle.mjs",
     "pi_transient_retry": "ops/dist/pi_transient_retry.bundle.mjs",
+    "pi_fast_mode": "ops/dist/pi_fast_mode.bundle.mjs",
     "pi_worker_tools_extension": "ops/dist/pi_worker_tools_extension.bundle.mjs",
     "pi_write_domain_extension": "ops/dist/pi_write_domain_extension.bundle.mjs",
     "review_evidence": "ops/dist/review_evidence.bundle.mjs",

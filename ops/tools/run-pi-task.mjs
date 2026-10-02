@@ -99,6 +99,7 @@ import {
   taskResultOutputPaths,
 } from "./task_result_synthesis.mjs";
 import { TRANSIENT_RETRY_EXTENSION_NAMES } from "./pi_transient_retry.mjs";
+import { fastModeExtensionPath } from "./pi_fast_mode.mjs";
 import { submitTaskResult } from "./pi_task_result_extension.mjs";
 import {
   analyzeTaskResult,
@@ -1188,6 +1189,12 @@ result.selection.runnerExtensions.transient_retry = transientRetryPath;
 if (transientRetryPath && !extensionPaths.includes(transientRetryPath)) extensionPaths.push(transientRetryPath);
 else if (!transientRetryPath) {
   result.warnings.push("瞬时服务错误分类扩展不在运行目录；本次不追加原生重试提示。");
+}
+if (reviewTaskPackage?.runtime_context?.fast === true) {
+  const fastModePath = fastModeExtensionPath(path.dirname(fileURLToPath(import.meta.url)));
+  if (!fastModePath) failEarly(result, "transport_failed", "Missing pi_fast_mode beside runner; rebuild/deploy the runner.");
+  if (!extensionPaths.includes(fastModePath)) extensionPaths.push(fastModePath);
+  result.selection.fast = true;
 }
 let writeDomainSpec = null;
 if (writeDomainSpecPath) {
