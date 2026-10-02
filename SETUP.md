@@ -56,7 +56,7 @@
 | 组 | 内容 | 作用 |
 | --- | --- | --- |
 | Grok 快速型号 | `models.json` 的 `xai/grok-4.7-build-fast`（由 manifest 的 `pi_models` 登记） | 控制面 `/fast` 自动切换 Grok 4.7；按快版真实单价记账（普通版两倍）；已有同 id 不同定义保留并报 conflict |
-| 型号别名 | `extensions/openai-codex-sol-context-alias.ts` | `-700k` / `-500k` 型号改写为上游型号与请求档 |
+| 型号别名 | `extensions/openai-codex-sol-context-alias.ts` | 只改写 `gpt-5.6-sol-500k`、`gpt-6.1-sol-500k`、`gpt-6-astra-500k`、`gpt-6-luna-fast-700k` 四个固定 ID；前三个只换上游型号，只有 `gpt-6-luna-fast-700k` 加 `service_tier=priority` |
 | 压缩链 | npm `pi-midrun-compact` 与 `extensions/pi-midrun-compact/config.json`（上下文 90% 时中途压缩并自动续跑）；本地包 `pi-compaction-model-recovery`；设置 `compaction.enabled=false`、`compactionModel`（`openai-codex/gpt-6-luna-fast-700k` @xhigh） | 压缩交给指定型号，不占用当前会话型号 |
 | 联网搜索 | npm `pi-web-access@0.21.0`；补丁 `extensions/search-effort-patch/`（给 OpenAI 搜索注入 `openaiSearchModel` 的档位后缀）、`extensions/search-route-policy.ts`（与 `pi-web-access` 同时存在时隐藏 Claude 搜索工具）；`~/.pi/web-search.json` 的 `searchRouting`、`workflow`、`openaiSearchModel`、`pageAnswer` | 调研类子代理联网；不配密钥时走 Exa 与 Codex 登录态，Brave、Tavily 等需在 `~/.pi/web-search.json` 自行补 key |
 

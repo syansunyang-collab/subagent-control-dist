@@ -2691,10 +2691,8 @@ import { existsSync as existsSync5 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import path5 from "node:path";
 var PI_CHILD_COMPACTION_EXTENSION_PROFILE = "pi-child-compaction-extensions/v1";
-var RELATIVE_EXTENSION_PATHS2 = Object.freeze([
-  "npm/node_modules/pi-compaction-model/src/index.ts",
-  "npm/node_modules/pi-midrun-compact/index.ts"
-]);
+var COMPACTION_WRITER = "local-packages/pi-compaction-model-recovery/src/index.ts";
+var MIDRUN_EXTENSION = "npm/node_modules/pi-midrun-compact/index.ts";
 function resolvePiAgentDir2(env = process.env) {
   const configured = String(env.PI_CODING_AGENT_DIR || "").trim();
   return path5.resolve(configured || path5.join(homedir2(), ".pi", "agent"));
@@ -2704,7 +2702,8 @@ function resolvePiChildCompactionExtensions(options = {}) {
   if (String(env.PI_CONTROL_PI || "").trim()) return [];
   const exists = options.exists || existsSync5;
   const agentDir = path5.resolve(options.agentDir || resolvePiAgentDir2(env));
-  return RELATIVE_EXTENSION_PATHS2.map((relativePath) => path5.join(agentDir, ...relativePath.split("/"))).filter((candidate) => exists(candidate));
+  const join = (relativePath) => path5.join(agentDir, ...relativePath.split("/"));
+  return [COMPACTION_WRITER, MIDRUN_EXTENSION].map(join).filter((file) => exists(file));
 }
 function isPiCompactionExtensionProfileCli(argv1 = process.argv[1]) {
   return path5.basename(String(argv1 || "")).toLowerCase() === "pi_compaction_extension_profile.mjs";

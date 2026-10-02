@@ -72,23 +72,56 @@ export function splitModelSuffix(value) {
 }
 
 /**
- * 磁盘档位：openaiSearchModel 后缀优先于 openaiSearchReasoning 字段。
- * 插件对配置是进程内懒缓存，请求体上的模型名可能是旧值、不带后缀；
- * 拦截层每次读盘，才能把档位补上。
+ * 每次读盘。pi-web-access 缓存 openaiSearchModel，请求体后缀可能是旧档位。
+ * hasModel 为 false 表示磁盘没有 openaiSearchModel。model 是去掉白名单后缀后的裸模型。
  */
-function readDiskEffort(configPath) {
+function readDiskSearchConfig(configPath) {
   try {
     const raw = JSON.parse(readFileSync(configPath, "utf-8"));
-    const fromModel = splitModelSuffix(raw?.openaiSearchModel);
-    if (fromModel.effort) return { effort: fromModel.effort, source: "config-model-suffix" };
+    const configuredModel = raw?.openaiSearchModel;
+    const hasModel = typeof configuredModel === "string" && configuredModel.trim().length > 0;
+    const fromModel = hasModel ? splitModelSuffix(configuredModel) : {};
+    let field;
     const value = raw?.openaiSearchReasoning;
-    if (typeof value !== "string") return {};
-    const trimmed = value.trim().toLowerCase();
-    if (EFFORT_LEVELS.includes(trimmed)) return { effort: trimmed, source: "config-field" };
+    if (typeof value === "string") {
+      const trimmed = value.trim().toLowerCase();
+      if (EFFORT_LEVELS.includes(trimmed)) field = trimmed;
+    }
+    return {
+      hasModel,
+      model: hasModel ? fromModel.model : undefined,
+      modelEffort: fromModel.effort,
+      field,
+    };
   } catch {
-    /* 文件缺失或无效 JSON */
+    return { hasModel: false };
   }
-  return {};
+}
+
+/**
+ * 裸模型与磁盘 openaiSearchModel 一致时采用磁盘最新档位，丢掉请求上的缓存后缀。
+ * 磁盘换了模型时，不把新模型的后缀或字段档位套到旧模型请求上。
+ */
+function resolveSearchEffort(requestModel, disk) {
+  const request = splitModelSuffix(requestModel);
+  const bareMatch = Boolean(disk.hasModel) && request.model === disk.model;
+  if (bareMatch) {
+    const strip = Boolean(request.effort);
+    if (disk.modelEffort) {
+      return { model: request.model, effort: disk.modelEffort, source: "config-model-suffix", strip };
+    }
+    if (disk.field) {
+      return { model: request.model, effort: disk.field, source: "config-field", strip };
+    }
+    return { model: request.model, effort: undefined, source: null, strip };
+  }
+  if (request.effort) {
+    return { model: request.model, effort: request.effort, source: "model-suffix", strip: true };
+  }
+  if (!disk.hasModel && disk.field) {
+    return { model: request.model, effort: disk.field, source: "config-field", strip: false };
+  }
+  return { model: request.model, effort: undefined, source: null, strip: false };
 }
 
 /** 复刻插件的来源清理口径：去掉 utm_source=openai，再按 URL 规范化 */
@@ -213,19 +246,21 @@ function consumeSseLine(line, record, outputItems) {
 
 /**
  * 构造 usage 采样流：先无条件透传，再做旁路解析。
- * onDone(record) 在流结束或采样到 completed 事件时触发（只触发一次）。
+ * ttfbMs 在首个响应块写入；终态行只填充采样字段。
+ * onDone(record) 在流 EOF（flush）时触发一次，ms 在此时写入。
  */
 export function createUsageTap(record, onDone, startedAt = Date.now()) {
   const decoder = new TextDecoder();
   let buffer = "";
   let finished = false;
+  let sawChunk = false;
   const outputItems = []; // 跨 chunk 累积，不受缓冲区滑动影响
 
   const finish = () => {
     if (finished) return;
     finished = true;
     try {
-      record.ms = Date.now() - startedAt; // 总耗时：流结束时刻
+      record.ms = Date.now() - startedAt; // 总耗时：流 EOF
       onDone(record);
     } catch {
       /* 落盘失败不影响流 */
@@ -235,6 +270,10 @@ export function createUsageTap(record, onDone, startedAt = Date.now()) {
   return new TransformStream({
     transform(chunk, controller) {
       controller.enqueue(chunk); // 透传优先
+      if (!sawChunk) {
+        sawChunk = true;
+        record.ttfbMs = Date.now() - startedAt;
+      }
       if (finished) return;
       try {
         buffer += decoder.decode(chunk, { stream: true });
@@ -242,10 +281,7 @@ export function createUsageTap(record, onDone, startedAt = Date.now()) {
         while ((newlineIndex = buffer.indexOf("\n")) >= 0) {
           const line = buffer.slice(0, newlineIndex);
           buffer = buffer.slice(newlineIndex + 1);
-          if (consumeSseLine(line, record, outputItems)) {
-            finish();
-            return;
-          }
+          consumeSseLine(line, record, outputItems);
         }
         if (buffer.length > BUFFER_LIMIT_BYTES) {
           buffer = buffer.slice(-BUFFER_KEEP_BYTES);
@@ -305,21 +341,18 @@ export function createPatchedFetch(options = {}) {
     // 非目标请求：零改动直通
     if (!body || !isSearchRequest(url, body)) return fetchImpl(input, init);
 
-    // ① 请求体上的一体化后缀优先（模型与档位绑在一处）
-    const { model: bareModel, effort: suffixEffort } = splitModelSuffix(body.model);
-    if (suffixEffort) body.model = bareModel;
-
-    // ② 请求体没有后缀时读盘：磁盘 openaiSearchModel 后缀 → openaiSearchReasoning 字段
-    //    插件懒缓存可能导致 body.model 仍是旧值（不带后缀），档位必须以磁盘为准
-    const disk = suffixEffort ? {} : readDiskEffort(configPath);
-    const effort = suffixEffort ?? disk.effort;
+    // 裸模型与磁盘一致时采用磁盘最新档位；磁盘换了模型则不套用新档位。
+    const disk = readDiskSearchConfig(configPath);
+    const resolved = resolveSearchEffort(body.model, disk);
+    if (resolved.strip) body.model = resolved.model;
+    const effort = resolved.effort;
     if (effort) body.reasoning = { effort };
 
     const record = {
       ts: new Date().toISOString(),
       model: body.model,
       effortRequested: effort,
-      effortSource: suffixEffort ? "model-suffix" : disk.source ?? null,
+      effortSource: resolved.source,
       injected: Boolean(effort),
     };
     const startedAt = Date.now();
@@ -357,7 +390,6 @@ export function createPatchedFetch(options = {}) {
     }
 
     record.status = response.status;
-    record.ttfbMs = Date.now() - startedAt; // 首字节耗时；总耗时在流结束时补记
 
     // 只在成功响应且可挂流时采样；任何异常都降级为原样返回
     try {

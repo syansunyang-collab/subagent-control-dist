@@ -21,7 +21,7 @@ import { CompletionDelivery, terminalFingerprint } from "./completion-delivery.m
 import { createAgentPanelEnsurer, createDispatchPrepareTool } from "./dispatch-prepare-tool.mjs";
 import { createContextCompaction } from "./context-compaction.mjs";
 import { createControlResourceLoader } from "./control-resource-loader.mjs";
-import { createFleetCompletionWatcher, FLEET_COMPLETION_NOTICE_EVENT } from "./fleet-completion-watcher.mjs";
+import { createFleetCompletionWatcher, fleetNoticeKey, FLEET_COMPLETION_NOTICE_EVENT } from "./fleet-completion-watcher.mjs";
 import { createFleetTools } from "./fleet-tools.mjs";
 import { registerSessionLiveness } from "./session-liveness.mjs";
 import { createPiAsyncService, isTerminalTransportState, normalizeTaskState, resultTrackingVersion } from "./async-service.mjs";
@@ -57,9 +57,20 @@ function trackingEntries(ctx) {
   return [];
 }
 
+function persistedFleetNotices(ctx) {
+  return trackingEntries(ctx).flatMap(entry => {
+    if (entry?.type === "custom_message" && entry.customType === "fleet-completion"
+      && entry.details?.session_id === sessionIdFrom(ctx)) return [entry.details];
+    if (entry?.type === "custom" && entry.customType === TRACKING_ENTRY_TYPE
+      && entry.data?.target === "fleet" && entry.data.action === "ack") return [entry.data.notice];
+    return [];
+  });
+}
+
 function restoredTracking(ctx) {
   const activeTasks = new Set();
   const activeRuns = new Set();
+  const pendingFleet = new Map();
   for (const entry of trackingEntries(ctx)) {
     if (entry?.type === "custom_message" && entry.customType === "subagent-completion") {
       for (const notice of entry.details?.notices ?? [entry.details]) {
@@ -69,8 +80,21 @@ function restoredTracking(ctx) {
         }
       }
     }
+    if (entry?.type === "custom_message" && entry.customType === "fleet-completion") {
+      const notice = entry.details;
+      if (notice?.event === FLEET_COMPLETION_NOTICE_EVENT && notice.session_id === sessionIdFrom(ctx)
+        && pendingFleet.get(notice.run_id) === fleetNoticeKey(notice)
+        && notice.driver_status !== "needs_parent_review") activeRuns.delete(notice.run_id);
+    }
     if (entry?.type !== "custom" || entry.customType !== TRACKING_ENTRY_TYPE) continue;
     const data = entry.data ?? {};
+    if (data.target === "fleet") {
+      if (data.action === "pending") pendingFleet.set(data.notice.run_id, fleetNoticeKey(data.notice));
+      if (data.action === "ack" && data.notice.event === FLEET_COMPLETION_NOTICE_EVENT
+        && pendingFleet.get(data.notice.run_id) === fleetNoticeKey(data.notice)
+        && data.notice.driver_status !== "needs_parent_review") activeRuns.delete(data.notice.run_id);
+      if (data.action === "track") for (const id of normalizedIds(data.ids)) pendingFleet.delete(id);
+    }
     const target = data.target === "fleet" ? activeRuns : activeTasks;
     for (const id of normalizedIds(data.ids)) {
       if (data.action === "complete") target.delete(id);
@@ -543,8 +567,10 @@ export default function controlDelegateExtension(pi, {
   const deliverFleetNotice = async (notice) => {
     if (branchBinding && !branchBinding.active) return;
     if (typeof onFleetCompletionNotice === "function") await onFleetCompletionNotice(notice);
-    else await sendCompletionMessage(pi, "fleet-completion", fleetCompletionText(notice), notice);
-    if (notice.event === FLEET_COMPLETION_NOTICE_EVENT && notice.driver_status !== "needs_parent_review"
+    else await sendCompletionMessage(pi, "fleet-completion", fleetCompletionText(notice), {
+      ...notice, session_id: sessionIdFrom(sessionContext),
+    });
+    if (typeof onFleetCompletionNotice === "function" && notice.event === FLEET_COMPLETION_NOTICE_EVENT && notice.driver_status !== "needs_parent_review"
       && (!notice.watch_generation || notice.watch_generation === fleetCompletionWatcher?.watchGeneration(notice.run_id))) {
       recordTracking(pi, "fleet", "complete", [notice.run_id]);
     }
@@ -588,6 +614,14 @@ export default function controlDelegateExtension(pi, {
     ? createFleetCompletionWatcher({
       fleet: resolvedFleetCore,
       onNotice: deliverFleetNotice,
+      requireAcknowledgement: typeof onFleetCompletionNotice !== "function",
+      onPending: notice => pi.appendEntry?.(TRACKING_ENTRY_TYPE, {
+        target: "fleet", action: "pending", notice,
+      }),
+      onAcknowledged: notice => pi.appendEntry?.(TRACKING_ENTRY_TYPE, {
+        target: "fleet", action: "ack", notice,
+      }),
+      persistedNotices: () => persistedFleetNotices(sessionContext),
       isIdle: () => Boolean(sessionContext) && (sessionContext.isIdle?.() ?? true),
       onRead: read => {
         pi.appendEntry?.(TRACKING_ENTRY_TYPE, { target: "fleet", action: "read", ids: [read.run_id], ...read });
@@ -734,9 +768,12 @@ export default function controlDelegateExtension(pi, {
       await completionWatcher.start();
     }
     if (fleetCompletionWatcher) {
-      await fleetCompletionWatcher.resetSession({ runIds: restored.runIds, reads: fleetReads });
+      await fleetCompletionWatcher.resetSession({
+        runIds: restored.runIds, reads: fleetReads, notified: persistedFleetNotices(ctx),
+      });
       fleetCompletionWatcher.start();
     }
+    await delegateWork?.startSession(_event, ctx);
     livenessLease = registerSessionLiveness({
       name: "subagent-control",
       sessionId: sessionIdFrom(ctx),
@@ -748,7 +785,7 @@ export default function controlDelegateExtension(pi, {
   // 生命周期工具注册即常驻：会话中途增删活动工具会改变下一轮的工具定义与系统提示词工具清单，
   // 服务端提示缓存从改动处整段失效（09-25 主会话诊断：派发后轮首只命中约 1 万 token）。
   const delegateWork = enableDelegateWork ? installDelegateWork(pi, {
-    runtimeRoot, projectRoot, mode, manifest, ...delegateWorkOptions,
+    runtimeRoot, projectRoot, mode, manifest, ...delegateWorkOptions, registerSessionStart: false,
   }) : null;
 
   installFastMode(pi, () => sessionFast);
@@ -763,6 +800,10 @@ export default function controlDelegateExtension(pi, {
   pi.on("message_end", (event, ctx) => {
     const message = event?.message;
     if (message?.role !== "custom") return;
+    if (message.customType === "fleet-completion") {
+      if (message.details?.session_id === sessionIdFrom(ctx)) fleetCompletionWatcher?.acknowledge(message.details);
+      return;
+    }
     if (message.customType !== "subagent-completion" && message.customType !== "subagent-pause") return;
     const notices = message.details?.notices ?? [message.details];
     completionDelivery.acknowledge(notices.filter(notice => notice?.session_id === sessionIdFrom(ctx)));

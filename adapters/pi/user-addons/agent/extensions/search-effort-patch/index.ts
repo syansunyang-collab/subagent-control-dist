@@ -1,7 +1,7 @@
 // search-effort-patch / pi 扩展包装层
 //
 // 本文件是薄壳：把 core.mjs 的可测逻辑挂到 pi 运行时的全局 fetch 上。
-// 真源：tools/pi-search-effort-patch/
+// 真源：adapters/pi/user-addons/agent/extensions/search-effort-patch/
 // 用户级安装：~/.pi/agent/extensions/search-effort-patch/{index.ts,core.mjs}
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -10,7 +10,7 @@ import { createPatchedFetch } from "./core.mjs";
 
 const INSTALLED = Symbol.for("pi.search-effort-patch.installed");
 const VERSION = Symbol.for("pi.search-effort-patch.version");
-const PATCH_VERSION = 4; // 每次改 core 拦截逻辑 +1，让 /reload 能换上新包装
+const PATCH_VERSION = 5; // 每次改 core 拦截逻辑 +1，让 /reload 能换上新包装
 
 export default function searchEffortPatch(_pi: ExtensionAPI): void {
   const current = globalThis.fetch;

@@ -10,6 +10,10 @@ export function observeFleetToolResult(fleet, action, result) {
   watchers.get(fleet)?.observe(result.run_id, action, result);
 }
 
+export function fleetNoticeKey(notice) {
+  return JSON.stringify([notice.run_id, String(notice.revision ?? "unknown"), notice.driver_status ?? null]);
+}
+
 function normalizedRunIds(values) {
   const output = [];
   for (const value of Array.isArray(values) ? values : []) {
@@ -31,6 +35,10 @@ export class FleetCompletionWatcher {
     fleet,
     onNotice,
     onRead = null,
+    requireAcknowledgement = false,
+    onPending = null,
+    onAcknowledged = null,
+    persistedNotices = () => [],
     isIdle = () => true,
     waitMs = 60_000,
     noticeRetryBaseMs = 250,
@@ -46,6 +54,9 @@ export class FleetCompletionWatcher {
     this.fleet = fleet;
     this.onNotice = onNotice;
     this.onRead = onRead;
+    Object.assign(this, { requireAcknowledgement, onPending, onAcknowledged, persistedNotices });
+    this.pending = new Map();
+    this.ackWaiters = new Map();
     this.isIdle = isIdle;
     watchers.set(fleet, this);
     this.waitMs = Math.max(Number(waitMs) || 0, 1_000);
@@ -63,12 +74,12 @@ export class FleetCompletionWatcher {
     this.sessionGeneration = 0;
   }
 
-  async resetSession({ runIds = [], reads = [] } = {}) {
+  async resetSession({ runIds = [], reads = [], notified = [] } = {}) {
     this.stop();
     this.watchedRunIds = new Set(normalizedRunIds(runIds));
     this.running.clear();
     this.runGenerations.clear();
-    this.delivered.clear();
+    this.delivered = new Set(notified.map(fleetNoticeKey));
     this.observed.clear();
     for (const read of reads) {
       if (read.run_id && read.revision != null) this.observed.set(read.run_id, { revision: String(read.revision), driver_status: read.driver_status });
@@ -89,12 +100,20 @@ export class FleetCompletionWatcher {
     this.started = false;
     this.sessionGeneration += 1;
     this.watchedRunIds.clear();
+    this.pending.clear();
+    for (const wake of this.ackWaiters.values()) wake();
+    this.ackWaiters.clear();
   }
 
   trackRunIds(runIds) {
     const ids = normalizedRunIds(runIds);
     const added = ids.filter((runId) => !this.watchedRunIds.has(runId));
     for (const runId of ids) {
+      for (const [key, notice] of this.pending) {
+        if (notice.run_id !== runId) continue;
+        this.pending.delete(key);
+        this.ackWaiters.get(key)?.();
+      }
       this.watchedRunIds.add(runId);
       this.runGenerations.set(runId, (this.runGenerations.get(runId) ?? 0) + 1);
       if (this.started) this.launch(runId);
@@ -120,10 +139,21 @@ export class FleetCompletionWatcher {
     }
   }
 
+  acknowledge(notice) {
+    const key = fleetNoticeKey(notice);
+    const pending = this.pending.get(key);
+    if (!pending || !this.active(pending.run_id, pending.watch_generation)) return false;
+    this.onAcknowledged?.(pending);
+    this.pending.delete(key);
+    this.delivered.add(key);
+    this.ackWaiters.get(key)?.();
+    this.lastDeliveryError.delete(pending.run_id);
+    return true;
+  }
+
   launch(runId) {
     if (!this.started || this.running.has(runId)) return;
     const generation = this.watchGeneration(runId);
-    for (const key of this.delivered) if (key.startsWith(`${runId}:`)) this.delivered.delete(key);
     const promise = this.watch(runId, generation)
       .catch((error) => {
         this.lastWatchError.set(runId, error);
@@ -149,6 +179,7 @@ export class FleetCompletionWatcher {
   async deliver(runId, key, notice, generation) {
     let attempt = 0;
     while (this.active(runId, generation)) {
+      if (this.delivered.has(key)) return true;
       if (!this.isIdle()) {
         await this.sleep(Math.max(this.noticeRetryBaseMs, 50));
         continue;
@@ -170,23 +201,46 @@ export class FleetCompletionWatcher {
             event: FLEET_WATCH_FAILURE_EVENT, run_id: runId, driver_status: null,
             error: latest?.error ?? { kind: "status_unavailable", message: "fleet status unavailable" },
           };
+          this.pending.delete(key);
+          key = fleetNoticeKey(notice);
         }
         if (latest?.ok && latest.summary?.revision != null && latest.driver_status != null) {
           if (String(latest.summary.revision) !== String(notice.revision)
-            || latest.driver_status !== notice.driver_status) return false;
+            || latest.driver_status !== notice.driver_status) {
+            this.pending.delete(key);
+            return false;
+          }
           const read = this.observed.get(runId);
           if (read?.revision === String(notice.revision) && read.driver_status === notice.driver_status) {
+            this.pending.delete(key);
             this.delivered.add(key);
             return true;
           }
         }
       }
       try {
+        if (this.requireAcknowledgement) {
+          if (!this.pending.has(key)) {
+            notice = { ...notice, watch_generation: generation };
+            this.onPending?.(notice);
+            this.pending.set(key, notice);
+          }
+          for (const persisted of this.persistedNotices()) this.acknowledge(persisted);
+          if (this.delivered.has(key)) return true;
+        }
         await this.onNotice(notice);
         if (!this.active(runId, generation)) return false;
-        this.delivered.add(key);
-        this.lastDeliveryError.delete(runId);
-        return true;
+        if (!this.requireAcknowledgement) this.delivered.add(key);
+        if (this.delivered.has(key)) {
+          this.lastDeliveryError.delete(runId);
+          return true;
+        }
+        // The void host API only accepts the send. Retry unacknowledged delivery after backoff.
+        await Promise.race([
+          this.sleep(Math.max(this.noticeRetryMaxMs, 50)),
+          new Promise(resolve => this.ackWaiters.set(key, resolve)),
+        ]);
+        this.ackWaiters.delete(key);
       } catch (error) {
         attempt += 1;
         this.lastDeliveryError.set(runId, error);
@@ -213,7 +267,7 @@ export class FleetCompletionWatcher {
       }
       if (!this.active(runId, generation)) return;
       if (!result?.ok) {
-        const key = `${runId}:watch_failed`;
+        const key = fleetNoticeKey({ run_id: runId, driver_status: null });
         if (!this.delivered.has(key)) {
           const delivered = await this.deliver(runId, key, {
             event: FLEET_WATCH_FAILURE_EVENT,
@@ -228,7 +282,7 @@ export class FleetCompletionWatcher {
       }
       const driverStatus = String(result.driver_status ?? "");
       if (!result.settled && !SETTLED_DRIVER_STATES.has(driverStatus)) continue;
-      const key = `${runId}:${result.summary?.revision ?? "unknown"}:${driverStatus}`;
+      const key = fleetNoticeKey({ run_id: runId, revision: result.summary?.revision, driver_status: driverStatus || null });
       if (!this.delivered.has(key)) {
         const delivered = await this.deliver(runId, key, {
           event: FLEET_COMPLETION_NOTICE_EVENT,

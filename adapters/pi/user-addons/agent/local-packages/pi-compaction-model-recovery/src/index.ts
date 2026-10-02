@@ -6,6 +6,18 @@ import { loadConfig, parseModelReference } from "./config.js";
 
 const RETRY = { enabled: true, maxRetries: 2, baseDelayMs: 2000, maxAgentDelayMs: 10000 };
 
+// Host compaction passes createRequestIdentity("compaction"). ExtensionContext does not expose that factory.
+function compactionRequestIdentity(sessionId: string) {
+  return {
+    sessionId,
+    threadId: sessionId,
+    turnId: randomUUID(),
+    requestKind: "compaction" as const,
+    startedAt: Date.now(),
+    windowId: `${sessionId}:0`,
+  };
+}
+
 function restorePreviousFileOperations(event: SessionBeforeCompactEvent) {
   for (let i = event.branchEntries.length - 1; i >= 0; i--) {
     const entry = event.branchEntries[i];
@@ -107,7 +119,7 @@ export default function compactionModel(pi: ExtensionAPI) {
           onRetryFinished(success, attempt, error) {
             log.write("retry_finished", { stage: writer.stage, model: writer.model, success, attempt, ...(error ? { error: log.error(error) } : {}) });
           },
-        }, sessionId);
+        }, sessionId, compactionRequestIdentity(sessionId));
         if (event.signal.aborted) { log.write("cancelled", { stage: writer.stage }); pending = undefined; return { cancel: true }; }
         log.write("writer_success", { stage: writer.stage, model: writer.model, durationMs: Date.now() - started, usage: result.usage });
         return { compaction: { ...result, details: { ...(result.details as Record<string, unknown>), compactionRoute: { runId: log.runId, stage: writer.stage, model: writer.model } } } };

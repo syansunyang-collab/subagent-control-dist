@@ -5,11 +5,10 @@ import path from "node:path";
 
 export const PI_CHILD_COMPACTION_EXTENSION_PROFILE = "pi-child-compaction-extensions/v1";
 
-// 子进程 -ne 后只显式加载主会话同一套压缩插件：DeepSeek 压缩模型 + midrun 90% 触发。
-const RELATIVE_EXTENSION_PATHS = Object.freeze([
-  "npm/node_modules/pi-compaction-model/src/index.ts",
-  "npm/node_modules/pi-midrun-compact/index.ts",
-]);
+// 子进程 -ne 后只显式加载主会话同一套压缩插件。
+// 写手只用 settings 已登记的本地恢复包；入口缺失时不加载退役 npm 写手。
+const COMPACTION_WRITER = "local-packages/pi-compaction-model-recovery/src/index.ts";
+const MIDRUN_EXTENSION = "npm/node_modules/pi-midrun-compact/index.ts";
 
 export function resolvePiAgentDir(env = process.env) {
   const configured = String(env.PI_CODING_AGENT_DIR || "").trim();
@@ -21,9 +20,8 @@ export function resolvePiChildCompactionExtensions(options = {}) {
   if (String(env.PI_CONTROL_PI || "").trim()) return [];
   const exists = options.exists || existsSync;
   const agentDir = path.resolve(options.agentDir || resolvePiAgentDir(env));
-  return RELATIVE_EXTENSION_PATHS
-    .map((relativePath) => path.join(agentDir, ...relativePath.split("/")))
-    .filter((candidate) => exists(candidate));
+  const join = (relativePath) => path.join(agentDir, ...relativePath.split("/"));
+  return [COMPACTION_WRITER, MIDRUN_EXTENSION].map(join).filter((file) => exists(file));
 }
 
 export function isPiCompactionExtensionProfileCli(argv1 = process.argv[1]) {

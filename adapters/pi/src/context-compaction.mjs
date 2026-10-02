@@ -203,19 +203,6 @@ export function createContextCompaction(options = {}) {
     }
 
     if (payloadBytes(payload) > thresholdBytes) {
-      for (let index = retainedMessages.length - 1; index >= 0 && payloadBytes(payload) > thresholdBytes; index -= 1) {
-        const message = retainedMessages[index];
-        const currentBytes = utf8ByteLength(message.text);
-        if (currentBytes <= 64) continue;
-        const shortened = truncateUtf8(message.text, Math.max(32, Math.floor(currentBytes / 2)));
-        message.text = shortened.text;
-        message.truncated = true;
-        truncated = true;
-        rebuild();
-      }
-    }
-
-    if (payloadBytes(payload) > thresholdBytes) {
       throw new ContextCompactionError(
         `recoverable context core exceeds ${thresholdBytes} UTF-8 bytes`,
         "threshold_unachievable",

@@ -299,7 +299,7 @@ const cores = globalThis[coresKey] ??= new Map();
 
 export function installDelegateWork(pi, { sdk = null, sourceSession = null, core = null, storeRoot = null,
   branchFactory = null, onAccepted = () => {}, onError = () => {}, resolveDelegateSelection = null,
-  runtimeRoot = null, projectRoot = null, manifest = null, ...factoryOptions } = {}) {
+  runtimeRoot = null, projectRoot = null, manifest = null, registerSessionStart = true, ...factoryOptions } = {}) {
   async function spawnSelectionBridge({ pick, model, effort }) {
     const runtime = runtimeRoot || sourcePackageRoot();
     const project = projectRoot || currentSource?.session?.sessionManager?.getCwd?.() || runtime;
@@ -333,6 +333,7 @@ export function installDelegateWork(pi, { sdk = null, sourceSession = null, core
     return response;
   }
   let currentCore = core, currentSource = null, timer = null;
+  let readyTimer = null, deliveryReady = true;
   let initialization = null;
   async function initialize() {
     if (currentSource && currentCore) return currentCore;
@@ -341,6 +342,8 @@ export function installDelegateWork(pi, { sdk = null, sourceSession = null, core
       const hostSdk = sdk ?? await loadHostPiSdk(process.argv[1], { pi });
       const session = typeof sourceSession === "function" ? sourceSession() : sourceSession ?? captureSourceSession(pi, hostSdk);
       currentSource = nativeWorkSource(session);
+      const sourceIdle = currentSource.isIdle;
+      currentSource.isIdle = () => deliveryReady && sourceIdle();
       const root = storeRoot ?? path.join(session.sessionManager.getCwd(), ".runtime", "delegate-work", currentSource.id);
       currentCore = core ?? cores.get(root);
       if (!currentCore) {
@@ -379,18 +382,28 @@ export function installDelegateWork(pi, { sdk = null, sourceSession = null, core
     const branchId = ctx?.sessionManager?.getSessionId?.();
     if (branchId && workBranchBinding(branchId)) return;
     try {
+      // Recovery may enqueue a turn. resources_discover follows the complete SDK session_start dispatch.
+      deliveryReady = false;
       await initialize();
       timer ??= setInterval(() => { void currentCore?.flush(); }, 1000);
       timer.unref?.();
     } catch (error) { onError(error); }
   };
-  pi.on("session_start", startSession);
+  if (registerSessionStart) pi.on("session_start", startSession);
+  pi.on("resources_discover", () => {
+    if (!currentSource) return;
+    clearTimeout(readyTimer);
+    readyTimer = setTimeout(() => { deliveryReady = true; void currentCore?.flush(); }, 0);
+    readyTimer.unref?.();
+  });
   pi.on("agent_settled", () => { void currentCore?.flush(); });
   pi.on("message_end", (event, ctx) => {
     currentCore?.acknowledge?.(event.message, ctx.sessionManager.getSessionId());
   });
   pi.on("session_shutdown", async event => {
     clearInterval(timer); timer = null;
+    clearTimeout(readyTimer); readyTimer = null;
+    deliveryReady = false;
     currentCore?.detachSource();
     if (event?.reason === "quit") await currentCore?.close();
     currentSource = null;

@@ -38,14 +38,36 @@ function readValue(source, dottedKey) {
   ), source);
 }
 
-function packageNameFromExtension(file) {
+function localPackageDirectory(file) {
+  const parts = path.resolve(String(file || "")).split(path.sep);
+  const index = parts.lastIndexOf("local-packages");
+  if (index < 0 || index + 1 >= parts.length) return null;
+  return parts.slice(0, index + 2).join(path.sep);
+}
+
+function packageNameFromPackageJson(packageDir, exists, read) {
+  const packageJson = path.join(packageDir, "package.json");
+  if (!exists(packageJson)) return null;
+  try {
+    const parsed = JSON.parse(read(packageJson, "utf8"));
+    const name = typeof parsed?.name === "string" ? parsed.name.trim() : "";
+    return name || null;
+  } catch {
+    return null;
+  }
+}
+
+function packageNameFromExtension(file, exists = existsSync, read = readFileSync) {
+  const packageDir = localPackageDirectory(file);
+  if (packageDir) return packageNameFromPackageJson(packageDir, exists, read);
   const normalized = String(file || "").replaceAll("\\", "/");
   const marker = "/npm/node_modules/";
   const index = normalized.lastIndexOf(marker);
   if (index < 0) return null;
   const rest = normalized.slice(index + marker.length);
   const [name] = rest.split("/");
-  return name || null;
+  // npm 路径只认 midrun；写手由本地恢复包的 package.json name 识别。
+  return name === "pi-midrun-compact" ? name : null;
 }
 
 export function runPiChildPublishGate(options = {}) {
@@ -91,7 +113,7 @@ export function runPiChildPublishGate(options = {}) {
 
   const extensions = resolvePiChildCompactionExtensions({ agentDir, env, exists });
   result.extensions = extensions;
-  const names = new Set(extensions.map(packageNameFromExtension));
+  const names = new Set(extensions.map((file) => packageNameFromExtension(file, exists, read)));
   for (const required of ["pi-compaction-model", "pi-midrun-compact"]) {
     if (!names.has(required)) errors.push(`missing compaction extension package ${required}`);
   }
