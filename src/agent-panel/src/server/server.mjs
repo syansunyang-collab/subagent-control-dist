@@ -19,6 +19,7 @@ import {
   resolvePanelRoot,
   resolvePanelStateRoot,
   resolveRegistryRoot,
+  resolveRuntimeAssetRoot,
   validateControlRepo,
 } from "./async-core.mjs";
 import { createConfigStore, publishedRuntimeRoot } from "./config-store.mjs";
@@ -349,6 +350,8 @@ async function routeHandler(projection, projectionWorker, configStore, config, r
       // panel_root 是稳定实例身份（面板资产根）；control_repo_path 只展示当前监控仓，切仓会变。
       panel_root: config.panelRoot,
       control_repo_path: config.controlRepoPath,
+      // 进程启动时读一次发布清单。健康请求本身不读盘，手动启动器用它判断要不要换掉旧面板。
+      runtime_build_id: config.runtimeBuildId,
     });
     return;
   }
@@ -607,6 +610,16 @@ async function routeHandler(projection, projectionWorker, configStore, config, r
   });
 }
 
+// 发布清单缺失或 build_id 不是非空字符串时返回 null：健康接口照常 200，调用方把缺标识当成“身份未知”。
+function readPublishedBuildId(runtimeRoot) {
+  try {
+    const payload = JSON.parse(readFileSync(path.join(runtimeRoot, "ops", "dist", "subagent_service.manifest.json"), "utf8"));
+    return typeof payload?.build_id === "string" && payload.build_id.length > 0 ? payload.build_id : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createPanelServer(options = {}) {
   const panelRoot = resolvePanelRoot(options.panelRoot);
   const panelStateRoot = resolvePanelStateRoot(options.panelStateRoot);
@@ -675,9 +688,11 @@ export async function createPanelServer(options = {}) {
   if (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) {
     throw new PanelError("PORT_INVALID", "loopback 端口无效", { status: 500 });
   }
+  const runtimeAssetRoot = resolveRuntimeAssetRoot(options.runtimeRoot ?? options.runtimeAssetRoot);
   const config = {
     panelRoot,
     panelStateRoot,
+    runtimeBuildId: readPublishedBuildId(runtimeAssetRoot),
     webRoot,
     controlRepoPath,
     paths,

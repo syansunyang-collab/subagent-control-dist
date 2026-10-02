@@ -2016,6 +2016,8 @@ function resolveDeps(overrides = {}) {
   deps3.acquireBuildLock ??= () => acquireBuildLock({ deps: deps3 });
   deps3.startShell ??= (executable, endpoint) => startShell(executable, endpoint, { deps: deps3 });
   deps3.startBackgroundBuild ??= () => startBackgroundBuild({ deps: deps3 });
+  deps3.killProcessTree ??= killProcessTree;
+  deps3.sleep ??= (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   return deps3;
 }
 function spawnDetached(argv, { cwd, env, windowsHide = true } = {}) {
@@ -2207,7 +2209,24 @@ function startBackgroundBuild({ deps: deps3 } = {}) {
   });
   return child.pid;
 }
-async function ensureAgentPanel({ deps: deps3 } = {}) {
+function killProcessTree(pid) {
+  if (process5.platform === "win32") spawnSync3("taskkill", ["/F", "/T", "/PID", String(pid)], { windowsHide: true });
+  else process5.kill(pid, "SIGTERM");
+}
+async function stopStalePanel(resolved, health, port) {
+  const previous = health.runtime_build_id;
+  const current = runtimeBuildId({ deps: resolved });
+  if (!previous || !current || previous === current) return null;
+  const shell = resolved.runningShell();
+  if (filled(shell)) resolved.killProcessTree(shell.pid);
+  const deadline = Date.now() + PANEL_STOP_TIMEOUT_MS;
+  while (!await resolved.portIsFree(port)) {
+    if (Date.now() > deadline) throw pyError("RuntimeError", `\u65E7\u9762\u677F\uFF08\u6784\u5EFA ${previous}\uFF09\u672A\u9000\u51FA\uFF0C\u672A\u542F\u52A8\u5F53\u524D\u6784\u5EFA`);
+    await resolved.sleep(100);
+  }
+  return { previous_build_id: previous, runtime_build_id: current };
+}
+async function ensureAgentPanel({ deps: deps3, replaceStaleBuild = false } = {}) {
   const resolved = resolveDeps(deps3);
   try {
     if (!isFile2(resolved.paths.projectFile)) {
@@ -2217,13 +2236,16 @@ async function ensureAgentPanel({ deps: deps3 } = {}) {
     const endpoint = await resolved.allocateEndpoint();
     const manifest = resolved.validManifest();
     const health = await resolved.probeHealth(Number(pyGetItem(endpoint, "port")));
-    if (resolved.isOurPanel(health, endpoint)) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
-    const shell = resolved.runningShell();
+    const ours = resolved.isOurPanel(health, endpoint);
+    const replaced = ours && replaceStaleBuild ? await stopStalePanel(resolved, health, Number(pyGetItem(endpoint, "port"))) : null;
+    if (ours && !replaced) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
+    const shell = replaced ? {} : resolved.runningShell();
     if (filled(shell)) return { status: "starting", pid: shell.pid, ...endpoint };
-    if (filled(manifest)) return resolved.startShell(String(pyGetItem(manifest, "executable")), endpoint);
-    if (resolved.buildRunning()) return { status: "build_started", build_in_progress: true, ...endpoint };
-    const pid = resolved.startBackgroundBuild();
-    return { status: "build_started", pid, log_path: String(resolved.paths.buildLogPath), ...endpoint };
+    let launched;
+    if (filled(manifest)) launched = resolved.startShell(String(pyGetItem(manifest, "executable")), endpoint);
+    else if (resolved.buildRunning()) launched = { status: "build_started", build_in_progress: true, ...endpoint };
+    else launched = { status: "build_started", pid: resolved.startBackgroundBuild(), log_path: String(resolved.paths.buildLogPath), ...endpoint };
+    return replaced ? { ...launched, ...replaced } : launched;
   } catch (error) {
     return { status: "failed", error: errorText(error), log_path: String(resolved.paths.buildLogPath) };
   }
@@ -2246,7 +2268,7 @@ function acquireBuildLock({ deps: deps3 } = {}) {
   }
   return null;
 }
-var MONITOR_ROOT, PANEL_STATE_ROOT, PANEL_ASSET_ROOT, PANEL_ROOT, SHELL_ROOT, PROJECT_FILE, RUNTIME_ROOT2, ENDPOINT_PATH, MANIFEST_PATH, BUILD_STATE_PATH, BUILD_LOG_PATH, BUILD_LOCK_PATH, SHELL_STATE_PATH, PORT_BASE, PORT_SPAN, DEFAULT_PATHS, STILL_ACTIVE_LOCK_STALE_SECONDS;
+var MONITOR_ROOT, PANEL_STATE_ROOT, PANEL_ASSET_ROOT, PANEL_ROOT, SHELL_ROOT, PROJECT_FILE, RUNTIME_ROOT2, ENDPOINT_PATH, MANIFEST_PATH, BUILD_STATE_PATH, BUILD_LOG_PATH, BUILD_LOCK_PATH, SHELL_STATE_PATH, PORT_BASE, PORT_SPAN, DEFAULT_PATHS, STILL_ACTIVE_LOCK_STALE_SECONDS, PANEL_STOP_TIMEOUT_MS;
 var init_agent_panel_launcher = __esm({
   "ops/tools/dispatch-core/agent_panel_launcher.mjs"() {
     init_tool_common();
@@ -2283,6 +2305,7 @@ var init_agent_panel_launcher = __esm({
       buildScript: path5.join(PANEL_ASSET_ROOT, "ops", "dist", "agent_panel_launcher.bundle.mjs")
     });
     STILL_ACTIVE_LOCK_STALE_SECONDS = 600;
+    PANEL_STOP_TIMEOUT_MS = 5e3;
   }
 });
 
@@ -5288,7 +5311,7 @@ function loadPick(item, index, file, role, notes, known, ids2) {
   if (item.capability !== void 0 && !text2(item.capability)) bad("value_invalid", "capability", "\u4E0D\u80FD\u4E3A\u7A7A\uFF1B\u9002\u7528\u5168\u90E8\u4EFB\u52A1\u65F6\u5220\u9664\u8BE5\u5B57\u6BB5");
   const capability = item.capability === void 0 ? null : item.capability.trim();
   if (capability && !known.has(capability)) bad("capability_unknown", "capability", `${capability} \u4E0D\u662F\u8BE5\u89D2\u8272\u5DF2\u6709\u4EFB\u52A1\u7C7B\u578B`);
-  if (!text2(item.model) || !item.model.includes("/")) bad("value_invalid", "model", "\u5FC5\u987B\u662F Pi \u6A21\u578B\u5168\u540D\uFF0C\u4F8B\u5982 openai-codex/gpt-6-sol");
+  if (!text2(item.model) || !item.model.includes("/")) bad("value_invalid", "model", "\u5FC5\u987B\u662F Pi \u6A21\u578B\u5168\u540D\uFF0C\u4F8B\u5982 openai-codex/gpt-6.1-sol");
   const model = item.model.trim();
   const levels = {};
   for (const key of ["effort", "effort_min", "effort_max"]) {

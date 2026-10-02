@@ -1771,476 +1771,6 @@ var init_py = __esm({
   }
 });
 
-// ops/node_modules/koffi/src/koffi/src/static.js
-import { createRequire } from "node:module";
-function loadStatic(pkg2) {
-  let native2 = null;
-  if (pkg2 == "linux-arm") {
-    try {
-      native2 = require2("@koromix/koffi-linux-arm");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "linux-arm64") {
-    try {
-      native2 = require2("@koromix/koffi-linux-arm64");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "linux-ia32") {
-    try {
-      native2 = require2("@koromix/koffi-linux-ia32");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "linux-x64") {
-    try {
-      native2 = require2("@koromix/koffi-linux-x64");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "linux-riscv64") {
-    try {
-      native2 = require2("@koromix/koffi-linux-riscv64");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "freebsd-ia32") {
-    try {
-      native2 = require2("@koromix/koffi-freebsd-ia32");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "freebsd-x64") {
-    try {
-      native2 = require2("@koromix/koffi-freebsd-x64");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "freebsd-arm64") {
-    try {
-      native2 = require2("@koromix/koffi-freebsd-arm64");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "openbsd-ia32") {
-    try {
-      native2 = require2("@koromix/koffi-openbsd-ia32");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "openbsd-x64") {
-    try {
-      native2 = require2("@koromix/koffi-openbsd-x64");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "win32-ia32") {
-    try {
-      native2 = require2("@koromix/koffi-win32-ia32");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "win32-x64") {
-    try {
-      native2 = require2("@koromix/koffi-win32-x64");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "win32-arm64") {
-    try {
-      native2 = require2("@koromix/koffi-win32-arm64");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "darwin-x64") {
-    try {
-      native2 = require2("@koromix/koffi-darwin-x64");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "darwin-arm64") {
-    try {
-      native2 = require2("@koromix/koffi-darwin-arm64");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "linux-loong64") {
-    try {
-      native2 = require2("@koromix/koffi-linux-loong64");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "android-arm64") {
-    try {
-      native2 = require2("@koromix/koffi-android-arm64");
-    } catch (err) {
-    }
-  }
-  if (pkg2 == "android-x64") {
-    try {
-      native2 = require2("@koromix/koffi-android-x64");
-    } catch (err) {
-    }
-  }
-  return native2;
-}
-var require2;
-var init_static = __esm({
-  "ops/node_modules/koffi/src/koffi/src/static.js"() {
-    require2 = createRequire(import.meta.url);
-  }
-});
-
-// ops/node_modules/koffi/src/koffi/index.js
-import util from "node:util";
-import fs2 from "node:fs";
-import { createRequire as createRequire2 } from "node:module";
-import fs from "node:fs";
-function determineAbi() {
-  let abi = process.arch.toString();
-  if (abi == "riscv32" || abi == "riscv64") {
-    let file = openFile(process.execPath, "r");
-    try {
-      let header = readElfHeader(file);
-      let float_abi = header.e_flags & 6;
-      switch (float_abi) {
-        case 0:
-          {
-          }
-          break;
-        case 2:
-          {
-            abi += "f";
-          }
-          break;
-        case 4:
-          {
-            abi += "d";
-          }
-          break;
-        case 6:
-          {
-            abi += "q";
-          }
-          break;
-      }
-    } finally {
-      file.close();
-    }
-  } else if (abi == "arm") {
-    let file = openFile(process.execPath, "r");
-    try {
-      let header = readElfHeader(file);
-      if (header.e_flags & 1024) {
-        abi += "hf";
-      } else if (header.e_flags & 512) {
-        abi += "sf";
-      } else {
-        throw new Error("Unknown ARM floating-point ABI");
-      }
-    } finally {
-      file.close();
-    }
-  }
-  return abi;
-}
-function readElfHeader(file, offset = 0) {
-  let buf = file.read(offset, 512);
-  if (buf.length < 16)
-    throw new Error("Truncated header");
-  if (buf[0] != 127 || buf[1] != 69 || buf[2] != 76 || buf[3] != 70)
-    throw new Error("Invalid magic number");
-  if (buf[6] != 1)
-    throw new Error("Invalid ELF version");
-  if (buf[5] != 1)
-    throw new Error("Big-endian architectures are not supported");
-  switch (buf[4]) {
-    case 1:
-      {
-        if (buf.length < 68)
-          throw new Error("Truncated ELF header");
-        return {
-          ei_class: 32,
-          e_machine: buf.readUInt16LE(18),
-          e_flags: buf.readUInt32LE(36),
-          e_phoff: buf.readUInt32LE(28),
-          e_phentsize: buf.readUInt16LE(42),
-          e_phnum: buf.readUInt16LE(44)
-        };
-      }
-      break;
-    case 2:
-      {
-        if (buf.length < 120)
-          throw new Error("Truncated ELF header");
-        return {
-          ei_class: 64,
-          e_machine: buf.readUInt16LE(18),
-          e_flags: buf.readUInt32LE(48),
-          e_phoff: buf.readBigUInt64LE(32),
-          e_phentsize: buf.readUInt16LE(54),
-          e_phnum: buf.readUInt16LE(56)
-        };
-      }
-      break;
-    default:
-      throw new Error("Invalid ELF class");
-  }
-}
-function openFile(filename, flags) {
-  let fd = fs.openSync(filename, flags);
-  return new FileHandle(fd);
-}
-function detectPlatform() {
-  if (process.versions.napi == null || process.versions.napi < package_default.cnoke.napi) {
-    let major = parseInt(process.versions.node, 10);
-    throw new Error(`This engine is based on Node ${process.versions.node}, but ${package_default.name} does not support the Node ${major}.x branch (Node-API < ${package_default.cnoke.napi})`);
-  }
-  let abi = determineAbi();
-  let pkg2 = `${process.platform}-${process.arch}`;
-  let triplets2 = [`${process.platform}_${abi}`];
-  if (process.platform == "linux")
-    triplets2.push(`musl_${abi}`);
-  return [package_default.version, pkg2, triplets2];
-}
-function loadDynamic(dirname, pkg2, triplets2) {
-  let suffix = "/../../build/koffi";
-  let root = dirname + suffix;
-  let roots = [root];
-  let native2 = null;
-  let err = null;
-  if (process["resourcesPath"] != null) {
-    let suffixes = [
-      "/koffi",
-      "/koffi/build",
-      "/node_modules/koffi/build"
-    ];
-    for (let suffix2 of suffixes)
-      roots.push(process["resourcesPath"] + suffix2);
-  }
-  let names = [
-    `${import.meta.dirname}/../../../@koromix/koffi-${pkg2}`,
-    ...triplets2.flatMap((triplet) => roots.map((dir) => `${dir}/${triplet}/koffi.node`))
-  ];
-  for (let name of names) {
-    if (!fs2.existsSync(name))
-      continue;
-    try {
-      native2 = require22(name);
-      break;
-    } catch (e) {
-      err ??= e;
-    }
-  }
-  if (native2 == null && err != null)
-    throw err;
-  return native2;
-}
-function wrapNative(native2, version2) {
-  if (native2 == null)
-    throw new Error("Cannot find the native Koffi module; did you bundle it correctly?");
-  if (native2.version != version2)
-    throw new Error("Mismatched native Koffi modules");
-  let load = native2.load;
-  let register = native2.register;
-  let introspect = native2.type;
-  native2.sizeof = (spec) => introspect(spec).size;
-  native2.alignof = (spec) => introspect(spec).alignment;
-  native2.offsetof = (spec, name) => {
-    let info = introspect(spec);
-    if (info.primitive != "Record")
-      throw new TypeError("The offsetof() function can only be used with record types");
-    let member = info.members[name];
-    if (member == null)
-      throw new Error(`Record type ${info.name} does not have member '${name}'`);
-    return member.offset;
-  };
-  native2.register = (...args) => {
-    if (args.length >= 3 && typeof args[1] == "function") {
-      process.emitWarning("Using koffi.register() with a custom this value was deprecated in Koffi 2.17, use function.bind() instead", "DeprecationWarning", "KOFFI009");
-      args[1] = args[1].bind(args[0]);
-      args = args.slice(1);
-    }
-    return register(...args);
-  };
-  native2.load = (...args) => {
-    let lib = load(...args);
-    lib.cdecl = util.deprecate((...args2) => lib.func("__cdecl", ...args2), "The koffi.cdecl() function was deprecated in Koffi 2.7, use koffi.func(...) instead", "KOFFI003");
-    lib.stdcall = util.deprecate((...args2) => lib.func("__stdcall", ...args2), 'The koffi.stdcall() function was deprecated in Koffi 2.7, use koffi.func("__stdcall", ...) instead', "KOFFI004");
-    lib.fastcall = util.deprecate((...args2) => lib.func("__fastcall", ...args2), 'The koffi.fastcall() function was deprecated in Koffi 2.7, use koffi.func("__fastcall", ...) instead', "KOFFI005");
-    lib.thiscall = util.deprecate((...args2) => lib.func("__thiscall", ...args2), 'The koffi.thiscall() function was deprecated in Koffi 2.7, use koffi.func("__thiscall", ...) instead', "KOFFI006");
-    return lib;
-  };
-  native2.resolve = util.deprecate(native2.type, "The koffi.resolve() function was deprecated in Koffi 3.0, use koffi.type() instead", "KOFFI007");
-  native2.introspect = util.deprecate(native2.type, "The koffi.introspect() function was deprecated in Koffi 3.0, use koffi.type() instead", "KOFFI008");
-}
-var FileHandle, package_default, require22, version, pkg, triplets, native, mod_LibraryHandle, mod_TypeObject, mod_Union, mod_address, mod_alias, mod_alignof, mod_alloc, mod_array, mod_as, mod_call, mod_config, mod_decode, mod_disposable, mod_encode, mod_enumeration, mod_errno, mod_extension, mod_free, mod_in, mod_inout, mod_introspect, mod_load, mod_node, mod_offsetof, mod_opaque, mod_os, mod_out, mod_pack, mod_pointer, mod_proto, mod_register, mod_reset, mod_resolve, mod_sizeof, mod_stats, mod_struct, mod_type, mod_types, mod_union, mod_unregister, mod_version, mod_view, index_default;
-var init_koffi = __esm({
-  "ops/node_modules/koffi/src/koffi/index.js"() {
-    init_static();
-    FileHandle = class {
-      constructor(fd) {
-        this.fd = fd;
-      }
-      close() {
-        fs.closeSync(this.fd);
-      }
-      [Symbol.dispose]() {
-        fs.closeSync(this.fd);
-      }
-      read(offset, len) {
-        let buf = Buffer.allocUnsafe(len);
-        let read = fs.readSync(this.fd, buf, 0, len, offset);
-        return buf.subarray(0, read);
-      }
-    };
-    package_default = { name: "koffi", version: "3.2.1", cnoke: { api: "../../vendor/node-api-headers", output: "../../bin/Koffi/{{ toolchain }}", node: 16, napi: 8 } };
-    require22 = createRequire2(import.meta.url);
-    [version, pkg, triplets] = detectPlatform();
-    native = loadStatic(pkg) ?? loadDynamic(import.meta.dirname, pkg, triplets);
-    wrapNative(native, version);
-    mod_LibraryHandle = native.LibraryHandle;
-    mod_TypeObject = native.TypeObject;
-    mod_Union = native.Union;
-    mod_address = native.address;
-    mod_alias = native.alias;
-    mod_alignof = native.alignof;
-    mod_alloc = native.alloc;
-    mod_array = native.array;
-    mod_as = native.as;
-    mod_call = native.call;
-    mod_config = native.config;
-    mod_decode = native.decode;
-    mod_disposable = native.disposable;
-    mod_encode = native.encode;
-    mod_enumeration = native.enumeration;
-    mod_errno = native.errno;
-    mod_extension = native.extension;
-    mod_free = native.free;
-    mod_in = native.in;
-    mod_inout = native.inout;
-    mod_introspect = native.introspect;
-    mod_load = native.load;
-    mod_node = native.node;
-    mod_offsetof = native.offsetof;
-    mod_opaque = native.opaque;
-    mod_os = native.os;
-    mod_out = native.out;
-    mod_pack = native.pack;
-    mod_pointer = native.pointer;
-    mod_proto = native.proto;
-    mod_register = native.register;
-    mod_reset = native.reset;
-    mod_resolve = native.resolve;
-    mod_sizeof = native.sizeof;
-    mod_stats = native.stats;
-    mod_struct = native.struct;
-    mod_type = native.type;
-    mod_types = native.types;
-    mod_union = native.union;
-    mod_unregister = native.unregister;
-    mod_version = native.version;
-    mod_view = native.view;
-    index_default = native;
-  }
-});
-
-// ops/node_modules/koffi/index.js
-var init_koffi2 = __esm({
-  "ops/node_modules/koffi/index.js"() {
-    init_koffi();
-    init_koffi();
-  }
-});
-
-// ops/tools/dispatch-core/file_lock.mjs
-import { closeSync as closeSync2, openSync as openSync2 } from "node:fs";
-import { constants } from "node:os";
-function osError(operation, code, target) {
-  const error = new Error(`${operation} failed (${code}): ${target}`);
-  error.code = code;
-  return error;
-}
-function nativeBackend() {
-  if (backend) return backend;
-  if (process.platform === "win32") {
-    const kernel = index_default.load("kernel32.dll");
-    const create = kernel.func("intptr_t __stdcall CreateFileW(str16, uint32_t, uint32_t, void *, uint32_t, uint32_t, intptr_t)");
-    const lock = kernel.func("int __stdcall LockFileEx(intptr_t, uint32_t, uint32_t, uint32_t, uint32_t, void *)");
-    const close = kernel.func("int __stdcall CloseHandle(intptr_t)");
-    const lastError = kernel.func("uint32_t __stdcall GetLastError()");
-    backend = (target) => {
-      const handle = create(target, 3221225472, 3, null, 4, 128, 0);
-      if (handle === -1 || handle === -1n) throw osError("CreateFileW", lastError(), target);
-      let held = false;
-      try {
-        const overlapped = Buffer.alloc(index_default.sizeof("uintptr_t") * 3 + 8);
-        held = Boolean(lock(handle, 3, 0, 1, 0, overlapped));
-        if (!held) {
-          const code = lastError();
-          if (code === 33) return null;
-          throw osError("LockFileEx", code, target);
-        }
-        return () => {
-          if (!close(handle)) throw osError("CloseHandle", lastError(), target);
-        };
-      } finally {
-        if (!held) close(handle);
-      }
-    };
-  } else {
-    const libc = index_default.load(null);
-    const flock = libc.func("int flock(int, int)");
-    backend = (target) => {
-      const fd = openSync2(target, "a+");
-      let held = false;
-      try {
-        let result;
-        do {
-          result = flock(fd, 2 | 4);
-        } while (result !== 0 && index_default.errno() === constants.errno.EINTR);
-        held = result === 0;
-        if (!held) {
-          const code = index_default.errno();
-          if (code === constants.errno.EAGAIN || code === constants.errno.EWOULDBLOCK) return null;
-          throw osError("flock", code, target);
-        }
-        return () => closeSync2(fd);
-      } finally {
-        if (!held) closeSync2(fd);
-      }
-    };
-  }
-  return backend;
-}
-function tryFileLock(target) {
-  const release = nativeBackend()(target);
-  if (release === null) return null;
-  let released = false;
-  return Object.freeze({
-    release() {
-      if (released) return;
-      released = true;
-      release();
-    }
-  });
-}
-var backend;
-var init_file_lock = __esm({
-  "ops/tools/dispatch-core/file_lock.mjs"() {
-    init_koffi2();
-  }
-});
-
-// ops/tools/async-core/runtime/shared.mjs
-var HOST_REBOOT_MARGIN_MS;
-var init_shared = __esm({
-  "ops/tools/async-core/runtime/shared.mjs"() {
-    HOST_REBOOT_MARGIN_MS = 5e3;
-  }
-});
-
 // ops/tools/_dispatch-prepare-argv.mjs
 var DISPATCH_PREPARE_SEED_FIELD_TYPES, DISPATCH_PREPARE_SEED_FIELDS, AUTHORIZATION_OVERRIDES, DISPATCH_PREPARE_OVERRIDE_FLAGS;
 var init_dispatch_prepare_argv = __esm({
@@ -2430,7 +1960,7 @@ function loadPick(item, index, file, role, notes, known, ids2) {
   if (item.capability !== void 0 && !text2(item.capability)) bad("value_invalid", "capability", "\u4E0D\u80FD\u4E3A\u7A7A\uFF1B\u9002\u7528\u5168\u90E8\u4EFB\u52A1\u65F6\u5220\u9664\u8BE5\u5B57\u6BB5");
   const capability = item.capability === void 0 ? null : item.capability.trim();
   if (capability && !known.has(capability)) bad("capability_unknown", "capability", `${capability} \u4E0D\u662F\u8BE5\u89D2\u8272\u5DF2\u6709\u4EFB\u52A1\u7C7B\u578B`);
-  if (!text2(item.model) || !item.model.includes("/")) bad("value_invalid", "model", "\u5FC5\u987B\u662F Pi \u6A21\u578B\u5168\u540D\uFF0C\u4F8B\u5982 openai-codex/gpt-6-sol");
+  if (!text2(item.model) || !item.model.includes("/")) bad("value_invalid", "model", "\u5FC5\u987B\u662F Pi \u6A21\u578B\u5168\u540D\uFF0C\u4F8B\u5982 openai-codex/gpt-6.1-sol");
   const model = item.model.trim();
   const levels = {};
   for (const key of ["effort", "effort_min", "effort_max"]) {
@@ -2815,7 +2345,7 @@ var init_model_catalog_cache = __esm({
 
 // ops/tools/dispatch-core/agent_panel_launcher.mjs
 import { createHash as createHash4 } from "node:crypto";
-import { closeSync as closeSync3, mkdirSync as mkdirSync3, openSync as openSync3, readdirSync as readdirSync2, readFileSync as readFileSync6, renameSync as renameSync3, rmSync as rmSync2, statSync as statSync4, writeFileSync as writeFileSync2, writeSync as writeSync2 } from "node:fs";
+import { closeSync as closeSync2, mkdirSync as mkdirSync3, openSync as openSync2, readdirSync as readdirSync2, readFileSync as readFileSync6, renameSync as renameSync3, rmSync as rmSync2, statSync as statSync4, writeFileSync as writeFileSync2, writeSync as writeSync2 } from "node:fs";
 import net from "node:net";
 import path6 from "node:path";
 import { homedir } from "node:os";
@@ -2878,6 +2408,8 @@ function resolveDeps(overrides = {}) {
   deps4.acquireBuildLock ??= () => acquireBuildLock({ deps: deps4 });
   deps4.startShell ??= (executable, endpoint) => startShell(executable, endpoint, { deps: deps4 });
   deps4.startBackgroundBuild ??= () => startBackgroundBuild({ deps: deps4 });
+  deps4.killProcessTree ??= killProcessTree;
+  deps4.sleep ??= (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   return deps4;
 }
 function spawnDetached(argv, { cwd, env, windowsHide = true } = {}) {
@@ -3069,7 +2601,24 @@ function startBackgroundBuild({ deps: deps4 } = {}) {
   });
   return child.pid;
 }
-async function ensureAgentPanel({ deps: deps4 } = {}) {
+function killProcessTree(pid) {
+  if (process5.platform === "win32") spawnSync2("taskkill", ["/F", "/T", "/PID", String(pid)], { windowsHide: true });
+  else process5.kill(pid, "SIGTERM");
+}
+async function stopStalePanel(resolved, health, port) {
+  const previous = health.runtime_build_id;
+  const current = runtimeBuildId({ deps: resolved });
+  if (!previous || !current || previous === current) return null;
+  const shell = resolved.runningShell();
+  if (filled(shell)) resolved.killProcessTree(shell.pid);
+  const deadline = Date.now() + PANEL_STOP_TIMEOUT_MS;
+  while (!await resolved.portIsFree(port)) {
+    if (Date.now() > deadline) throw pyError("RuntimeError", `\u65E7\u9762\u677F\uFF08\u6784\u5EFA ${previous}\uFF09\u672A\u9000\u51FA\uFF0C\u672A\u542F\u52A8\u5F53\u524D\u6784\u5EFA`);
+    await resolved.sleep(100);
+  }
+  return { previous_build_id: previous, runtime_build_id: current };
+}
+async function ensureAgentPanel({ deps: deps4, replaceStaleBuild = false } = {}) {
   const resolved = resolveDeps(deps4);
   try {
     if (!isFile2(resolved.paths.projectFile)) {
@@ -3079,13 +2628,16 @@ async function ensureAgentPanel({ deps: deps4 } = {}) {
     const endpoint = await resolved.allocateEndpoint();
     const manifest = resolved.validManifest();
     const health = await resolved.probeHealth(Number(pyGetItem(endpoint, "port")));
-    if (resolved.isOurPanel(health, endpoint)) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
-    const shell = resolved.runningShell();
+    const ours = resolved.isOurPanel(health, endpoint);
+    const replaced = ours && replaceStaleBuild ? await stopStalePanel(resolved, health, Number(pyGetItem(endpoint, "port"))) : null;
+    if (ours && !replaced) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
+    const shell = replaced ? {} : resolved.runningShell();
     if (filled(shell)) return { status: "starting", pid: shell.pid, ...endpoint };
-    if (filled(manifest)) return resolved.startShell(String(pyGetItem(manifest, "executable")), endpoint);
-    if (resolved.buildRunning()) return { status: "build_started", build_in_progress: true, ...endpoint };
-    const pid = resolved.startBackgroundBuild();
-    return { status: "build_started", pid, log_path: String(resolved.paths.buildLogPath), ...endpoint };
+    let launched;
+    if (filled(manifest)) launched = resolved.startShell(String(pyGetItem(manifest, "executable")), endpoint);
+    else if (resolved.buildRunning()) launched = { status: "build_started", build_in_progress: true, ...endpoint };
+    else launched = { status: "build_started", pid: resolved.startBackgroundBuild(), log_path: String(resolved.paths.buildLogPath), ...endpoint };
+    return replaced ? { ...launched, ...replaced } : launched;
   } catch (error) {
     return { status: "failed", error: errorText(error), log_path: String(resolved.paths.buildLogPath) };
   }
@@ -3094,7 +2646,7 @@ function acquireBuildLock({ deps: deps4 } = {}) {
   const resolved = resolveDeps(deps4);
   mkdirSync3(resolved.paths.runtimeRoot, { recursive: true });
   try {
-    return openSync3(resolved.paths.buildLockPath, "wx");
+    return openSync2(resolved.paths.buildLockPath, "wx");
   } catch (error) {
     if (error?.code !== "EEXIST") throw error;
   }
@@ -3102,13 +2654,13 @@ function acquireBuildLock({ deps: deps4 } = {}) {
     const stale = Date.now() / 1e3 - statSync4(resolved.paths.buildLockPath).mtimeMs / 1e3;
     if (stale > STILL_ACTIVE_LOCK_STALE_SECONDS && !resolved.buildRunning()) {
       rmSync2(resolved.paths.buildLockPath, { force: true });
-      return openSync3(resolved.paths.buildLockPath, "wx");
+      return openSync2(resolved.paths.buildLockPath, "wx");
     }
   } catch {
   }
   return null;
 }
-var MONITOR_ROOT, PANEL_STATE_ROOT, PANEL_ASSET_ROOT, PANEL_ROOT, SHELL_ROOT, PROJECT_FILE, RUNTIME_ROOT2, ENDPOINT_PATH, MANIFEST_PATH, BUILD_STATE_PATH, BUILD_LOG_PATH, BUILD_LOCK_PATH, SHELL_STATE_PATH, PORT_BASE, PORT_SPAN, DEFAULT_PATHS, STILL_ACTIVE_LOCK_STALE_SECONDS;
+var MONITOR_ROOT, PANEL_STATE_ROOT, PANEL_ASSET_ROOT, PANEL_ROOT, SHELL_ROOT, PROJECT_FILE, RUNTIME_ROOT2, ENDPOINT_PATH, MANIFEST_PATH, BUILD_STATE_PATH, BUILD_LOG_PATH, BUILD_LOCK_PATH, SHELL_STATE_PATH, PORT_BASE, PORT_SPAN, DEFAULT_PATHS, STILL_ACTIVE_LOCK_STALE_SECONDS, PANEL_STOP_TIMEOUT_MS;
 var init_agent_panel_launcher = __esm({
   "ops/tools/dispatch-core/agent_panel_launcher.mjs"() {
     init_tool_common();
@@ -3145,16 +2697,17 @@ var init_agent_panel_launcher = __esm({
       buildScript: path6.join(PANEL_ASSET_ROOT, "ops", "dist", "agent_panel_launcher.bundle.mjs")
     });
     STILL_ACTIVE_LOCK_STALE_SECONDS = 600;
+    PANEL_STOP_TIMEOUT_MS = 5e3;
   }
 });
 
 // ops/tools/dispatch-core/prepared_dispatch.mjs
 import {
-  closeSync as closeSync4,
+  closeSync as closeSync3,
   fstatSync as fstatSync2,
   lstatSync as lstatSync2,
   mkdirSync as mkdirSync4,
-  openSync as openSync4,
+  openSync as openSync3,
   readFileSync as readFileSync7,
   readdirSync as readdirSync3,
   rmSync as rmSync3,
@@ -3910,7 +3463,7 @@ function _readFile(target, label) {
   assertRegularFile(file, label, { error: PreparedDispatchError });
   let fd = null;
   try {
-    fd = openSync4(file, "r");
+    fd = openSync3(file, "r");
     const info = fstatSync2(fd);
     if (!info.isFile()) throw new PreparedDispatchError(`${label} is not a regular file: ${file}`);
     return readFileSync7(fd);
@@ -3920,7 +3473,7 @@ function _readFile(target, label) {
   } finally {
     if (fd !== null) {
       try {
-        closeSync4(fd);
+        closeSync3(fd);
       } catch {
       }
     }
@@ -8000,24 +7553,9 @@ var init_fleet_manifest_check = __esm({
   }
 });
 
-// ops/tools/dispatch-core/fleet_scheduler.mjs
-import { spawn as spawn2 } from "node:child_process";
-import {
-  closeSync as closeSync5,
-  existsSync as existsSync9,
-  mkdirSync as mkdirSync8,
-  openSync as openSync5,
-  readFileSync as readFileSync10,
-  readdirSync as readdirSync7,
-  rmSync as rmSync4,
-  statSync as statSync10,
-  writeFileSync as writeFileSync6
-} from "node:fs";
-import path16 from "node:path";
-import { uptime } from "node:os";
+// ops/tools/dispatch-core/fleet/py-utils.mjs
+import { statSync as statSync10 } from "node:fs";
 import process8 from "node:process";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
-import { setTimeout as delay } from "node:timers/promises";
 function sleepSeconds(seconds) {
   const ms = Math.max(0, Number(seconds) * 1e3);
   if (!ms) return;
@@ -8075,6 +7613,543 @@ function isFile4(target) {
 function resolveUnder(value, base) {
   return pyResolveUnder(pyStr(value), base);
 }
+function pyStripChars2(text3, chars) {
+  let start = 0;
+  let end = text3.length;
+  while (start < end && chars.includes(text3[start])) start += 1;
+  while (end > start && chars.includes(text3[end - 1])) end -= 1;
+  return text3.slice(start, end);
+}
+function notEmptyValue(value) {
+  return value !== null && value !== void 0 && value !== "";
+}
+function positiveInt(value, fallback = 0) {
+  let parsed;
+  try {
+    parsed = pyInt(value);
+  } catch {
+    return fallback;
+  }
+  return parsed >= 0 ? parsed : fallback;
+}
+function truthyList(value) {
+  if (value === null || value === void 0) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  return Boolean(value);
+}
+var init_py_utils = __esm({
+  "ops/tools/dispatch-core/fleet/py-utils.mjs"() {
+    init_py();
+    init_tool_common();
+  }
+});
+
+// ops/node_modules/koffi/src/koffi/src/static.js
+import { createRequire } from "node:module";
+function loadStatic(pkg2) {
+  let native2 = null;
+  if (pkg2 == "linux-arm") {
+    try {
+      native2 = require2("@koromix/koffi-linux-arm");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "linux-arm64") {
+    try {
+      native2 = require2("@koromix/koffi-linux-arm64");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "linux-ia32") {
+    try {
+      native2 = require2("@koromix/koffi-linux-ia32");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "linux-x64") {
+    try {
+      native2 = require2("@koromix/koffi-linux-x64");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "linux-riscv64") {
+    try {
+      native2 = require2("@koromix/koffi-linux-riscv64");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "freebsd-ia32") {
+    try {
+      native2 = require2("@koromix/koffi-freebsd-ia32");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "freebsd-x64") {
+    try {
+      native2 = require2("@koromix/koffi-freebsd-x64");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "freebsd-arm64") {
+    try {
+      native2 = require2("@koromix/koffi-freebsd-arm64");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "openbsd-ia32") {
+    try {
+      native2 = require2("@koromix/koffi-openbsd-ia32");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "openbsd-x64") {
+    try {
+      native2 = require2("@koromix/koffi-openbsd-x64");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "win32-ia32") {
+    try {
+      native2 = require2("@koromix/koffi-win32-ia32");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "win32-x64") {
+    try {
+      native2 = require2("@koromix/koffi-win32-x64");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "win32-arm64") {
+    try {
+      native2 = require2("@koromix/koffi-win32-arm64");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "darwin-x64") {
+    try {
+      native2 = require2("@koromix/koffi-darwin-x64");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "darwin-arm64") {
+    try {
+      native2 = require2("@koromix/koffi-darwin-arm64");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "linux-loong64") {
+    try {
+      native2 = require2("@koromix/koffi-linux-loong64");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "android-arm64") {
+    try {
+      native2 = require2("@koromix/koffi-android-arm64");
+    } catch (err) {
+    }
+  }
+  if (pkg2 == "android-x64") {
+    try {
+      native2 = require2("@koromix/koffi-android-x64");
+    } catch (err) {
+    }
+  }
+  return native2;
+}
+var require2;
+var init_static = __esm({
+  "ops/node_modules/koffi/src/koffi/src/static.js"() {
+    require2 = createRequire(import.meta.url);
+  }
+});
+
+// ops/node_modules/koffi/src/koffi/index.js
+import util from "node:util";
+import fs2 from "node:fs";
+import { createRequire as createRequire2 } from "node:module";
+import fs from "node:fs";
+function determineAbi() {
+  let abi = process.arch.toString();
+  if (abi == "riscv32" || abi == "riscv64") {
+    let file = openFile(process.execPath, "r");
+    try {
+      let header = readElfHeader(file);
+      let float_abi = header.e_flags & 6;
+      switch (float_abi) {
+        case 0:
+          {
+          }
+          break;
+        case 2:
+          {
+            abi += "f";
+          }
+          break;
+        case 4:
+          {
+            abi += "d";
+          }
+          break;
+        case 6:
+          {
+            abi += "q";
+          }
+          break;
+      }
+    } finally {
+      file.close();
+    }
+  } else if (abi == "arm") {
+    let file = openFile(process.execPath, "r");
+    try {
+      let header = readElfHeader(file);
+      if (header.e_flags & 1024) {
+        abi += "hf";
+      } else if (header.e_flags & 512) {
+        abi += "sf";
+      } else {
+        throw new Error("Unknown ARM floating-point ABI");
+      }
+    } finally {
+      file.close();
+    }
+  }
+  return abi;
+}
+function readElfHeader(file, offset = 0) {
+  let buf = file.read(offset, 512);
+  if (buf.length < 16)
+    throw new Error("Truncated header");
+  if (buf[0] != 127 || buf[1] != 69 || buf[2] != 76 || buf[3] != 70)
+    throw new Error("Invalid magic number");
+  if (buf[6] != 1)
+    throw new Error("Invalid ELF version");
+  if (buf[5] != 1)
+    throw new Error("Big-endian architectures are not supported");
+  switch (buf[4]) {
+    case 1:
+      {
+        if (buf.length < 68)
+          throw new Error("Truncated ELF header");
+        return {
+          ei_class: 32,
+          e_machine: buf.readUInt16LE(18),
+          e_flags: buf.readUInt32LE(36),
+          e_phoff: buf.readUInt32LE(28),
+          e_phentsize: buf.readUInt16LE(42),
+          e_phnum: buf.readUInt16LE(44)
+        };
+      }
+      break;
+    case 2:
+      {
+        if (buf.length < 120)
+          throw new Error("Truncated ELF header");
+        return {
+          ei_class: 64,
+          e_machine: buf.readUInt16LE(18),
+          e_flags: buf.readUInt32LE(48),
+          e_phoff: buf.readBigUInt64LE(32),
+          e_phentsize: buf.readUInt16LE(54),
+          e_phnum: buf.readUInt16LE(56)
+        };
+      }
+      break;
+    default:
+      throw new Error("Invalid ELF class");
+  }
+}
+function openFile(filename, flags) {
+  let fd = fs.openSync(filename, flags);
+  return new FileHandle(fd);
+}
+function detectPlatform() {
+  if (process.versions.napi == null || process.versions.napi < package_default.cnoke.napi) {
+    let major = parseInt(process.versions.node, 10);
+    throw new Error(`This engine is based on Node ${process.versions.node}, but ${package_default.name} does not support the Node ${major}.x branch (Node-API < ${package_default.cnoke.napi})`);
+  }
+  let abi = determineAbi();
+  let pkg2 = `${process.platform}-${process.arch}`;
+  let triplets2 = [`${process.platform}_${abi}`];
+  if (process.platform == "linux")
+    triplets2.push(`musl_${abi}`);
+  return [package_default.version, pkg2, triplets2];
+}
+function loadDynamic(dirname, pkg2, triplets2) {
+  let suffix = "/../../build/koffi";
+  let root = dirname + suffix;
+  let roots = [root];
+  let native2 = null;
+  let err = null;
+  if (process["resourcesPath"] != null) {
+    let suffixes = [
+      "/koffi",
+      "/koffi/build",
+      "/node_modules/koffi/build"
+    ];
+    for (let suffix2 of suffixes)
+      roots.push(process["resourcesPath"] + suffix2);
+  }
+  let names = [
+    `${import.meta.dirname}/../../../@koromix/koffi-${pkg2}`,
+    ...triplets2.flatMap((triplet) => roots.map((dir) => `${dir}/${triplet}/koffi.node`))
+  ];
+  for (let name of names) {
+    if (!fs2.existsSync(name))
+      continue;
+    try {
+      native2 = require22(name);
+      break;
+    } catch (e) {
+      err ??= e;
+    }
+  }
+  if (native2 == null && err != null)
+    throw err;
+  return native2;
+}
+function wrapNative(native2, version2) {
+  if (native2 == null)
+    throw new Error("Cannot find the native Koffi module; did you bundle it correctly?");
+  if (native2.version != version2)
+    throw new Error("Mismatched native Koffi modules");
+  let load = native2.load;
+  let register = native2.register;
+  let introspect = native2.type;
+  native2.sizeof = (spec) => introspect(spec).size;
+  native2.alignof = (spec) => introspect(spec).alignment;
+  native2.offsetof = (spec, name) => {
+    let info = introspect(spec);
+    if (info.primitive != "Record")
+      throw new TypeError("The offsetof() function can only be used with record types");
+    let member = info.members[name];
+    if (member == null)
+      throw new Error(`Record type ${info.name} does not have member '${name}'`);
+    return member.offset;
+  };
+  native2.register = (...args) => {
+    if (args.length >= 3 && typeof args[1] == "function") {
+      process.emitWarning("Using koffi.register() with a custom this value was deprecated in Koffi 2.17, use function.bind() instead", "DeprecationWarning", "KOFFI009");
+      args[1] = args[1].bind(args[0]);
+      args = args.slice(1);
+    }
+    return register(...args);
+  };
+  native2.load = (...args) => {
+    let lib = load(...args);
+    lib.cdecl = util.deprecate((...args2) => lib.func("__cdecl", ...args2), "The koffi.cdecl() function was deprecated in Koffi 2.7, use koffi.func(...) instead", "KOFFI003");
+    lib.stdcall = util.deprecate((...args2) => lib.func("__stdcall", ...args2), 'The koffi.stdcall() function was deprecated in Koffi 2.7, use koffi.func("__stdcall", ...) instead', "KOFFI004");
+    lib.fastcall = util.deprecate((...args2) => lib.func("__fastcall", ...args2), 'The koffi.fastcall() function was deprecated in Koffi 2.7, use koffi.func("__fastcall", ...) instead', "KOFFI005");
+    lib.thiscall = util.deprecate((...args2) => lib.func("__thiscall", ...args2), 'The koffi.thiscall() function was deprecated in Koffi 2.7, use koffi.func("__thiscall", ...) instead', "KOFFI006");
+    return lib;
+  };
+  native2.resolve = util.deprecate(native2.type, "The koffi.resolve() function was deprecated in Koffi 3.0, use koffi.type() instead", "KOFFI007");
+  native2.introspect = util.deprecate(native2.type, "The koffi.introspect() function was deprecated in Koffi 3.0, use koffi.type() instead", "KOFFI008");
+}
+var FileHandle, package_default, require22, version, pkg, triplets, native, mod_LibraryHandle, mod_TypeObject, mod_Union, mod_address, mod_alias, mod_alignof, mod_alloc, mod_array, mod_as, mod_call, mod_config, mod_decode, mod_disposable, mod_encode, mod_enumeration, mod_errno, mod_extension, mod_free, mod_in, mod_inout, mod_introspect, mod_load, mod_node, mod_offsetof, mod_opaque, mod_os, mod_out, mod_pack, mod_pointer, mod_proto, mod_register, mod_reset, mod_resolve, mod_sizeof, mod_stats, mod_struct, mod_type, mod_types, mod_union, mod_unregister, mod_version, mod_view, index_default;
+var init_koffi = __esm({
+  "ops/node_modules/koffi/src/koffi/index.js"() {
+    init_static();
+    FileHandle = class {
+      constructor(fd) {
+        this.fd = fd;
+      }
+      close() {
+        fs.closeSync(this.fd);
+      }
+      [Symbol.dispose]() {
+        fs.closeSync(this.fd);
+      }
+      read(offset, len) {
+        let buf = Buffer.allocUnsafe(len);
+        let read = fs.readSync(this.fd, buf, 0, len, offset);
+        return buf.subarray(0, read);
+      }
+    };
+    package_default = { name: "koffi", version: "3.2.1", cnoke: { api: "../../vendor/node-api-headers", output: "../../bin/Koffi/{{ toolchain }}", node: 16, napi: 8 } };
+    require22 = createRequire2(import.meta.url);
+    [version, pkg, triplets] = detectPlatform();
+    native = loadStatic(pkg) ?? loadDynamic(import.meta.dirname, pkg, triplets);
+    wrapNative(native, version);
+    mod_LibraryHandle = native.LibraryHandle;
+    mod_TypeObject = native.TypeObject;
+    mod_Union = native.Union;
+    mod_address = native.address;
+    mod_alias = native.alias;
+    mod_alignof = native.alignof;
+    mod_alloc = native.alloc;
+    mod_array = native.array;
+    mod_as = native.as;
+    mod_call = native.call;
+    mod_config = native.config;
+    mod_decode = native.decode;
+    mod_disposable = native.disposable;
+    mod_encode = native.encode;
+    mod_enumeration = native.enumeration;
+    mod_errno = native.errno;
+    mod_extension = native.extension;
+    mod_free = native.free;
+    mod_in = native.in;
+    mod_inout = native.inout;
+    mod_introspect = native.introspect;
+    mod_load = native.load;
+    mod_node = native.node;
+    mod_offsetof = native.offsetof;
+    mod_opaque = native.opaque;
+    mod_os = native.os;
+    mod_out = native.out;
+    mod_pack = native.pack;
+    mod_pointer = native.pointer;
+    mod_proto = native.proto;
+    mod_register = native.register;
+    mod_reset = native.reset;
+    mod_resolve = native.resolve;
+    mod_sizeof = native.sizeof;
+    mod_stats = native.stats;
+    mod_struct = native.struct;
+    mod_type = native.type;
+    mod_types = native.types;
+    mod_union = native.union;
+    mod_unregister = native.unregister;
+    mod_version = native.version;
+    mod_view = native.view;
+    index_default = native;
+  }
+});
+
+// ops/node_modules/koffi/index.js
+var init_koffi2 = __esm({
+  "ops/node_modules/koffi/index.js"() {
+    init_koffi();
+    init_koffi();
+  }
+});
+
+// ops/tools/dispatch-core/file_lock.mjs
+import { closeSync as closeSync4, openSync as openSync4 } from "node:fs";
+import { constants } from "node:os";
+function osError(operation, code, target) {
+  const error = new Error(`${operation} failed (${code}): ${target}`);
+  error.code = code;
+  return error;
+}
+function nativeBackend() {
+  if (backend) return backend;
+  if (process.platform === "win32") {
+    const kernel = index_default.load("kernel32.dll");
+    const create = kernel.func("intptr_t __stdcall CreateFileW(str16, uint32_t, uint32_t, void *, uint32_t, uint32_t, intptr_t)");
+    const lock = kernel.func("int __stdcall LockFileEx(intptr_t, uint32_t, uint32_t, uint32_t, uint32_t, void *)");
+    const close = kernel.func("int __stdcall CloseHandle(intptr_t)");
+    const lastError = kernel.func("uint32_t __stdcall GetLastError()");
+    backend = (target) => {
+      const handle = create(target, 3221225472, 3, null, 4, 128, 0);
+      if (handle === -1 || handle === -1n) throw osError("CreateFileW", lastError(), target);
+      let held = false;
+      try {
+        const overlapped = Buffer.alloc(index_default.sizeof("uintptr_t") * 3 + 8);
+        held = Boolean(lock(handle, 3, 0, 1, 0, overlapped));
+        if (!held) {
+          const code = lastError();
+          if (code === 33) return null;
+          throw osError("LockFileEx", code, target);
+        }
+        return () => {
+          if (!close(handle)) throw osError("CloseHandle", lastError(), target);
+        };
+      } finally {
+        if (!held) close(handle);
+      }
+    };
+  } else {
+    const libc = index_default.load(null);
+    const flock = libc.func("int flock(int, int)");
+    backend = (target) => {
+      const fd = openSync4(target, "a+");
+      let held = false;
+      try {
+        let result;
+        do {
+          result = flock(fd, 2 | 4);
+        } while (result !== 0 && index_default.errno() === constants.errno.EINTR);
+        held = result === 0;
+        if (!held) {
+          const code = index_default.errno();
+          if (code === constants.errno.EAGAIN || code === constants.errno.EWOULDBLOCK) return null;
+          throw osError("flock", code, target);
+        }
+        return () => closeSync4(fd);
+      } finally {
+        if (!held) closeSync4(fd);
+      }
+    };
+  }
+  return backend;
+}
+function tryFileLock(target) {
+  const release = nativeBackend()(target);
+  if (release === null) return null;
+  let released = false;
+  return Object.freeze({
+    release() {
+      if (released) return;
+      released = true;
+      release();
+    }
+  });
+}
+var backend;
+var init_file_lock = __esm({
+  "ops/tools/dispatch-core/file_lock.mjs"() {
+    init_koffi2();
+  }
+});
+
+// ops/tools/dispatch-core/fleet/constants.mjs
+import path16 from "node:path";
+var DEFAULT_STATE_ROOT, DEFAULT_ASYNC_TASK_ROOT, TERMINAL_STATES, ASYNC_TERMINAL_STATES, ACTIVE_STATES, FAILED_DEPENDENCY_STATES, SUMMARY_NODE_LIMIT, SUMMARY_EVENT_LIMIT, SAFE_ID_RE, INITIAL_LIVENESS_GRACE_SECONDS, RUN_LOCK_TIMEOUT_SECONDS, LIVENESS_RECHECK_SECONDS, DISPATCH_PREPARE_TIMEOUT_SECONDS, MAX_RUNTIME_EVIDENCE_BYTES, MAX_RUNTIME_USAGE_VALUE, RUNTIME_USAGE_FIELDS, ROUTE_KEYS;
+var init_constants = __esm({
+  "ops/tools/dispatch-core/fleet/constants.mjs"() {
+    init_tool_common();
+    DEFAULT_STATE_ROOT = path16.join(ROOT, ".runtime", "cockpit", "fleet_runs");
+    DEFAULT_ASYNC_TASK_ROOT = path16.join(ROOT, ".runtime", "cockpit", "async_tasks");
+    TERMINAL_STATES = /* @__PURE__ */ new Set(["done", "failed", "cancelled", "blocked", "needs_parent_review"]);
+    ASYNC_TERMINAL_STATES = /* @__PURE__ */ new Set(["done", "failed", "cancelled"]);
+    ACTIVE_STATES = /* @__PURE__ */ new Set(["submitted", "queued", "running", "cancel_requested"]);
+    FAILED_DEPENDENCY_STATES = /* @__PURE__ */ new Set(["failed", "cancelled", "blocked"]);
+    SUMMARY_NODE_LIMIT = 8;
+    SUMMARY_EVENT_LIMIT = 8;
+    SAFE_ID_RE = /[^A-Za-z0-9_.-]+/g;
+    INITIAL_LIVENESS_GRACE_SECONDS = 10 * 60;
+    RUN_LOCK_TIMEOUT_SECONDS = 30;
+    LIVENESS_RECHECK_SECONDS = 5 * 60;
+    DISPATCH_PREPARE_TIMEOUT_SECONDS = 5 * 60;
+    MAX_RUNTIME_EVIDENCE_BYTES = 128 * 1024;
+    MAX_RUNTIME_USAGE_VALUE = 2147483647;
+    RUNTIME_USAGE_FIELDS = [
+      "total_tokens",
+      "input_tokens",
+      "cached_input_tokens",
+      "output_tokens",
+      "reasoning_output_tokens",
+      "model_context_window"
+    ];
+    ROUTE_KEYS = ["executor", "model", "effort"];
+  }
+});
+
+// ops/tools/dispatch-core/fleet/deps.mjs
+var deps3;
+var init_deps = __esm({
+  "ops/tools/dispatch-core/fleet/deps.mjs"() {
+    deps3 = {};
+  }
+});
+
+// ops/tools/dispatch-core/fleet/paths.mjs
+import { mkdirSync as mkdirSync8, writeFileSync as writeFileSync6 } from "node:fs";
+import path17 from "node:path";
 function utcAfter(seconds) {
   const now = utcNow();
   const match = /^(.*?)(?:\.(\d{1,6}))?\+00:00$/.exec(now);
@@ -8097,15 +8172,8 @@ function safeId(value) {
   const cleaned = pyStripChars2(pyStrip(pyStr(value)).replace(SAFE_ID_RE, "-"), ".-");
   return cleaned || "fleet-run";
 }
-function pyStripChars2(text3, chars) {
-  let start = 0;
-  let end = text3.length;
-  while (start < end && chars.includes(text3[start])) start += 1;
-  while (end > start && chars.includes(text3[end - 1])) end -= 1;
-  return text3.slice(start, end);
-}
 function writeJson2(target, data) {
-  mkdirSync8(path16.dirname(target), { recursive: true });
+  mkdirSync8(path17.dirname(target), { recursive: true });
   writeFileSync6(target, `${canonicalJson(data)}
 `, "utf8");
   return null;
@@ -8123,29 +8191,43 @@ function stateRoot(value) {
   return requireRepoInternal(resolved, "state root");
 }
 function runDir(root, runId) {
-  return path16.join(pyStr(root), safeId(runId));
+  return path17.join(pyStr(root), safeId(runId));
 }
 function statePath(root, runId) {
-  return path16.join(runDir(root, runId), "state.json");
+  return path17.join(runDir(root, runId), "state.json");
 }
 function manifestSnapshotPath(root, runId) {
-  return path16.join(runDir(root, runId), "manifest.json");
+  return path17.join(runDir(root, runId), "manifest.json");
 }
 function seedPath(root, runId, nodeIdValue) {
-  return path16.join(runDir(root, runId), "seeds", `${safeId(nodeIdValue)}.json`);
+  return path17.join(runDir(root, runId), "seeds", `${safeId(nodeIdValue)}.json`);
 }
 function dependencyResultIndexPath(root, runId, nodeIdValue) {
-  return path16.join(runDir(root, runId), "dependency-results", `${safeId(nodeIdValue)}.json`);
+  return path17.join(runDir(root, runId), "dependency-results", `${safeId(nodeIdValue)}.json`);
 }
 function driverStatusPath(root, runId) {
-  return path16.join(runDir(root, runId), "driver.json");
+  return path17.join(runDir(root, runId), "driver.json");
 }
 function driverLogPath(root, runId) {
-  return path16.join(runDir(root, runId), "driver.log");
+  return path17.join(runDir(root, runId), "driver.log");
 }
 function runLockPath(root, runId) {
-  return path16.join(runDir(root, runId), "scheduler.lock");
+  return path17.join(runDir(root, runId), "scheduler.lock");
 }
+var init_paths = __esm({
+  "ops/tools/dispatch-core/fleet/paths.mjs"() {
+    init_py();
+    init_tool_common();
+    init_constants();
+    init_py_utils();
+  }
+});
+
+// ops/tools/dispatch-core/fleet/locks.mjs
+import { mkdirSync as mkdirSync9 } from "node:fs";
+import path18 from "node:path";
+import process9 from "node:process";
+import { setTimeout as delay } from "node:timers/promises";
 function runMutationLock(root, runId, fn, { timeoutSeconds = RUN_LOCK_TIMEOUT_SECONDS } = {}) {
   const lock = acquireRunLock(root, runId, timeoutSeconds);
   try {
@@ -8162,7 +8244,7 @@ function runMutationLock(root, runId, fn, { timeoutSeconds = RUN_LOCK_TIMEOUT_SE
 }
 function acquireRunLock(root, runId, timeoutSeconds = RUN_LOCK_TIMEOUT_SECONDS) {
   const target = runLockPath(root, runId);
-  mkdirSync8(path16.dirname(target), { recursive: true });
+  mkdirSync9(path18.dirname(target), { recursive: true });
   const deadline = deps3.monotonic() + Math.max(0, timeoutSeconds);
   for (; ; ) {
     const lock = tryFileLock(target);
@@ -8173,7 +8255,7 @@ function acquireRunLock(root, runId, timeoutSeconds = RUN_LOCK_TIMEOUT_SECONDS) 
 }
 async function acquireRunLockAsync(root, runId, timeoutSeconds = RUN_LOCK_TIMEOUT_SECONDS) {
   const target = runLockPath(root, runId);
-  mkdirSync8(path16.dirname(target), { recursive: true });
+  mkdirSync9(path18.dirname(target), { recursive: true });
   const deadline = deps3.monotonic() + Math.max(0, timeoutSeconds);
   for (; ; ) {
     const lock = tryFileLock(target);
@@ -8195,12 +8277,44 @@ function processAliveImpl(pid) {
   }
   if (value <= 0) return false;
   try {
-    process8.kill(value, 0);
+    process9.kill(value, 0);
   } catch {
     return false;
   }
   return true;
 }
+var init_locks = __esm({
+  "ops/tools/dispatch-core/fleet/locks.mjs"() {
+    init_tool_common();
+    init_file_lock();
+    init_constants();
+    init_deps();
+    init_paths();
+    init_py_utils();
+  }
+});
+
+// ops/tools/dispatch-core/fleet/api.mjs
+var api;
+var init_api = __esm({
+  "ops/tools/dispatch-core/fleet/api.mjs"() {
+    api = {};
+  }
+});
+
+// ops/tools/dispatch-core/fleet/host-paths.mjs
+var hostPaths;
+var init_host_paths = __esm({
+  "ops/tools/dispatch-core/fleet/host-paths.mjs"() {
+    hostPaths = {
+      SCHEDULER_CLI_PATH: "",
+      DISPATCH_PREPARE_PATH: "",
+      ASYNC_SERVICE_PATH: ""
+    };
+  }
+});
+
+// ops/tools/dispatch-core/fleet/route.mjs
 function newRouteRecord(requested, source) {
   return {
     source,
@@ -8291,9 +8405,6 @@ function routeFromPayload(payload) {
   }
   return result;
 }
-function notEmptyValue(value) {
-  return value !== null && value !== void 0 && value !== "";
-}
 function updateRouteFromPayload(node, payload, source) {
   const record2 = ensureRouteRecord(node);
   const actual = routeFromPayload(payload);
@@ -8318,214 +8429,19 @@ function normalizeDispatchOverrides(contextMode = "") {
   }
   return context ? { context_mode: context } : {};
 }
-function createInitialState(manifest, manifestPath, runId, root, dispatchOverrides = null) {
-  const nodes = [];
-  for (const node of Array.isArray(manifest.nodes) ? manifest.nodes : []) {
-    if (!isRecord(node)) continue;
-    const nid = nodeId(node);
-    const requestedRoute = nodeRoute(node);
-    const routeSource = nodeRouteSource(node);
-    const routeRecord = newRouteRecord(requestedRoute, routeSource);
-    const seed = nodeSeed(node);
-    nodes.push({
-      id: nid,
-      kind: nodeKind(node),
-      command_spec: nodeKind(node) === "command" ? nodeCommand(node) : null,
-      state: "pending",
-      route_id: Object.hasOwn(seed, "route_id") ? seed.route_id : Object.hasOwn(node, "route_id") ? node.route_id : "",
-      role: nodeRole(node),
-      route: routeRecord,
-      route_source: routeSource,
-      requested_route: deepCopy2(requestedRoute),
-      actual_route: null,
-      usage_provenance: null,
-      depends_on: nodeDependsOn(node),
-      dependency_policy: nodeDependencyPolicy(node),
-      failure_policy: nodeFailurePolicy(node),
-      resource_locks: nodeResourceLocks(node),
-      is_reducer: nodeIsReducer(node),
-      isolation: nodeIsolation(node, manifest),
-      write_scope: nodeWriteScope(node),
-      task_id: null,
-      task_root: pyStr(DEFAULT_ASYNC_TASK_ROOT),
-      worktree_path: null,
-      dispatch: null,
-      last_status: null,
-      review_required: false,
-      review_decision: null,
-      review: null,
-      review_round: 0,
-      review_history: [],
-      revision: 0,
-      updated_at: utcNow()
-    });
+var init_route = __esm({
+  async "ops/tools/dispatch-core/fleet/route.mjs"() {
+    init_py();
+    init_tool_common();
+    await init_fleet_manifest_check();
+    init_constants();
+    init_py_utils();
   }
-  return {
-    run_state_schema_version: 1,
-    run_id: runId,
-    created_at: utcNow(),
-    updated_at: utcNow(),
-    repo_root: pyStr(ROOT),
-    manifest_source: pyStr(manifestPath),
-    manifest_snapshot: pyStr(manifestSnapshotPath(root, runId)),
-    state_root: pyStr(root),
-    budget: effectiveBudget(manifest),
-    review_policy: effectiveReviewPolicy(manifest),
-    dispatch_overrides: { ...dispatchOverrides || {} },
-    run_state: "created",
-    revision: 0,
-    event_revision: 0,
-    ready_queue: [],
-    ready_queue_revision: 0,
-    failure_fuse: { status: "open", blocked_nodes: [] },
-    fleet_settled_emitted: false,
-    nodes,
-    events: []
-  };
-}
-function indexNodes(state) {
-  const out = /* @__PURE__ */ Object.create(null);
-  for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
-    if (isRecord(node)) out[node.id] = node;
-  }
-  return out;
-}
-function positiveInt(value, fallback = 0) {
-  let parsed;
-  try {
-    parsed = pyInt(value);
-  } catch {
-    return fallback;
-  }
-  return parsed >= 0 ? parsed : fallback;
-}
-function appendFleetEvent(state, eventType, node = null, options = {}) {
-  const { businessState = null, incrementNodeRevision = true, ...details } = options;
-  if (node !== null && incrementNodeRevision) {
-    node.revision = positiveInt(node.revision) + 1;
-  }
-  state.revision = positiveInt(state.revision) + 1;
-  const timestamp = utcNow();
-  const nodeState = pyStr(node !== null ? node.state : state.run_state || "unknown");
-  const business = businessState || (Object.hasOwn(BUSINESS_STATE_BY_NODE_STATE, nodeState) ? BUSINESS_STATE_BY_NODE_STATE[nodeState] : nodeState);
-  const cursorRevision = positiveInt(state.event_revision) + 1;
-  state.event_revision = cursorRevision;
-  const event = {
-    at: timestamp,
-    timestamp,
-    type: eventType,
-    run_id: pyStr(state.run_id || ""),
-    node_id: node !== null ? pyStr(node.id || "") : "",
-    task_id: node !== null ? node.task_id ?? null : null,
-    revision: node !== null ? positiveInt(node.revision) : positiveInt(state.revision),
-    node_revision: node !== null ? positiveInt(node.revision) : null,
-    fleet_revision: cursorRevision,
-    cursor: `${state.run_id}+${cursorRevision}`,
-    state: nodeState,
-    business_state: business,
-    ...details
-  };
-  let events = state.events;
-  if (!Array.isArray(events)) {
-    events = [];
-    state.events = events;
-  }
-  events.push(event);
-  if (events.length > 200) events.splice(0, events.length - 200);
-  return event;
-}
-function setNodeState(state, node, nodeState, options = {}) {
-  const { eventType = "agent_progress", businessState = null, ...details } = options;
-  const before = pyStr(node.state || "");
-  node.state = nodeState;
-  node.updated_at = utcNow();
-  if (before !== nodeState || ["agent_started", "agent_settled", "reducer_settled"].includes(eventType)) {
-    appendFleetEvent(state, eventType, node, { businessState, ...details });
-  }
-  return before !== nodeState;
-}
-function setFailureFuse(state, { nodeIdValue, reason, blocker = null } = {}) {
-  let fuse = state.failure_fuse;
-  if (!isRecord(fuse)) {
-    fuse = {};
-    state.failure_fuse = fuse;
-  }
-  fuse.status = "tripped";
-  fuse.reason = reason;
-  fuse.tripped_by = blocker || nodeIdValue;
-  if (!Object.hasOwn(fuse, "blocked_nodes")) fuse.blocked_nodes = [];
-  const blockedNodes = fuse.blocked_nodes;
-  if (Array.isArray(blockedNodes) && !blockedNodes.includes(nodeIdValue)) blockedNodes.push(nodeIdValue);
-  return null;
-}
-function rebuildReadyQueue(state, manifestNodesList, { preserveExisting = true } = {}) {
-  const byId = indexNodes(state);
-  const [layers] = topologicalLayers(manifestNodesList);
-  const criticality = downstreamCounts(manifestNodesList);
-  const layerIndex = /* @__PURE__ */ Object.create(null);
-  layers.forEach((layer, index) => {
-    for (const nid of layer) layerIndex[nid] = index;
-  });
-  const existing = preserveExisting ? state.ready_queue : [];
-  const existingIds = Array.isArray(existing) ? existing.map((item) => pyStr(item)) : [];
-  const candidates = /* @__PURE__ */ new Set();
-  for (const [nid, node] of Object.entries(byId)) {
-    if (node.state === "pending" && dependenciesReady(node, byId)) candidates.add(pyStr(nid));
-  }
-  const ordered = existingIds.filter((nid) => candidates.has(nid));
-  for (const nid of candidates) {
-    if (!ordered.includes(nid)) ordered.push(nid);
-  }
-  ordered.sort((left, right) => {
-    const leftKey = [-(criticality[left] ?? 0), layerIndex[left] ?? 0, left];
-    const rightKey = [-(criticality[right] ?? 0), layerIndex[right] ?? 0, right];
-    for (let i = 0; i < 3; i += 1) {
-      if (leftKey[i] < rightKey[i]) return -1;
-      if (leftKey[i] > rightKey[i]) return 1;
-    }
-    return 0;
-  });
-  state.ready_queue = ordered;
-  state.ready_queue_revision = positiveInt(state.revision);
-  return ordered;
-}
-function startRun(manifestFile, runIdArg, root, force, dispatchOverrides = null) {
-  const resolvedRoot = requireRepoInternal(root, "state root");
-  const manifest = loadManifest(manifestFile);
-  const validation = validateManifest(manifest);
-  if (validation.status !== "ok") {
-    throw new ToolError(`fleet manifest failed validation: ${validation.errors.join("; ")}`);
-  }
-  const stem = path16.basename(pyStr(manifestFile)).replace(/\.[^.\\/]*$/, "");
-  const runId = safeId(runIdArg || pyStr(manifest.run_id || stem));
-  const directory = runDir(resolvedRoot, runId);
-  if (existsSync9(directory) && !force) throw new ToolError(`fleet run already exists: ${rel(directory)}`);
-  if (existsSync9(cancellationPath(resolvedRoot, runId))) throw new ToolError("cancelled fleet records are retained; use a new run_id");
-  if (existsSync9(directory) && force) rmSync4(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-  mkdirSync8(directory, { recursive: true });
-  writeJson2(manifestSnapshotPath(resolvedRoot, runId), manifest);
-  const state = createInitialState(
-    manifest,
-    resolveLikePython(manifestFile),
-    runId,
-    resolvedRoot,
-    dispatchOverrides
-  );
-  state.run_state = "running";
-  appendFleetEvent(state, "fleet_started", null, {
-    businessState: "running",
-    incrementNodeRevision: false,
-    manifest: pyStr(manifestFile)
-  });
-  rebuildReadyQueue(state, Array.isArray(manifest.nodes) ? [...manifest.nodes] : [], { preserveExisting: false });
-  writeJson2(statePath(resolvedRoot, runId), state);
-  return {
-    status: "ok",
-    run_id: runId,
-    state_path: rel(statePath(resolvedRoot, runId)),
-    nodes: state.nodes.length
-  };
-}
+});
+
+// ops/tools/dispatch-core/fleet/async-runtime.mjs
+import { existsSync as existsSync9, readdirSync as readdirSync7, readFileSync as readFileSync10, statSync as statSync11 } from "node:fs";
+import path19 from "node:path";
 function runCommandImpl(cmd, cwd, { stdin = null, timeout = 60 } = {}) {
   const argv = cmd.map((item) => pyStr(item));
   const proc = pySpawnSync(argv[0], argv.slice(1), {
@@ -8549,6 +8465,9 @@ function runCommandImpl(cmd, cwd, { stdin = null, timeout = 60 } = {}) {
     stderr: pyStr(proc.stderr ?? "")
   };
 }
+function runCommand(cmd, cwd, options = {}) {
+  return deps3.runCommand(cmd, cwd, options);
+}
 function parseJsonStdout(result, label) {
   const text3 = pyStrip(pyStr(result.stdout || ""));
   if (!text3) throw new ToolError(`${label} returned empty stdout: ${pyStr(result.stderr ?? "").slice(0, 400)}`);
@@ -8563,11 +8482,11 @@ function parseJsonStdout(result, label) {
   return data;
 }
 function nodeTaskRoot(state, node) {
-  const defaultRoot = path16.join(runDir(pyStr(state.state_root), pyStr(state.run_id)), "async_tasks");
+  const defaultRoot = path19.join(runDir(pyStr(state.state_root), pyStr(state.run_id)), "async_tasks");
   return pyStr(node.task_root || defaultRoot);
 }
 function asyncCompletionInbox(taskRoot) {
-  return path16.join(path16.dirname(resolveLikePython(taskRoot)), "async_inbox");
+  return path19.join(path19.dirname(resolveLikePython(taskRoot)), "async_inbox");
 }
 function runtimeTaskDir(node) {
   const lastStatus = isRecord(node.last_status) ? node.last_status : {};
@@ -8585,7 +8504,7 @@ function runtimeTaskDir(node) {
 }
 function readBoundedRuntimeJson(target) {
   try {
-    if (!isFile4(target) || statSync10(target).size > MAX_RUNTIME_EVIDENCE_BYTES) return null;
+    if (!isFile4(target) || statSync11(target).size > MAX_RUNTIME_EVIDENCE_BYTES) return null;
     const raw = readFileSync10(target);
     if (raw.length > MAX_RUNTIME_EVIDENCE_BYTES) return null;
     const data = pyJsonLoads(new TextDecoder("utf-8", { fatal: true }).decode(raw));
@@ -8599,8 +8518,8 @@ function readTerminalRuntimeArtifacts(node) {
   if (taskDir === null) return {};
   const artifacts = {};
   for (const name of ["status.json", "child-task-live.json", "child-task-result.json"]) {
-    const target = resolveLikePython(path16.join(taskDir, name));
-    if (!pySamePath(path16.dirname(target), taskDir)) continue;
+    const target = resolveLikePython(path19.join(taskDir, name));
+    if (!pySamePath(path19.dirname(target), taskDir)) continue;
     const data = readBoundedRuntimeJson(target);
     if (data !== null) artifacts[name] = data;
   }
@@ -8713,7 +8632,7 @@ function applyAsyncStatus(node, status, source, fleetState = null) {
   if (fleetState !== null && fleetState !== void 0) {
     const terminal = TERMINAL_STATES.has(node.state);
     const eventType = terminal && node.is_reducer ? "reducer_settled" : terminal ? "agent_settled" : "agent_progress";
-    appendFleetEvent(fleetState, eventType, node, {
+    api.appendFleetEvent(fleetState, eventType, node, {
       businessState: pyStr(status.business_state || "") || null,
       source,
       changed,
@@ -8733,7 +8652,7 @@ function readCompletionNotices(taskRoot, taskIds) {
   const names = sortedStrings2(readdirSync7(inbox).filter((name) => name.endsWith(".json")));
   for (const name of names) {
     if (name.endsWith(".stall.json") || name.endsWith(".attention.json")) continue;
-    const noticePath = path16.join(inbox, name);
+    const noticePath = path19.join(inbox, name);
     let notice;
     try {
       notice = pyJsonLoads(pyReadText(noticePath));
@@ -8799,7 +8718,7 @@ function waitForCompletionNotices(state, waitMs, { pollIntervalMs = 250 } = {}) 
   const deadline = deps3.monotonic() + waitMs / 1e3;
   const errors = /* @__PURE__ */ new Set();
   for (; ; ) {
-    if (state.state_root && state.run_id && existsSync9(cancellationPath(state.state_root, state.run_id))) {
+    if (state.state_root && state.run_id && existsSync9(api.cancellationPath(state.state_root, state.run_id))) {
       return { status: "cancelling", event: "cancellation_requested", active: activeNodes.length, notices: [] };
     }
     const found = /* @__PURE__ */ Object.create(null);
@@ -8842,7 +8761,7 @@ function asyncInternalBatchImpl(operation, taskRoot, taskIds, { detail = "compac
     const batch = taskIds.slice(start, start + batchSize);
     const argv = [
       "node",
-      ASYNC_SERVICE_PATH,
+      hostPaths.ASYNC_SERVICE_PATH,
       "internal",
       operation,
       "--task-root",
@@ -8970,543 +8889,46 @@ function refreshActiveNodes(state, { forceReconcile = false } = {}) {
   }
   return summary;
 }
-function acceptanceLeafExpectedIds(manifestNode) {
-  const seed = nodeSeed(manifestNode);
-  const contract = isRecord(seed.contract) ? seed.contract : {};
-  const context = isRecord(contract.acceptance_context) ? contract.acceptance_context : {};
-  const items = Array.isArray(context.items) ? context.items : [];
-  let ids2 = items.filter((item) => isRecord(item) && item.acceptance_id).map((item) => pyStr(item.acceptance_id));
-  if (!ids2.length && context.acceptance_id) ids2 = [pyStr(context.acceptance_id)];
-  return ids2;
-}
-function acceptanceResultsBlockIssue(reportPath, expectedIds) {
-  let text3;
-  try {
-    text3 = pyReadText(reportPath);
-  } catch {
-    return `report not readable: ${rel(reportPath)}`;
-  }
-  const match = ACCEPTANCE_RESULTS_BLOCK.exec(text3);
-  if (!match) return "missing ```json acceptance_results block";
-  let payload;
-  try {
-    payload = pyJsonLoads(match[1]);
-  } catch (error) {
-    if (error?.name !== "JSONDecodeError") throw error;
-    return `acceptance_results block is invalid JSON: ${error.message}`;
-  }
-  const entries = isRecord(payload) ? payload.acceptance_results : null;
-  if (!Array.isArray(entries)) return "acceptance_results block root must contain an acceptance_results list";
-  const seen = [];
-  for (const entry of entries) {
-    if (!isRecord(entry)) return "acceptance_results entries must be objects";
-    if (!["pass", "fail", "needs_owner"].includes(entry.gate)) {
-      return `acceptance_results gate invalid: ${pyStr(entry.gate ?? null)}`;
-    }
-    seen.push(pyStr(entry.acceptance_id ?? null));
-  }
-  const seenSorted = sortedStrings2(new Set(seen));
-  const expectedSorted = sortedStrings2(new Set(expectedIds));
-  if (!pyDictEqual(seenSorted, expectedSorted) || seen.length !== new Set(seen).size) {
-    return `acceptance_results ids mismatch: got ${pyRepr(sortedStrings2(seen))}, expected ${pyRepr(sortedStrings2(expectedIds))}`;
-  }
-  return null;
-}
-function enforceAcceptanceResultsGate(state, manifestById, { reportRoot = null } = {}) {
-  if (!Object.values(manifestById).some((node) => nodeIsReducer(node))) return [];
-  const actions = [];
-  const byId = indexNodes(state);
-  for (const [nid, manifestNode] of Object.entries(manifestById)) {
-    if (nodeIsReducer(manifestNode)) continue;
-    const expectedIds = acceptanceLeafExpectedIds(manifestNode);
-    if (!expectedIds.length) continue;
-    const node = byId[nid];
-    if (!node || node.state !== "done") continue;
-    const taskId = pyStr(node.task_id || "");
-    if (!taskId || node.acceptance_results_checked === taskId) continue;
-    const slug = pyStr(nodeSeed(manifestNode).slug || "");
-    const reportPath = path16.join(reportRoot || path16.join(ROOT, "notes", "verify"), `${slug}.md`);
-    const issue = acceptanceResultsBlockIssue(reportPath, expectedIds);
-    node.acceptance_results_checked = taskId;
-    if (issue === null) {
-      delete node.acceptance_results_block;
-      continue;
-    }
-    node.acceptance_results_block = issue;
-    actions.push({ node: nid, action: "derive_from_prose", issue });
-  }
-  return actions;
-}
-function downstreamCounts(manifestNodesList) {
-  const ids2 = manifestNodesList.map((node) => nodeId(node));
-  const reverse = /* @__PURE__ */ new Map();
-  for (const nid of ids2) if (!reverse.has(nid)) reverse.set(nid, /* @__PURE__ */ new Set());
-  for (const node of manifestNodesList) {
-    const nid = nodeId(node);
-    for (const dep of nodeDependsOn(node)) {
-      if (reverse.has(dep)) reverse.get(dep).add(nid);
-    }
-  }
-  const memo = /* @__PURE__ */ new Map();
-  const visit = (nid) => {
-    if (memo.has(nid)) return memo.get(nid);
-    const children = /* @__PURE__ */ new Set();
-    memo.set(nid, children);
-    for (const child of reverse.get(nid) ?? /* @__PURE__ */ new Set()) {
-      children.add(child);
-      for (const item of visit(child)) children.add(item);
-    }
-    memo.set(nid, children);
-    return children;
-  };
-  const out = /* @__PURE__ */ Object.create(null);
-  for (const nid of ids2) out[nid] = visit(nid).size;
-  return out;
-}
-function dependenciesReady(node, byId) {
-  const policy = pyStr(node.dependency_policy || "all_succeeded");
-  for (const dep of node.depends_on || []) {
-    const depNode = byId[dep] ?? {};
-    const depState = depNode.state;
-    if (depNode.kind === "gate") {
-      if (depState !== "done") return false;
-      continue;
-    }
-    if (depState === "needs_parent_review" && requiresSafetyReview(depNode.last_status || {})) return false;
-    if (policy === "all_settled") {
-      if (!TERMINAL_STATES.has(depState)) return false;
-    } else if (depState !== "done") {
-      return false;
-    }
-  }
-  return true;
-}
-function blockedByFailedDependency(node, byId) {
-  const toleratesFailure = pyStr(node.dependency_policy || "all_succeeded") === "all_settled" || pyStr(node.failure_policy || "success_only") === "all_settled";
-  for (const dep of node.depends_on || []) {
-    const depNode = byId[dep] ?? {};
-    const depState = depNode.state;
-    if (!FAILED_DEPENDENCY_STATES.has(depState)) continue;
-    if (depNode.kind === "gate" || !toleratesFailure) return pyStr(dep);
-  }
-  return null;
-}
-function registerAllSettledConsumers(state) {
-  const byId = indexNodes(state);
-  const consumersByDependency = /* @__PURE__ */ new Map();
-  for (const consumer of Array.isArray(state.nodes) ? state.nodes : []) {
-    if (!isRecord(consumer) || consumer.dependency_policy !== "all_settled") continue;
-    const consumerId = pyStr(consumer.id || "");
-    for (const dependencyId of consumer.depends_on || []) {
-      const key = pyStr(dependencyId);
-      if (!consumersByDependency.has(key)) consumersByDependency.set(key, []);
-      consumersByDependency.get(key).push(consumerId);
-    }
-  }
-  const changed = [];
-  for (const [dependencyId, consumerIds] of consumersByDependency) {
-    const dependency = byId[dependencyId];
-    if (!dependency || !TERMINAL_STATES.has(dependency.state)) continue;
-    if (dependency.kind === "gate" || requiresSafetyReview(dependency.last_status || {})) {
-      continue;
-    }
-    const normalizedConsumers = sortedStrings2(new Set(consumerIds));
-    if (!pyDictEqual(dependency.all_settled_consumers ?? null, normalizedConsumers)) {
-      dependency.all_settled_consumers = normalizedConsumers;
-      changed.push(dependencyId);
-    }
-    if (dependency.state === "needs_parent_review") {
-      const lastStatus = isRecord(dependency.last_status) ? dependency.last_status : {};
-      const executionState = lastStatus.state;
-      if (!ASYNC_TERMINAL_STATES.has(executionState)) continue;
-      setNodeState(state, dependency, executionState, {
-        eventType: "agent_settled",
-        businessState: pyStr(lastStatus.business_state || "") || null,
-        review_deferred_to: normalizedConsumers
-      });
-      dependency.review_required = false;
-      dependency.review_decision = null;
-      dependency.review_deferred_to = normalizedConsumers;
-      changed.push(dependencyId);
-    }
-    dependency.updated_at = utcNow();
-  }
-  return sortedStrings2(new Set(changed));
-}
-function releaseResolvedDependencyBlocks(state, byId) {
-  const released = [];
-  for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
-    if (!isRecord(node) || node.state !== "blocked") continue;
-    const blocker = pyStr(node.blocked_by || "");
-    const dependencies = new Set((node.depends_on || []).map((dep) => pyStr(dep)));
-    if (!dependencies.has(blocker)) continue;
-    const blockerState = (byId[blocker] ?? {}).state;
-    if (pyStr(node.dependency_policy || "all_succeeded") !== "all_settled" && FAILED_DEPENDENCY_STATES.has(blockerState)) {
-      continue;
-    }
-    node.state = "pending";
-    delete node.blocked_by;
-    node.updated_at = utcNow();
-    released.push(pyStr(node.id || ""));
-  }
-  return released;
-}
-function reviewEvidencePath(value) {
-  if (!pyStrip(value)) throw new ToolError("review evidence is required");
-  const resolved = requireRepoInternal(resolveUnder(pyStrip(value), ROOT), "review evidence");
-  if (!existsSync9(resolved)) throw new ToolError(`review evidence does not exist: ${rel(resolved)}`);
-  return rel(resolved);
-}
-function appendReviewRecord(node, record2) {
-  if (!Object.hasOwn(node, "review_history")) node.review_history = [];
-  const history = node.review_history;
-  if (Array.isArray(history)) {
-    history.push(record2);
-    if (history.length > 20) history.splice(0, history.length - 20);
-  }
-  node.review = record2;
-  node.review_decision = record2.decision;
-  node.review_required = false;
-  node.reviewed_at = record2.reviewed_at;
-  return null;
-}
-function reviewRun(runId, root, nodeIdValue, decision, evidence, reason) {
-  const resolvedRoot = requireRepoInternal(root, "state root");
-  return runMutationLock(resolvedRoot, runId, () => reviewRunLocked(runId, resolvedRoot, nodeIdValue, decision, evidence, reason));
-}
-function reviewRunLocked(runId, root, nodeIdValue, decision, evidence, reason) {
-  const resolvedRoot = requireRepoInternal(root, "state root");
-  const target = statePath(resolvedRoot, runId);
-  const state = loadJson(target);
-  const node = indexNodes(state)[nodeIdValue];
-  if (!node) throw new ToolError(`node not found: ${nodeIdValue}`);
-  if (existsSync9(cancellationPath(resolvedRoot, runId))) throw new ToolError("fleet cancellation requested; start a new run instead of reviewing this run");
-  const currentState = node.state;
-  const settledRequeue = decision === "requeued" && ["done", "blocked", "failed", "cancelled"].includes(currentState);
-  if (node.resource_quarantined || currentState !== "needs_parent_review" && !settledRequeue) {
-    throw new ToolError(`node is not waiting for parent review: ${nodeIdValue} state=${pyStr(node.state ?? null)}`);
-  }
-  const evidencePath = decision === "requeued" && !pyStrip(evidence) ? null : reviewEvidencePath(evidence);
-  const record2 = {
-    decision,
-    evidence_path: evidencePath,
-    reason: pyStrip(reason),
-    reviewed_at: utcNow(),
-    previous_state: node.state ?? null,
-    previous_task_id: node.task_id ?? null
-  };
-  let reviewRound = positiveInt(node.review_round);
-  if (decision !== "accepted") reviewRound += 1;
-  node.review_round = reviewRound;
-  record2.round = reviewRound;
-  appendReviewRecord(node, record2);
-  const fuseTripped = false;
-  if (decision === "accepted") {
-    setNodeState(state, node, "done", { eventType: "agent_settled", businessState: "completed" });
-    delete node.blocked_by;
-  } else if (decision === "blocked") {
-    setNodeState(state, node, "blocked", { eventType: "agent_settled", businessState: "blocked" });
-    node.blocked_by = "parent_review";
-  } else if (decision === "requeued") {
-    const previousTaskId = pyStr(node.task_id || "");
-    if (previousTaskId) {
-      if (!Object.hasOwn(node, "superseded_task_ids")) node.superseded_task_ids = [];
-      const superseded = node.superseded_task_ids;
-      if (Array.isArray(superseded) && !superseded.includes(previousTaskId)) {
-        superseded.push(previousTaskId);
-        if (superseded.length > 20) superseded.splice(0, superseded.length - 20);
-      }
-    }
-    node.task_id = null;
-    node.receipt_task_id = null;
-    node.dispatch = null;
-    node.last_status = null;
-    node.review_required = false;
-    node.review_decision = null;
-    node.review = null;
-    delete node.reviewed_at;
-    delete node.next_liveness_check_at;
-    delete node.blocked_by;
-    setNodeState(state, node, "pending", { eventType: "agent_progress", businessState: "queued" });
-  } else {
-    throw new ToolError("review decision must be accepted, blocked or requeued");
-  }
-  node.updated_at = utcNow();
-  state.updated_at = utcNow();
-  appendFleetEvent(state, "review", node, {
-    incrementNodeRevision: false,
-    decision,
-    evidence_path: evidencePath,
-    review_round: reviewRound,
-    fuse_tripped: fuseTripped
-  });
-  const manifest = loadManifestSnapshotForStatus(state);
-  if (manifest) rebuildReadyQueue(state, Array.isArray(manifest.nodes) ? [...manifest.nodes] : []);
-  writeJson2(target, state);
-  return {
-    status: "ok",
-    run_id: runId,
-    node_id: nodeIdValue,
-    decision,
-    node_state: node.state,
-    review_round: reviewRound,
-    fuse_tripped: fuseTripped,
-    state_path: rel(target)
-  };
-}
-function activeWriteScopes(state) {
-  const scopes = [];
-  for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
-    if (isRecord(node) && (ACTIVE_STATES.has(node.state) || node.resource_quarantined)) {
-      scopes.push([pyStr(node.id ?? null), [...node.write_scope || []]]);
-    }
-  }
-  return scopes;
-}
-function activeResourceLocks(state) {
-  const locks = [];
-  for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
-    if (isRecord(node) && (ACTIVE_STATES.has(node.state) || node.resource_quarantined)) {
-      const raw = node.resource_locks;
-      const values = Array.isArray(raw) ? sortedStrings2(new Set(raw.map((item) => pyStrip(pyStr(item))).filter((item) => item))) : [];
-      if (values.length) locks.push([pyStr(node.id || ""), values]);
-    }
-  }
-  return locks;
-}
-function writeLocked(node, active) {
-  const scope = [...node.write_scope || []];
-  if (!scope.length) return null;
-  for (const [owner, otherScope] of active) {
-    for (const left of scope) {
-      for (const right of otherScope) {
-        if (pathConflict(left, right)) return owner;
-      }
-    }
-  }
-  return null;
-}
-function resourceLocked(node, active) {
-  const requested = new Set(
-    (node.resource_locks || []).map((item) => pyStrip(pyStr(item))).filter((item) => item)
-  );
-  if (!requested.size) return null;
-  for (const [owner, held] of active) {
-    if (held.some((item) => requested.has(item))) return owner;
-  }
-  return null;
-}
-function budgetAllows(node, state, submittedThisTick) {
-  const budget = isRecord(state.budget) ? state.budget : {};
-  const activeNodes = (Array.isArray(state.nodes) ? state.nodes : []).filter(
-    (n) => isRecord(n) && ACTIVE_STATES.has(n.state)
-  );
-  const maxTotal = pyInt(budget.max_running_total || 8);
-  const maxTick = pyInt(budget.max_submitted_per_tick || maxTotal);
-  if (activeNodes.length >= maxTotal) return [false, `max_running_total ${maxTotal} reached`];
-  if (submittedThisTick >= maxTick) return [false, `max_submitted_per_tick ${maxTick} reached`];
-  const roleLimits = isRecord(budget.max_running_by_role) ? budget.max_running_by_role : {};
-  const role = pyStr(node.role || "");
-  const roleLimit = roleLimits[role];
-  if (typeof roleLimit === "number" && Number.isInteger(roleLimit) && typeof roleLimit !== "boolean" && roleLimit > 0) {
-    const roleActive = activeNodes.filter((n) => n.role === role).length;
-    if (roleActive >= roleLimit) return [false, `max_running_by_role.${role} ${roleLimit} reached`];
-  }
-  return [true, ""];
-}
-function ensureWorktree(state, node) {
-  const worktreeRoot = path16.join(runDir(pyStr(state.state_root), state.run_id), "worktrees");
-  const worktree = path16.join(worktreeRoot, safeId(pyStr(node.id)));
-  if (node.worktree_path) return pyStr(node.worktree_path);
-  if (existsSync9(worktree)) throw new ToolError(`worktree path already exists before dispatch: ${rel(worktree)}`);
-  const result = deps3.runCommand(["git", "worktree", "add", "--detach", worktree, "HEAD"], ROOT, { timeout: 120 });
-  if (result.exit_code !== 0) {
-    throw new ToolError(`git worktree add failed for ${node.id}: ${result.stderr.slice(0, 600)}`);
-  }
-  node.worktree_path = worktree;
-  return worktree;
-}
-function dependencyResultEntries(state, node, manifestNode) {
-  const requested = nodeDependencyArtifacts(manifestNode);
-  const policy = nodeDependencyPolicy(manifestNode);
-  const byId = indexNodes(state);
-  const resolved = [];
-  const entries = [];
-  for (const dependencyId of node.depends_on || []) {
-    const dependency = byId[pyStr(dependencyId)] ?? {};
-    const lastStatus = isRecord(dependency.last_status) ? dependency.last_status : {};
-    const dispatch = isRecord(dependency.dispatch) ? dependency.dispatch : {};
-    const businessOutput = isRecord(dispatch.business_output) ? dispatch.business_output : {};
-    const artifactPaths = {};
-    const missingArtifacts = [];
-    const requestedForDep = dependency.kind === "gate" ? [] : requested;
-    for (const artifact of requestedForDep) {
-      const candidates = artifact === "report" ? [
-        lastStatus.business_report_path,
-        lastStatus.report_path,
-        lastStatus.declared_report_path,
-        businessOutput.expected_report_path
-      ] : [
-        lastStatus.business_handoff_path,
-        lastStatus.handoff_path,
-        lastStatus.declared_handoff_path,
-        businessOutput.expected_handoff_path
-      ];
-      let selected = "";
-      for (const candidate of candidates) {
-        if (typeof candidate !== "string" || !pyStrip(candidate)) continue;
-        const target = resolveUnder(candidate, ROOT);
-        if (existsSync9(target)) {
-          selected = target;
-          break;
-        }
-      }
-      if (!selected) {
-        missingArtifacts.push(artifact);
-        if (policy !== "all_settled") {
-          throw new ToolError(
-            `node ${pyStr(node.id ?? null)} dependency ${dependencyId} has no durable ${artifact} artifact`
-          );
-        }
-        continue;
-      }
-      artifactPaths[artifact] = selected;
-      if (!resolved.includes(selected)) resolved.push(selected);
-    }
-    let artifactState;
-    if (!requestedForDep.length) artifactState = "not_requested";
-    else if (!missingArtifacts.length) artifactState = "available";
-    else if (Object.keys(artifactPaths).length) artifactState = "partial";
-    else artifactState = "missing";
-    const entry = {
-      node_id: pyStr(dependencyId),
-      execution_state: lastStatus.state || dependency.state || "unknown",
-      orchestration_state: dependency.state || "unknown",
-      business_state: lastStatus.business_state || "unknown",
-      artifact_state: artifactState,
-      artifacts: artifactPaths,
-      missing_artifacts: missingArtifacts
-    };
-    for (const key of ["contract_state", "failure_type", "error"]) {
-      const value = lastStatus[key];
-      if (notEmptyPy(value)) entry[key] = typeof value === "string" ? shortText(value) : value;
-    }
-    const blockIssue = dependency.acceptance_results_block;
-    if (blockIssue) {
-      entry.acceptance_results_block = typeof blockIssue === "string" ? shortText(blockIssue) : blockIssue;
-    }
-    entries.push(entry);
-  }
-  return [resolved, entries];
-}
-function writeDependencyResultIndex(state, node, manifestNode, entries) {
-  const root = pyStr(state.state_root);
-  const target = dependencyResultIndexPath(root, pyStr(state.run_id), pyStr(node.id));
-  writeJson2(target, {
-    schema_version: 1,
-    consumer_node_id: pyStr(node.id),
-    dependency_policy: "all_settled",
-    requested_artifacts: nodeDependencyArtifacts(manifestNode),
-    dependencies: entries
-  });
-  return resolveLikePython(target);
-}
-function seedWithDependencyArtifacts(state, node, manifestNode, manifest = {}) {
-  const seed = nodeSeed(manifestNode);
-  const writes = [...stringList2(manifestNode.write_scope), ...stringList2(manifestNode.write_domains)];
-  if (writes.length && nodeIsolation(manifestNode, manifest) !== "read_only" && nodeTargetIsolation(manifestNode, manifest) !== "read_only") {
-    seed.scope ??= {};
-    seed.scope.write_extra = dedupe([...seed.scope.write_extra || [], ...writes]);
-  }
-  let [artifacts, entries] = dependencyResultEntries(state, node, manifestNode);
-  if (nodeDependencyPolicy(manifestNode) === "all_settled") {
-    const indexPath = writeDependencyResultIndex(state, node, manifestNode, entries);
-    artifacts = [indexPath, ...artifacts];
-  }
-  if (!artifacts.length) return seed;
-  if (!Object.hasOwn(seed, "scope")) seed.scope = {};
-  const scope = seed.scope;
-  if (!isRecord(scope)) throw new ToolError(`node ${pyStr(node.id ?? null)} seed.scope must be an object`);
-  const reads = Object.hasOwn(scope, "read") ? scope.read : [];
-  if (!Array.isArray(reads)) throw new ToolError(`node ${pyStr(node.id ?? null)} seed.scope.read must be a list`);
-  scope.read = dedupe([...artifacts, ...reads]);
-  const layers = seed.read_scope_layers;
-  if (isRecord(layers)) {
-    const entry = Object.hasOwn(layers, "entry") ? layers.entry : [];
-    if (!Array.isArray(entry)) {
-      throw new ToolError(`node ${pyStr(node.id ?? null)} seed.read_scope_layers.entry must be a list`);
-    }
-    layers.entry = dedupe([...artifacts, ...entry]);
-  }
-  return seed;
-}
-function markFailure(node, { contractState, failureType, error, fleetState = null } = {}) {
-  node.state = "failed";
-  node.review_required = false;
-  node.review_decision = null;
-  node.last_status = {
-    source: "fleet_scheduler",
-    state: "failed",
-    business_state: "failed",
-    contract_state: contractState,
-    failure_type: failureType,
-    error
-  };
-  node.updated_at = utcNow();
-  if (fleetState) appendFleetEvent(fleetState, "agent_settled", node, {
-    businessState: "failed",
-    contract_state: contractState,
-    failure_type: failureType,
-    error,
-    attention_required: true,
-    route: routeSnapshot(node)
-  });
-}
-function markParentReview(node, { contractState, failureType, error, fleetState = null } = {}) {
-  node.state = "needs_parent_review";
-  node.review_required = true;
-  node.review_decision = "pending";
-  node.last_status = {
-    source: "fleet_scheduler",
-    state: "failed",
-    business_state: "failed",
-    contract_state: contractState,
-    failure_type: failureType,
-    requires_parent_review: true,
-    safety_review: true,
-    error
-  };
-  node.updated_at = utcNow();
-  if (fleetState !== null && fleetState !== void 0) {
-    appendFleetEvent(fleetState, "agent_settled", node, {
-      businessState: "needs_owner",
-      contract_state: contractState,
-      failure_type: failureType,
-      error,
-      route: routeSnapshot(node)
+var init_async_runtime = __esm({
+  async "ops/tools/dispatch-core/fleet/async-runtime.mjs"() {
+    init_api();
+    init_py();
+    init_tool_common();
+    await init_fleet_manifest_check();
+    init_constants();
+    init_deps();
+    init_host_paths();
+    init_paths();
+    init_py_utils();
+    await init_route();
+    Object.assign(api, {
+      runCommandImpl,
+      runCommand,
+      parseJsonStdout,
+      nodeTaskRoot,
+      asyncCompletionInbox,
+      runtimeTaskDir,
+      readBoundedRuntimeJson,
+      readTerminalRuntimeArtifacts,
+      runtimeIdentityEvidence,
+      runtimeTokenUsage,
+      enrichTerminalRouteFromRuntime,
+      requiresSafetyReview,
+      applyAsyncStatus,
+      readCompletionNotices,
+      compactCompletionNotice,
+      waitForCompletionNotices,
+      asyncInternalBatchImpl,
+      asyncInternalBatch,
+      refreshActiveNodes
     });
   }
-  return null;
-}
-function promoteLegacyDispatchFailureBlocks(state) {
-  const promoted = [];
-  for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
-    if (!isRecord(node) || node.state !== "blocked") continue;
-    if (node.task_id || node.blocked_by || node.last_status) continue;
-    const dispatch = node.dispatch;
-    if (!isRecord(dispatch)) continue;
-    let error = pyStrip(pyStr(dispatch.error || dispatch.stdout || ""));
-    if (!error) error = "legacy dispatch failure recorded without output";
-    markFailure(node, {
-      contractState: "dispatch_prepare_failed",
-      failureType: "legacy_dispatch_failure",
-      error,
-      fleetState: state
-    });
-    promoted.push(pyStr(node.id || ""));
-  }
-  return promoted;
-}
+});
+
+// ops/tools/dispatch-core/fleet/dispatch.mjs
+import { existsSync as existsSync10, mkdirSync as mkdirSync10, writeFileSync as writeFileSync7 } from "node:fs";
+import path20 from "node:path";
+import process10 from "node:process";
 function commandNodeCwd(spec) {
   const declared = pyStrip(pyStr(spec.cwd || ""));
   if (!declared) return ROOT;
@@ -9517,7 +8939,7 @@ function commandNodeCwd(spec) {
   return cwd;
 }
 function commandNodeEnv(state, node, manifestNode) {
-  const env = { ...process8.env };
+  const env = { ...process10.env };
   const root = pyStr(state.state_root);
   const runId = pyStr(state.run_id);
   env.FLEET_RUN_ID = runId;
@@ -9525,11 +8947,11 @@ function commandNodeEnv(state, node, manifestNode) {
   env.FLEET_RUN_DIR = runDir(root, runId);
   env.FLEET_STATE_PATH = statePath(root, runId);
   if (!nodeDependencyArtifacts(manifestNode).length) return env;
-  const [artifacts, entries] = dependencyResultEntries(state, node, manifestNode);
+  const [artifacts, entries] = api.dependencyResultEntries(state, node, manifestNode);
   if (nodeDependencyPolicy(manifestNode) === "all_settled") {
-    env.FLEET_DEPENDENCY_RESULT_INDEX = writeDependencyResultIndex(state, node, manifestNode, entries);
+    env.FLEET_DEPENDENCY_RESULT_INDEX = api.writeDependencyResultIndex(state, node, manifestNode, entries);
   }
-  if (artifacts.length) env.FLEET_DEPENDENCY_ARTIFACTS = artifacts.join(path16.delimiter);
+  if (artifacts.length) env.FLEET_DEPENDENCY_ARTIFACTS = artifacts.join(path20.delimiter);
   return env;
 }
 function executeCommandNode(state, node, manifestNode, { dryRun = false } = {}) {
@@ -9543,7 +8965,7 @@ function executeCommandNode(state, node, manifestNode, { dryRun = false } = {}) 
     cwd = commandNodeCwd(spec);
   } catch (error) {
     if (error?.name !== "ToolError") throw error;
-    markFailure(node, {
+    api.markFailure(node, {
       contractState: "command_invalid",
       failureType: "command_invalid",
       error: String(error.message),
@@ -9569,7 +8991,7 @@ function executeCommandNode(state, node, manifestNode, { dryRun = false } = {}) 
     env = commandNodeEnv(state, node, manifestNode);
   } catch (error) {
     if (error?.name !== "ToolError") throw error;
-    markFailure(node, {
+    api.markFailure(node, {
       contractState: "dependency_artifact_missing",
       failureType: "dependency_artifact_missing",
       error: String(error.message),
@@ -9579,19 +9001,19 @@ function executeCommandNode(state, node, manifestNode, { dryRun = false } = {}) 
   }
   const attempt = positiveInt(node.command_attempts) + 1;
   node.command_attempts = attempt;
-  const logsDir = path16.join(runDir(root, runId), "commands");
-  mkdirSync8(logsDir, { recursive: true });
-  const stdoutPath = path16.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.stdout.log`);
-  const stderrPath = path16.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.stderr.log`);
+  const logsDir = path20.join(runDir(root, runId), "commands");
+  mkdirSync10(logsDir, { recursive: true });
+  const stdoutPath = path20.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.stdout.log`);
+  const stderrPath = path20.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.stderr.log`);
   const startedAt = deps3.monotonic();
   let failure = null;
   let exitCode = null;
   let stdoutText = "";
   let stderrText = "";
-  const workerResultPath = path16.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.process.json`);
-  const workerSpecPath = path16.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.spec.json`);
-  writeJson2(workerSpecPath, { argv, cwd, timeout_ms: timeout * 1e3, cancel_path: cancellationPath(root, runId), result_path: workerResultPath });
-  const proc = pySpawnSync(process8.execPath, [SCHEDULER_CLI_PATH, "command-worker", "--spec", workerSpecPath], {
+  const workerResultPath = path20.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.process.json`);
+  const workerSpecPath = path20.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.spec.json`);
+  writeJson2(workerSpecPath, { argv, cwd, timeout_ms: timeout * 1e3, cancel_path: api.cancellationPath(root, runId), result_path: workerResultPath });
+  const proc = pySpawnSync(process10.execPath, [hostPaths.SCHEDULER_CLI_PATH, "command-worker", "--spec", workerSpecPath], {
     cwd,
     env,
     encoding: "utf8",
@@ -9599,12 +9021,12 @@ function executeCommandNode(state, node, manifestNode, { dryRun = false } = {}) 
     windowsHide: true,
     maxBuffer: 256 * 1024 * 1024
   });
-  const workerResult = existsSync9(workerResultPath) ? loadJson(workerResultPath) : null;
-  if (workerResult?.cancelled || existsSync9(cancellationPath(root, runId)) && !workerResult) {
-    writeFileSync6(stdoutPath, pyStr(proc.stdout ?? ""));
-    writeFileSync6(stderrPath, pyStr(proc.stderr ?? ""));
+  const workerResult = existsSync10(workerResultPath) ? loadJson(workerResultPath) : null;
+  if (workerResult?.cancelled || existsSync10(api.cancellationPath(root, runId)) && !workerResult) {
+    writeFileSync7(stdoutPath, pyStr(proc.stdout ?? ""));
+    writeFileSync7(stderrPath, pyStr(proc.stderr ?? ""));
     node.command_termination = workerResult || { confirmed: false, error: "command supervisor result missing" };
-    setNodeState(state, node, workerResult?.confirmed ? "cancelled" : "running", { eventType: workerResult?.confirmed ? "agent_settled" : "agent_progress", businessState: workerResult?.confirmed ? "cancelled" : "running" });
+    api.setNodeState(state, node, workerResult?.confirmed ? "cancelled" : "running", { eventType: workerResult?.confirmed ? "agent_settled" : "agent_progress", businessState: workerResult?.confirmed ? "cancelled" : "running" });
     node.command_result = { argv, cwd, attempt, stdout_path: stdoutPath, stderr_path: stderrPath };
     node.not_executed = Boolean(workerResult?.not_executed);
     node.cancel_reason = "user_requested";
@@ -9638,8 +9060,8 @@ function executeCommandNode(state, node, manifestNode, { dryRun = false } = {}) 
   }
   const durationSeconds = Math.round((deps3.monotonic() - startedAt) * 1e3) / 1e3;
   try {
-    writeFileSync6(stdoutPath, stdoutText, "utf8");
-    writeFileSync6(stderrPath, stderrText, "utf8");
+    writeFileSync7(stdoutPath, stdoutText, "utf8");
+    writeFileSync7(stderrPath, stderrText, "utf8");
   } catch (error) {
     if (failure === null) failure = ["command_log_write_failed", `cannot persist command logs: ${error.message}`];
   }
@@ -9657,7 +9079,7 @@ function executeCommandNode(state, node, manifestNode, { dryRun = false } = {}) 
     const [contractState, error] = failure;
     const quarantined = !workerResult?.confirmed;
     node.resource_quarantined = quarantined;
-    (quarantined ? markParentReview : markFailure)(node, {
+    (quarantined ? api.markParentReview : api.markFailure)(node, {
       contractState,
       failureType: quarantined ? "retained_worker" : contractState,
       error,
@@ -9682,7 +9104,7 @@ function executeCommandNode(state, node, manifestNode, { dryRun = false } = {}) 
     // 命令的 stdout 就是它对下游的正式产物，接进 dependency_artifacts 的 report 解析链。
     report_path: stdoutPath
   };
-  setNodeState(state, node, "done", {
+  api.setNodeState(state, node, "done", {
     eventType: "agent_settled",
     businessState: "completed",
     command: argv[0],
@@ -9714,7 +9136,7 @@ function openGateNode(state, node, { dryRun = false } = {}) {
     business_state: "gate_open",
     requires_parent_review: true
   };
-  setNodeState(state, node, "needs_parent_review", {
+  api.setNodeState(state, node, "needs_parent_review", {
     eventType: "gate_opened",
     businessState: "gate_open"
   });
@@ -9728,11 +9150,11 @@ function dispatchNodeImpl(state, manifest, node, manifestNode, { dryRun = false 
   const runId = pyStr(state.run_id);
   let seed;
   try {
-    seed = seedWithDependencyArtifacts(state, node, manifestNode, manifest);
+    seed = api.seedWithDependencyArtifacts(state, node, manifestNode, manifest);
   } catch (error) {
     if (error?.name !== "ToolError") throw error;
     if (!nodeDependencyArtifacts(manifestNode).length) throw error;
-    markFailure(node, {
+    api.markFailure(node, {
       contractState: "dependency_artifact_missing",
       failureType: "dependency_artifact_missing",
       error: String(error.message),
@@ -9744,16 +9166,16 @@ function dispatchNodeImpl(state, manifest, node, manifestNode, { dryRun = false 
   writeJson2(seedFile, seed);
   let dispatchCwd = ROOT;
   if (node.isolation === "worktree") {
-    dispatchCwd = dryRun ? path16.join(runDir(root, runId), "worktrees", safeId(pyStr(node.id))) : ensureWorktree(state, node);
+    dispatchCwd = dryRun ? path20.join(runDir(root, runId), "worktrees", safeId(pyStr(node.id))) : api.ensureWorktree(state, node);
   }
   const cmd = [
-    process8.execPath,
-    DISPATCH_PREPARE_PATH,
+    process10.execPath,
+    hostPaths.DISPATCH_PREPARE_PATH,
     "--seed-stdin",
     "--format",
     "json",
     "--async-task-root",
-    pyStr(nodeTaskRoot(state, node)),
+    pyStr(api.nodeTaskRoot(state, node)),
     "--batch-id",
     runId
   ];
@@ -9791,7 +9213,7 @@ function dispatchNodeImpl(state, manifest, node, manifestNode, { dryRun = false 
       const error = pyStrip(stderr) || pyStrip(stdout) || `dispatch_prepare exited ${raw.exit_code} without output`;
       node.dispatch = { exit_code: raw.exit_code, error: stderr, stdout };
       const safetyFailure = /write claim|identity|write.domain|write.scope|retained.worker/i.test(error);
-      (safetyFailure ? markParentReview : markFailure)(node, {
+      (safetyFailure ? api.markParentReview : api.markFailure)(node, {
         contractState: "dispatch_prepare_failed",
         failureType: error.toLowerCase().includes("write claim") ? "write_claim_conflict" : "dispatch_prepare_exit",
         error,
@@ -9803,7 +9225,7 @@ function dispatchNodeImpl(state, manifest, node, manifestNode, { dryRun = false 
         error
       };
     }
-    result = parseJsonStdout(raw, "dispatch_prepare");
+    result = api.parseJsonStdout(raw, "dispatch_prepare");
   }
   node.dispatch = result;
   const frozenSelection = isRecord(result.selection) ? result.selection : isRecord(result.async_preview?.selection) ? result.async_preview.selection : isRecord(result.async_model_selection?.selection) ? result.async_model_selection.selection : null;
@@ -9813,7 +9235,7 @@ function dispatchNodeImpl(state, manifest, node, manifestNode, { dryRun = false 
   const taskId = result.task_id;
   if (!taskId) {
     const error = "dispatch result missing task_id";
-    markParentReview(node, {
+    api.markParentReview(node, {
       contractState: "dispatch_result_invalid",
       failureType: "dispatch_missing_task_id",
       error,
@@ -9831,8 +9253,8 @@ function dispatchNodeImpl(state, manifest, node, manifestNode, { dryRun = false 
   if (result.warnings?.length) node.warnings = [...result.warnings];
   else delete node.warnings;
   updateRouteFromPayload(node, result, "dispatch_receipt");
-  node.task_root = pyStr(nodeTaskRoot(state, node));
-  setNodeState(state, node, pyStr(result.state || "submitted"), {
+  node.task_root = pyStr(api.nodeTaskRoot(state, node));
+  api.setNodeState(state, node, pyStr(result.state || "submitted"), {
     eventType: "agent_started",
     businessState: pyStr(result.business_state || "") || null,
     dispatch_source: "dispatch_prepare",
@@ -9873,388 +9295,35 @@ function compactDispatchOutcome(outcome) {
   }
   return data;
 }
-function settleFleetIfNeeded(state) {
-  const terminal = (Array.isArray(state.nodes) ? state.nodes : []).every(
-    (node) => isRecord(node) && TERMINAL_STATES.has(node.state)
-  );
-  if (!terminal) return false;
-  const outcomeState = driverOutcome(state);
-  state.run_state = outcomeState;
-  let previousOutcome = null;
-  const events = state.events;
-  if (Array.isArray(events)) {
-    for (let index = events.length - 1; index >= 0; index -= 1) {
-      const event = events[index];
-      if (isRecord(event) && event.type === "fleet_settled") {
-        previousOutcome = event.business_state ?? null;
-        break;
-      }
-    }
-  }
-  if (previousOutcome === outcomeState) {
-    state.fleet_settled_emitted = true;
-    return false;
-  }
-  appendFleetEvent(state, "fleet_settled", null, {
-    businessState: outcomeState,
-    incrementNodeRevision: false,
-    counts: stateCounts(state)
-  });
-  state.fleet_settled_emitted = true;
-  return true;
-}
-function cancellationPath(root, runId) {
-  return path16.join(runDir(root, runId), "cancel-request.json");
-}
-function cancelRun(runId, root, reason) {
-  const resolvedRoot = requireRepoInternal(root, "state root");
-  if (!String(reason || "").trim()) throw new ToolError("cancellation reason is required");
-  loadJson(statePath(resolvedRoot, runId));
-  try {
-    writeFileSync6(cancellationPath(resolvedRoot, runId), JSON.stringify({ reason, requested_at: utcNow() }), { flag: "wx" });
-  } catch (error) {
-    if (error.code !== "EEXIST") throw error;
-  }
-  try {
-    return runMutationLock(resolvedRoot, runId, () => {
-      const state = loadJson(statePath(resolvedRoot, runId));
-      return settleCancellation(state);
-    }, { timeoutSeconds: 5 });
-  } catch (error) {
-    if (!String(error.message).startsWith("fleet run mutation lock busy:")) throw error;
-    return { status: "cancelling", run_id: runId, reason: "waiting_for_inflight_operation", submitted: [] };
-  }
-}
-function missingTaskStoppedByReboot(state, node, taskRoot, failures) {
-  if (failures.length !== 1) return false;
-  let lookup;
-  try {
-    lookup = JSON.parse(failures[0]);
-  } catch {
-    return false;
-  }
-  if (lookup?.error !== `Unknown task_id: ${node.task_id}`) return false;
-  if (existsSync9(path16.join(taskRoot, node.task_id))) return false;
-  const started = (state.events || []).filter((event) => event.type === "agent_started" && event.node_id === node.id && event.task_id === node.task_id);
-  if (started.length !== 1) return false;
-  const dispatchedAt = Date.parse(started[0].at || started[0].timestamp || "");
-  const bootTime = Number(deps3.bootTimeMs());
-  return Number.isFinite(dispatchedAt) && Number.isFinite(bootTime) && dispatchedAt + HOST_REBOOT_MARGIN_MS < bootTime && !(state.events || []).some((event) => event.node_id === node.id && event.task_id === node.task_id && event.type !== "agent_started" && Date.parse(event.at || event.timestamp || "") >= bootTime);
-}
-function settleCancellation(state) {
-  const errors = [];
-  for (const node of state.nodes || []) {
-    if ((ACTIVE_STATES.has(node.state) || node.state === "paused" || node.resource_quarantined) && node.task_id) {
-      const taskRoot = nodeTaskRoot(state, node);
-      try {
-        node.cancel_reason = "user_requested";
-        const [statuses, failures] = asyncInternalBatch("get", taskRoot, [node.task_id]);
-        let status = statuses[node.task_id];
-        if (!status && missingTaskStoppedByReboot(state, node, taskRoot, failures)) {
-          setNodeState(state, node, "cancelled", {
-            eventType: "agent_settled",
-            businessState: "unknown",
-            source: "host_reboot_missing_task"
-          });
-          node.missing_task_evidence = { task_id: node.task_id, source: "host_reboot", outcome: "unknown" };
-          node.resource_quarantined = false;
-          continue;
-        }
-        errors.push(...failures);
-        if (!status) continue;
-        if (!ASYNC_TERMINAL_STATES.has(status.state) || node.resource_quarantined) {
-          const result = deps3.runCommand([
-            process8.execPath,
-            ASYNC_SERVICE_PATH,
-            "internal",
-            "cancel",
-            "--task-root",
-            taskRoot,
-            "--task-id",
-            node.task_id,
-            "--expected-revision",
-            String(status.revision),
-            "--reason",
-            "user_requested"
-          ], ROOT);
-          if (result.exit_code !== 0) errors.push((result.stderr || result.stdout).slice(0, 600));
-          const [latest, refreshErrors] = asyncInternalBatch("get", taskRoot, [node.task_id]);
-          errors.push(...refreshErrors);
-          status = latest[node.task_id];
-        }
-        if (status) applyAsyncStatus(node, status, "fleet_cancel", state);
-      } catch (error) {
-        errors.push(`${node.id}: ${error.message}`);
-      }
-    } else if (ACTIVE_STATES.has(node.state) || node.resource_quarantined) {
-      errors.push(`${node.id}: active execution has no confirmed termination`);
-    } else if (node.state === "paused") {
-      errors.push(`${node.id}: paused execution has no task_id; not marked cancelled`);
-    } else if (!TERMINAL_STATES.has(node.state)) {
-      setNodeState(state, node, "cancelled", { eventType: "agent_settled", businessState: "cancelled" });
-      node.cancel_reason = "user_requested";
-      node.not_executed = true;
-    }
-  }
-  state.ready_queue = [];
-  const active = (state.nodes || []).filter((node) => ACTIVE_STATES.has(node.state) || node.resource_quarantined);
-  state.run_state = active.length || errors.length ? "cancelling" : "cancelled";
-  state.cancellation = { ...loadJson(cancellationPath(state.state_root, state.run_id)), errors };
-  state.updated_at = utcNow();
-  writeJson2(statePath(state.state_root, state.run_id), state);
-  if (state.run_state === "cancelled") {
-    const driverFile = driverStatusPath(state.state_root, state.run_id);
-    const driver = existsSync9(driverFile) ? loadJson(driverFile) : {};
-    writeJson2(driverFile, {
-      ...driver,
-      run_id: state.run_id,
-      status: "cancelled",
-      counts: stateCounts(state),
-      updated_at: utcNow()
+var init_dispatch = __esm({
+  async "ops/tools/dispatch-core/fleet/dispatch.mjs"() {
+    init_api();
+    init_py();
+    init_tool_common();
+    await init_fleet_manifest_check();
+    init_constants();
+    init_deps();
+    init_host_paths();
+    init_paths();
+    init_py_utils();
+    await init_route();
+    Object.assign(api, {
+      commandNodeCwd,
+      commandNodeEnv,
+      executeCommandNode,
+      openGateNode,
+      dispatchNodeImpl,
+      dispatchNode,
+      compactDispatchOutcome
     });
   }
-  return { status: state.run_state, run_id: state.run_id, active: active.map((node) => node.id), errors, submitted: [] };
-}
-function pauseRequestPath(root, runId) {
-  return path16.join(runDir(root, runId), "pause-request.json");
-}
-function readPauseIntent(root, runId) {
-  const target = pauseRequestPath(root, runId);
-  return existsSync9(target) ? loadJson(target) : null;
-}
-function parseControlReply(result, label) {
-  if (!result || result.exit_code !== 0) return null;
-  try {
-    const data = pyJsonLoads(String(result.stdout ?? ""));
-    return isRecord(data) ? data : null;
-  } catch {
-    return null;
-  }
-}
-function controlFailureDetail(result) {
-  return String(result?.stderr || result?.stdout || "").trim().slice(0, 300);
-}
-function runAsyncControl(operation, taskRoot, taskId, { expectedRevision = "", reason = "" } = {}) {
-  const argv = [
-    process8.execPath,
-    ASYNC_SERVICE_PATH,
-    "internal",
-    operation,
-    "--task-root",
-    pyStr(taskRoot),
-    "--task-id",
-    pyStr(taskId)
-  ];
-  if (expectedRevision) argv.push("--expected-revision", pyStr(expectedRevision));
-  if (reason) argv.push("--reason", pyStr(reason));
-  const result = deps3.runCommand(argv, ROOT);
-  return { reply: parseControlReply(result, `async internal ${operation}`), detail: controlFailureDetail(result) };
-}
-function settlePause(state, { reason = null } = {}) {
-  const errors = [];
-  const root = pyStr(state.state_root);
-  const runId = pyStr(state.run_id);
-  const intent = readPauseIntent(root, runId);
-  const intentReason = pyStr(reason || intent?.reason || state.pause_request?.reason || "pause_requested");
-  const recorded = new Set(
-    [...intent?.task_ids ?? [], ...state.pause_request?.task_ids ?? []].map((item) => pyStr(item)).filter(Boolean)
-  );
-  const independent = new Set(
-    [...intent?.independent_task_ids ?? [], ...state.pause_request?.independent_task_ids ?? []].map((item) => pyStr(item)).filter(Boolean)
-  );
-  const nodes = (Array.isArray(state.nodes) ? state.nodes : []).filter((node) => isRecord(node));
-  if (existsSync9(cancellationPath(root, runId))) {
-    const cancellation = loadJson(cancellationPath(root, runId));
-    const cancellationState = ["cancelled", "cancelling"].includes(pyStr(state.run_state)) ? pyStr(state.run_state) : "cancelling";
-    return {
-      run_id: runId,
-      accepted: false,
-      state: cancellationState,
-      reason: "cancel_priority",
-      paused_task_ids: [],
-      pending_task_ids: [],
-      next_step: `\u5DF2\u5B58\u5728\u53D6\u6D88\u8BF7\u6C42\uFF08${pyStr(cancellation?.reason || "")}\uFF09\uFF0C\u6682\u505C\u4E0D\u518D\u6267\u884C\uFF1B\u7528 status \u89C2\u5BDF\u53D6\u6D88\u6536\u655B\uFF0C\u53D6\u6D88\u5B8C\u6210\u540E\u9700\u8981\u7EE7\u7EED\u65F6\u6309\u65B0 run \u5904\u7406\u3002`
-    };
-  }
-  if (nodes.length && nodes.every((node) => TERMINAL_STATES.has(node.state))) {
-    const settled = driverOutcome({ ...state, run_state: "running" });
-    state.run_state = settled;
-    state.updated_at = utcNow();
-    return {
-      run_id: runId,
-      accepted: true,
-      state: settled,
-      reason: "run_already_settled",
-      paused_task_ids: [],
-      pending_task_ids: []
-    };
-  }
-  for (const node of nodes) {
-    const taskId = pyStr(node.task_id || "");
-    if (!taskId) continue;
-    if (!(ACTIVE_STATES.has(node.state) || node.state === "paused")) continue;
-    const taskRoot = nodeTaskRoot(state, node);
-    const [statuses, failures] = asyncInternalBatch("get", taskRoot, [taskId], { detail: "diagnostic" });
-    errors.push(...failures);
-    const status = statuses[taskId];
-    if (!status) {
-      errors.push(`${pyStr(node.id)}: async get missing task ${taskId}`);
-      continue;
-    }
-    if (status.state === "paused") {
-      if (!recorded.has(taskId)) independent.add(taskId);
-      applyAsyncStatus(node, status, "fleet_pause", state);
-      continue;
-    }
-    if (!ACTIVE_STATES.has(status.state)) {
-      applyAsyncStatus(node, status, "fleet_pause", state);
-      continue;
-    }
-    if (node.pause_requested) continue;
-    const control = runAsyncControl("pause", taskRoot, taskId, {
-      expectedRevision: pyStr(status.revision),
-      reason: intentReason
-    });
-    if (!control.reply) {
-      errors.push(`${pyStr(node.id)}: internal pause \u672A\u53D6\u5F97\u56DE\u6267${control.detail ? `\uFF1A${control.detail}` : ""}`);
-      continue;
-    }
-    node.pause_request_reason = pyStr(control.reply.reason || "");
-    if (control.reply.reason === "already_paused") {
-      independent.add(taskId);
-      continue;
-    }
-    if (control.reply.accepted === false || control.reply.ok === false) {
-      errors.push(`${pyStr(node.id)}: ${pyStr(control.reply.reason || "pause_rejected")}${control.reply.next_step ? ` \u2014 ${pyStr(control.reply.next_step)}` : ""}`);
-      continue;
-    }
-    node.pause_requested = true;
-    recorded.add(taskId);
-  }
-  const pausedTaskIds = [];
-  const pendingTaskIds = [];
-  for (const taskId of [...recorded]) {
-    const node = nodes.find((item) => pyStr(item.task_id || "") === taskId);
-    if (!node) {
-      pendingTaskIds.push(taskId);
-      continue;
-    }
-    const [statuses, failures] = asyncInternalBatch("get", nodeTaskRoot(state, node), [taskId], { detail: "diagnostic" });
-    errors.push(...failures);
-    const status = statuses[taskId];
-    if (status) applyAsyncStatus(node, status, "fleet_pause", state);
-    if (status?.state === "paused") pausedTaskIds.push(taskId);
-    else if (!status || !TERMINAL_STATES.has(status.state)) pendingTaskIds.push(taskId);
-  }
-  const unmanagedActive = nodes.filter((node) => ACTIVE_STATES.has(node.state) && !pyStr(node.task_id || "")).map((node) => pyStr(node.id));
-  const activeAny = nodes.some((node) => ACTIVE_STATES.has(node.state));
-  const runState = pendingTaskIds.length || activeAny ? "pausing" : "paused";
-  state.pause_request = {
-    reason: intentReason,
-    requested_at: pyStr(intent?.requested_at || state.pause_request?.requested_at || utcNow()),
-    task_ids: [...recorded],
-    independent_task_ids: [...independent],
-    paused_task_ids: pausedTaskIds,
-    pending_task_ids: pendingTaskIds,
-    updated_at: utcNow()
-  };
-  state.run_state = runState;
-  state.updated_at = utcNow();
-  if (intent) {
-    writeJson2(pauseRequestPath(root, runId), {
-      ...intent,
-      reason: intentReason,
-      task_ids: [...recorded],
-      independent_task_ids: [...independent],
-      updated_at: utcNow()
-    });
-  }
-  const receipt = {
-    run_id: runId,
-    accepted: true,
-    state: runState,
-    reason: pendingTaskIds.length ? "pause_requested" : recorded.size ? "pause_confirmed" : "pause_idle",
-    paused_task_ids: pausedTaskIds,
-    pending_task_ids: pendingTaskIds
-  };
-  if (errors.length) {
-    receipt.errors = errors.slice(0, 20);
-    receipt.next_step = PAUSE_UNCONFIRMED_NEXT_STEP;
-  } else if (unmanagedActive.length) {
-    receipt.next_step = `\u8282\u70B9 ${unmanagedActive.join(", ")} \u4E3A\u540C\u6B65\u6267\u884C\uFF0C\u4E0D\u80FD\u534F\u4F5C\u6682\u505C\uFF1B\u7B49\u5176\u672C\u8F6E\u7ED3\u675F\u4E14\u65E0\u5176\u4ED6\u6D3B\u52A8\u6267\u884C\u540E run \u624D\u8FDB\u5165 paused\u3002`;
-  }
-  return receipt;
-}
-function pauseRun(runId, root, reason) {
-  const resolvedRoot = requireRepoInternal(root, "state root");
-  const text3 = String(reason || "").trim();
-  if (!text3) throw new ToolError("pause reason is required");
-  loadJson(statePath(resolvedRoot, runId));
-  const intentPath = pauseRequestPath(resolvedRoot, runId);
-  if (!existsSync9(intentPath)) {
-    writeJson2(intentPath, { reason: text3, requested_at: utcNow(), task_ids: [], independent_task_ids: [] });
-  }
-  try {
-    return runMutationLock(resolvedRoot, runId, () => {
-      const state = loadJson(statePath(resolvedRoot, runId));
-      state.resume_pending = false;
-      const receipt = settlePause(state, { reason: text3 });
-      writeJson2(statePath(resolvedRoot, runId), state);
-      if (receipt.reason === "cancel_priority") rmSync4(intentPath, { force: true });
-      return receipt;
-    }, { timeoutSeconds: 15 });
-  } catch (error) {
-    if (!String(error.message).startsWith("fleet run mutation lock busy:")) throw error;
-    return {
-      run_id: runId,
-      accepted: true,
-      state: "pausing",
-      reason: "waiting_for_inflight_operation",
-      paused_task_ids: [],
-      pending_task_ids: [],
-      next_step: "\u8C03\u5EA6\u5668\u6B63\u5728\u5904\u7406\u672C\u8F6E\u6D3E\u53D1\uFF0C\u505C\u6D3E\u610F\u56FE\u5DF2\u843D\u76D8\uFF1Bdriver \u4E0B\u4E00\u8F6E tick \u4F1A\u7EE7\u7EED\u534F\u4F5C\u6682\u505C\uFF0C\u7528 status \u89C2\u5BDF\u6536\u655B\u3002"
-    };
-  }
-}
-function resumePausedTasks(state, intent) {
-  const errors = [];
-  const pendingTaskIds = [];
-  const nodes = (Array.isArray(state.nodes) ? state.nodes : []).filter((node) => isRecord(node));
-  for (const rawTaskId of intent?.task_ids ?? []) {
-    const taskId = pyStr(rawTaskId);
-    if (!taskId) continue;
-    const node = nodes.find((item) => pyStr(item.task_id || "") === taskId);
-    if (!node) {
-      pendingTaskIds.push(taskId);
-      errors.push(`${taskId}: \u5DF2\u4E0D\u518D\u7ED1\u5B9A\u5230\u4EFB\u4F55\u8282\u70B9\uFF0C\u672A\u6062\u590D`);
-      continue;
-    }
-    const taskRoot = nodeTaskRoot(state, node);
-    const [statuses, failures] = asyncInternalBatch("get", taskRoot, [taskId], { detail: "diagnostic" });
-    errors.push(...failures);
-    const status = statuses[taskId];
-    if (!status) {
-      pendingTaskIds.push(taskId);
-      errors.push(`${taskId}: async get missing task`);
-      continue;
-    }
-    if (status.state !== "paused") {
-      applyAsyncStatus(node, status, "fleet_resume", state);
-      if (ACTIVE_STATES.has(status.state) && node.pause_requested) pendingTaskIds.push(taskId);
-      continue;
-    }
-    const control = runAsyncControl("resume", taskRoot, taskId, { expectedRevision: pyStr(status.revision) });
-    if (!control.reply || control.reply.ok === false || control.reply.accepted === false) {
-      pendingTaskIds.push(taskId);
-      const reason = control.reply ? pyStr(control.reply.reason || "resume_rejected") : `internal resume \u672A\u53D6\u5F97\u56DE\u6267${control.detail ? `\uFF1A${control.detail}` : ""}`;
-      errors.push(`${taskId}: ${reason}`);
-      continue;
-    }
-    node.pause_requested = false;
-    node.pause_request_reason = null;
-  }
-  return { pending_task_ids: pendingTaskIds, errors };
-}
+});
+
+// ops/tools/dispatch-core/fleet/driver.mjs
+import { closeSync as closeSync5, existsSync as existsSync11, mkdirSync as mkdirSync11, openSync as openSync5, readFileSync as readFileSync11, rmSync as rmSync4 } from "node:fs";
+import path21 from "node:path";
+import process11 from "node:process";
+import { setTimeout as delay2 } from "node:timers/promises";
 function tickRun(runId, root, dryRun, verbose = false, { forceReconcile = false } = {}) {
   const resolvedRoot = requireRepoInternal(root, "state root");
   return runMutationLock(resolvedRoot, runId, () => tickRunLocked(runId, resolvedRoot, dryRun, verbose, { forceReconcile }));
@@ -10263,8 +9332,8 @@ function tickRunLocked(runId, root, dryRun, verbose = false, { forceReconcile = 
   const resolvedRoot = requireRepoInternal(root, "state root");
   const target = statePath(resolvedRoot, runId);
   const state = loadJson(target);
-  if (existsSync9(cancellationPath(resolvedRoot, runId))) {
-    return dryRun ? { status: "cancelling", run_id: runId, submitted: [], dry_run: true } : settleCancellation(state);
+  if (existsSync11(api.cancellationPath(resolvedRoot, runId))) {
+    return dryRun ? { status: "cancelling", run_id: runId, submitted: [], dry_run: true } : api.settleCancellation(state);
   }
   const manifestSnapshot = pyStr(state.manifest_snapshot);
   const manifest = loadJson(manifestSnapshot);
@@ -10276,7 +9345,7 @@ function tickRunLocked(runId, root, dryRun, verbose = false, { forceReconcile = 
   for (const node of Array.isArray(manifest.nodes) ? manifest.nodes : []) {
     if (isRecord(node)) manifestById[nodeId(node)] = node;
   }
-  const byId = indexNodes(state);
+  const byId = api.indexNodes(state);
   for (const [nid, manifestNode] of Object.entries(manifestById)) {
     if (Object.hasOwn(byId, nid)) {
       if (!routeMatchesManifest(byId[nid], manifestNode)) {
@@ -10291,20 +9360,20 @@ function tickRunLocked(runId, root, dryRun, verbose = false, { forceReconcile = 
   }
   state.review_policy = effectiveReviewPolicy(manifest);
   state.run_state = "running";
-  const refreshSummary = refreshActiveNodes(state, { forceReconcile });
-  const acceptanceGateActions = enforceAcceptanceResultsGate(state, manifestById);
+  const refreshSummary = api.refreshActiveNodes(state, { forceReconcile });
+  const acceptanceGateActions = api.enforceAcceptanceResultsGate(state, manifestById);
   if (acceptanceGateActions.length) refreshSummary.acceptance_results_gate = acceptanceGateActions;
-  const allSettledUpdates = registerAllSettledConsumers(state);
+  const allSettledUpdates = api.registerAllSettledConsumers(state);
   if (allSettledUpdates.length) refreshSummary.all_settled_updates = allSettledUpdates;
-  const promotedDispatchFailures = promoteLegacyDispatchFailureBlocks(state);
+  const promotedDispatchFailures = api.promoteLegacyDispatchFailureBlocks(state);
   if (promotedDispatchFailures.length) refreshSummary.promoted_dispatch_failures = promotedDispatchFailures;
-  const releasedDependencyBlocks = releaseResolvedDependencyBlocks(state, byId);
+  const releasedDependencyBlocks = api.releaseResolvedDependencyBlocks(state, byId);
   if (releasedDependencyBlocks.length) refreshSummary.released_dependency_blocks = releasedDependencyBlocks;
   for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
     if (!isRecord(node) || node.state !== "pending") continue;
-    const badDep = blockedByFailedDependency(node, byId);
+    const badDep = api.blockedByFailedDependency(node, byId);
     if (badDep) {
-      setNodeState(state, node, "blocked", {
+      api.setNodeState(state, node, "blocked", {
         eventType: "agent_settled",
         businessState: "blocked",
         blocked_by: badDep,
@@ -10312,7 +9381,7 @@ function tickRunLocked(runId, root, dryRun, verbose = false, { forceReconcile = 
       });
       node.blocked_by = badDep;
       node.failure_fuse = { status: "tripped", blocked_by: badDep };
-      setFailureFuse(state, {
+      api.setFailureFuse(state, {
         nodeIdValue: pyStr(node.id || ""),
         reason: "failed_dependency",
         blocker: badDep
@@ -10321,12 +9390,12 @@ function tickRunLocked(runId, root, dryRun, verbose = false, { forceReconcile = 
   }
   const submitted = [];
   const skipped = [];
-  const activeScopes = activeWriteScopes(state);
-  const activeResources = activeResourceLocks(state);
+  const activeScopes = api.activeWriteScopes(state);
+  const activeResources = api.activeResourceLocks(state);
   let submittedThisTick = 0;
   const [layers] = topologicalLayers(Object.values(manifestById));
   const orderedIds = layers.flat();
-  const readyIds = rebuildReadyQueue(state, Object.values(manifestById));
+  const readyIds = api.rebuildReadyQueue(state, Object.values(manifestById));
   const readySet = new Set(readyIds);
   for (const nid of orderedIds) {
     const node = byId[nid];
@@ -10334,11 +9403,11 @@ function tickRunLocked(runId, root, dryRun, verbose = false, { forceReconcile = 
     if (!readySet.has(nid)) skipped.push({ node_id: nid, reason: "waiting_for_dependencies" });
   }
   const queueWorking = [...readyIds];
-  if (!dryRun && state.resume_pending && existsSync9(pauseRequestPath(resolvedRoot, runId))) {
-    const resumeInfo = resumePausedTasks(state, readPauseIntent(resolvedRoot, runId));
+  if (!dryRun && state.resume_pending && existsSync11(api.pauseRequestPath(resolvedRoot, runId))) {
+    const resumeInfo = api.resumePausedTasks(state, api.readPauseIntent(resolvedRoot, runId));
     state.resume_status = resumeInfo;
     if (!resumeInfo.pending_task_ids.length) {
-      rmSync4(pauseRequestPath(resolvedRoot, runId), { force: true });
+      rmSync4(api.pauseRequestPath(resolvedRoot, runId), { force: true });
       state.resume_pending = false;
       state.resume_status = null;
       state.pause_request = null;
@@ -10350,9 +9419,9 @@ function tickRunLocked(runId, root, dryRun, verbose = false, { forceReconcile = 
       return tickRunLocked(runId, resolvedRoot, false, verbose, { forceReconcile: true });
     }
   }
-  if (existsSync9(pauseRequestPath(resolvedRoot, runId))) {
-    const intent = readPauseIntent(resolvedRoot, runId);
-    const receipt = dryRun ? { run_id: runId, accepted: true, state: "pausing", reason: "dry_run", paused_task_ids: [], pending_task_ids: [] } : state.resume_pending ? { run_id: runId, accepted: true, state: "pausing", reason: "resume_pending", ...state.resume_status, next_step: RESUME_SEAM_NEXT_STEP } : settlePause(state, { reason: intent?.reason ?? null });
+  if (existsSync11(api.pauseRequestPath(resolvedRoot, runId))) {
+    const intent = api.readPauseIntent(resolvedRoot, runId);
+    const receipt = dryRun ? { run_id: runId, accepted: true, state: "pausing", reason: "dry_run", paused_task_ids: [], pending_task_ids: [] } : state.resume_pending ? { run_id: runId, accepted: true, state: "pausing", reason: "resume_pending", ...state.resume_status, next_step: api.RESUME_SEAM_NEXT_STEP } : api.settlePause(state, { reason: intent?.reason ?? null });
     state.run_state = receipt.state;
     state.ready_queue = [...state.ready_queue || []].filter((nid) => (byId[nid] ?? {}).state === "pending");
     state.updated_at = utcNow();
@@ -10370,7 +9439,7 @@ function tickRunLocked(runId, root, dryRun, verbose = false, { forceReconcile = 
         state_path: rel(target)
       };
     }
-    appendFleetEvent(state, "run_pause", null, {
+    api.appendFleetEvent(state, "run_pause", null, {
       incrementNodeRevision: false,
       pause: receipt,
       skipped: pausedSkipped
@@ -10389,20 +9458,20 @@ function tickRunLocked(runId, root, dryRun, verbose = false, { forceReconcile = 
     };
   }
   for (const nid of readyIds) {
-    if (existsSync9(cancellationPath(resolvedRoot, runId)) || existsSync9(pauseRequestPath(resolvedRoot, runId))) break;
+    if (existsSync11(api.cancellationPath(resolvedRoot, runId)) || existsSync11(api.pauseRequestPath(resolvedRoot, runId))) break;
     const node = byId[nid];
     if (!node || node.state !== "pending") continue;
-    const resourceOwner = resourceLocked(node, activeResources);
+    const resourceOwner = api.resourceLocked(node, activeResources);
     if (resourceOwner) {
       skipped.push({ node_id: nid, reason: `resource_locked_by:${resourceOwner}` });
       continue;
     }
-    const lockedBy = writeLocked(node, activeScopes);
+    const lockedBy = api.writeLocked(node, activeScopes);
     if (lockedBy) {
       skipped.push({ node_id: nid, reason: `write_locked_by:${lockedBy}` });
       continue;
     }
-    const [ok, reason] = budgetAllows(node, state, submittedThisTick);
+    const [ok, reason] = api.budgetAllows(node, state, submittedThisTick);
     if (!ok) {
       skipped.push({ node_id: nid, reason });
       continue;
@@ -10433,10 +9502,10 @@ function tickRunLocked(runId, root, dryRun, verbose = false, { forceReconcile = 
   const routeProvenanceUpdates = [];
   for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
     if (!isRecord(node) || !TERMINAL_STATES.has(node.state)) continue;
-    if (enrichTerminalRouteFromRuntime(node)) {
+    if (api.enrichTerminalRouteFromRuntime(node)) {
       const nodeIdValue = pyStr(node.id || "");
       routeProvenanceUpdates.push(nodeIdValue);
-      appendFleetEvent(state, "route_provenance", node, {
+      api.appendFleetEvent(state, "route_provenance", node, {
         incrementNodeRevision: false,
         source: "terminal_runtime_artifacts",
         route: routeSnapshot(node)
@@ -10444,8 +9513,8 @@ function tickRunLocked(runId, root, dryRun, verbose = false, { forceReconcile = 
     }
   }
   if (routeProvenanceUpdates.length) refreshSummary.route_provenance_updates = routeProvenanceUpdates;
-  settleFleetIfNeeded(state);
-  const compactSubmitted = submitted.map((item) => compactDispatchOutcome(item));
+  api.settleFleetIfNeeded(state);
+  const compactSubmitted = submitted.map((item) => api.compactDispatchOutcome(item));
   const returnedSubmitted = verbose ? submitted : compactSubmitted;
   let data;
   if (dryRun) {
@@ -10460,7 +9529,7 @@ function tickRunLocked(runId, root, dryRun, verbose = false, { forceReconcile = 
       state_path: rel(target)
     };
   } else {
-    appendFleetEvent(state, "tick", null, {
+    api.appendFleetEvent(state, "tick", null, {
       incrementNodeRevision: false,
       refresh: refreshSummary,
       submitted: compactSubmitted,
@@ -10487,7 +9556,7 @@ function waitRun(runId, root, waitMs, { verbose = false } = {}) {
   const resolvedRoot = requireRepoInternal(root, "state root");
   const target = statePath(resolvedRoot, runId);
   const state = loadJson(target);
-  const waited = waitForCompletionNotices(state, waitMs);
+  const waited = api.waitForCompletionNotices(state, waitMs);
   const data = { run_id: runId, state_path: rel(target), ...waited };
   if (waited.event === "completion_notice") {
     data.tick = tickRun(runId, resolvedRoot, false, verbose);
@@ -10501,16 +9570,16 @@ function resumeRun(runId, root, { dryRun = false, verbose = false } = {}) {
     const activeBefore = sortedStrings2(
       (Array.isArray(before.nodes) ? before.nodes : []).filter((node) => isRecord(node) && ACTIVE_STATES.has(node.state) && node.task_id).map((node) => pyStr(node.id || ""))
     );
-    const intent = readPauseIntent(resolvedRoot, runId);
+    const intent = api.readPauseIntent(resolvedRoot, runId);
     let resumeInfo = null;
     if (intent && dryRun) return {
-      ...buildStatusSummary(before),
+      ...api.buildStatusSummary(before),
       accepted: false,
       state: before.run_state,
       reason: "dry_run",
       resumed: false
     };
-    if (intent && (existsSync9(cancellationPath(resolvedRoot, runId)) || before.cancel_request)) return {
+    if (intent && (existsSync11(api.cancellationPath(resolvedRoot, runId)) || before.cancel_request)) return {
       ...tickRunLocked(runId, resolvedRoot, false, verbose),
       accepted: false,
       state: "cancelling",
@@ -10518,7 +9587,7 @@ function resumeRun(runId, root, { dryRun = false, verbose = false } = {}) {
       resumed: false
     };
     if (intent) {
-      resumeInfo = resumePausedTasks(before, intent);
+      resumeInfo = api.resumePausedTasks(before, intent);
       if (resumeInfo.pending_task_ids.length) {
         before.run_state = "pausing";
         before.resume_pending = true;
@@ -10533,10 +9602,10 @@ function resumeRun(runId, root, { dryRun = false, verbose = false } = {}) {
           pending_task_ids: resumeInfo.pending_task_ids,
           errors: resumeInfo.errors,
           paused_task_ids: before.nodes.filter((node) => node.state === "paused").map((node) => node.task_id),
-          next_step: RESUME_SEAM_NEXT_STEP
+          next_step: api.RESUME_SEAM_NEXT_STEP
         };
       }
-      rmSync4(pauseRequestPath(resolvedRoot, runId), { force: true });
+      rmSync4(api.pauseRequestPath(resolvedRoot, runId), { force: true });
       before.run_state = "running";
       before.resume_pending = false;
       before.resume_status = null;
@@ -10566,7 +9635,7 @@ function resumeRun(runId, root, { dryRun = false, verbose = false } = {}) {
     });
     if (resumeInfo?.errors.length) {
       data.errors = resumeInfo.errors.slice(0, 20);
-      data.next_step = RESUME_SEAM_NEXT_STEP;
+      data.next_step = api.RESUME_SEAM_NEXT_STEP;
     }
     return data;
   });
@@ -10596,18 +9665,13 @@ function driverOutcome(state) {
   }
   return "completed";
 }
-function truthyList(value) {
-  if (value === null || value === void 0) return false;
-  if (Array.isArray(value)) return value.length > 0;
-  return Boolean(value);
-}
 function writeDriverStatus(root, runId, data) {
   const currentPath = driverStatusPath(root, runId);
-  const previous = existsSync9(currentPath) ? loadJson(currentPath) : {};
+  const previous = existsSync11(currentPath) ? loadJson(currentPath) : {};
   writeJson2(currentPath, {
     ...previous,
     run_id: runId,
-    pid: process8.pid,
+    pid: process11.pid,
     updated_at: utcNow(),
     ...data
   });
@@ -10620,7 +9684,7 @@ function persistDriverOutcome(root, runId, outcome, error = null) {
     const changed = state.run_state !== outcome || state.driver_error !== error;
     state.run_state = outcome;
     state.driver_error = error;
-    if (changed) appendFleetEvent(state, "driver_status", null, {
+    if (changed) api.appendFleetEvent(state, "driver_status", null, {
       incrementNodeRevision: false,
       error,
       attention_required: outcome !== "completed"
@@ -10647,7 +9711,7 @@ function driveRun(runId, root, waitMs) {
           status: outcome,
           run_id: runId,
           ticks,
-          counts: stateCounts(state),
+          counts: api.stateCounts(state),
           state_path: rel(target),
           driver_status_path: rel(driverStatusPath(resolvedRoot, runId)),
           finished_at: utcNow()
@@ -10663,7 +9727,7 @@ function driveRun(runId, root, waitMs) {
         continue;
       }
       if (outcome === "cancelling") {
-        writeDriverStatus(resolvedRoot, runId, { status: outcome, ticks, counts: stateCounts(state) });
+        writeDriverStatus(resolvedRoot, runId, { status: outcome, ticks, counts: api.stateCounts(state) });
         deps3.sleep(Math.min(waitMs / 1e3, 1));
         continue;
       }
@@ -10719,9 +9783,9 @@ async function launchDriverLocked(runId, root, waitMs) {
   const resolvedRoot = requireRepoInternal(root, "state root");
   const target = statePath(resolvedRoot, runId);
   const state = loadJson(target);
-  if (existsSync9(cancellationPath(resolvedRoot, runId)) && state.run_state === "cancelled") return { status: "cancelled", run_id: runId, started: false };
+  if (existsSync11(api.cancellationPath(resolvedRoot, runId)) && state.run_state === "cancelled") return { status: "cancelled", run_id: runId, started: false };
   const statusFile = driverStatusPath(resolvedRoot, runId);
-  const existing = existsSync9(statusFile) ? loadJson(statusFile) : {};
+  const existing = existsSync11(statusFile) ? loadJson(statusFile) : {};
   if (["running", "cancelling", "paused", "pausing"].includes(existing.status) && deps3.processAlive(existing.pid)) {
     return {
       status: "ok",
@@ -10734,10 +9798,10 @@ async function launchDriverLocked(runId, root, waitMs) {
     };
   }
   const logPath = driverLogPath(resolvedRoot, runId);
-  mkdirSync8(path16.dirname(logPath), { recursive: true });
+  mkdirSync11(path21.dirname(logPath), { recursive: true });
   const command = [
-    process8.execPath,
-    SCHEDULER_CLI_PATH,
+    process11.execPath,
+    hostPaths.SCHEDULER_CLI_PATH,
     "drive",
     "--run-id",
     runId,
@@ -10768,14 +9832,14 @@ async function launchDriverLocked(runId, root, waitMs) {
   const failedToStart = () => spawnError || child.signalCode !== null || child.exitCode !== null && child.exitCode !== 0;
   const startDeadline = Date.now() + 1e4;
   while (!failedToStart() && child.exitCode === null && Date.now() < startDeadline) {
-    await delay(50);
-    if (existsSync9(statusFile) && loadJson(statusFile).pid === child.pid) break;
+    await delay2(50);
+    if (existsSync11(statusFile) && loadJson(statusFile).pid === child.pid) break;
   }
   if (failedToStart()) {
-    const tail2 = readFileSync10(logPath, "utf8").slice(-1200);
+    const tail2 = readFileSync11(logPath, "utf8").slice(-1200);
     throw new ToolError(`fleet driver failed to start: ${spawnError?.message || child.signalCode || ""}${tail2}`);
   }
-  const latest = existsSync9(statusFile) ? loadJson(statusFile) : {};
+  const latest = existsSync11(statusFile) ? loadJson(statusFile) : {};
   if (latest.pid !== child.pid) {
     writeJson2(statusFile, {
       run_id: runId,
@@ -10796,6 +9860,655 @@ async function launchDriverLocked(runId, root, waitMs) {
     log_path: rel(logPath)
   };
 }
+var init_driver = __esm({
+  async "ops/tools/dispatch-core/fleet/driver.mjs"() {
+    init_api();
+    init_py();
+    init_tool_common();
+    await init_fleet_manifest_check();
+    init_constants();
+    init_deps();
+    init_host_paths();
+    init_locks();
+    init_paths();
+    init_py_utils();
+    await init_route();
+    Object.assign(api, {
+      tickRun,
+      tickRunLocked,
+      waitRun,
+      resumeRun,
+      driverOutcome,
+      writeDriverStatus,
+      persistDriverOutcome,
+      driveRun,
+      launchDriverImpl,
+      launchDriver,
+      launchDriverLocked
+    });
+  }
+});
+
+// ops/tools/dispatch-core/fleet/state.mjs
+import { existsSync as existsSync12, mkdirSync as mkdirSync12, rmSync as rmSync5 } from "node:fs";
+import path22 from "node:path";
+function createInitialState(manifest, manifestPath, runId, root, dispatchOverrides = null) {
+  const nodes = [];
+  for (const node of Array.isArray(manifest.nodes) ? manifest.nodes : []) {
+    if (!isRecord(node)) continue;
+    const nid = nodeId(node);
+    const requestedRoute = nodeRoute(node);
+    const routeSource = nodeRouteSource(node);
+    const routeRecord = newRouteRecord(requestedRoute, routeSource);
+    const seed = nodeSeed(node);
+    nodes.push({
+      id: nid,
+      kind: nodeKind(node),
+      command_spec: nodeKind(node) === "command" ? nodeCommand(node) : null,
+      state: "pending",
+      route_id: Object.hasOwn(seed, "route_id") ? seed.route_id : Object.hasOwn(node, "route_id") ? node.route_id : "",
+      role: nodeRole(node),
+      route: routeRecord,
+      route_source: routeSource,
+      requested_route: deepCopy2(requestedRoute),
+      actual_route: null,
+      usage_provenance: null,
+      depends_on: nodeDependsOn(node),
+      dependency_policy: nodeDependencyPolicy(node),
+      failure_policy: nodeFailurePolicy(node),
+      resource_locks: nodeResourceLocks(node),
+      is_reducer: nodeIsReducer(node),
+      isolation: nodeIsolation(node, manifest),
+      write_scope: nodeWriteScope(node),
+      task_id: null,
+      task_root: pyStr(DEFAULT_ASYNC_TASK_ROOT),
+      worktree_path: null,
+      dispatch: null,
+      last_status: null,
+      review_required: false,
+      review_decision: null,
+      review: null,
+      review_round: 0,
+      review_history: [],
+      revision: 0,
+      updated_at: utcNow()
+    });
+  }
+  return {
+    run_state_schema_version: 1,
+    run_id: runId,
+    created_at: utcNow(),
+    updated_at: utcNow(),
+    repo_root: pyStr(ROOT),
+    manifest_source: pyStr(manifestPath),
+    manifest_snapshot: pyStr(manifestSnapshotPath(root, runId)),
+    state_root: pyStr(root),
+    budget: effectiveBudget(manifest),
+    review_policy: effectiveReviewPolicy(manifest),
+    dispatch_overrides: { ...dispatchOverrides || {} },
+    run_state: "created",
+    revision: 0,
+    event_revision: 0,
+    ready_queue: [],
+    ready_queue_revision: 0,
+    failure_fuse: { status: "open", blocked_nodes: [] },
+    fleet_settled_emitted: false,
+    nodes,
+    events: []
+  };
+}
+function indexNodes(state) {
+  const out = /* @__PURE__ */ Object.create(null);
+  for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
+    if (isRecord(node)) out[node.id] = node;
+  }
+  return out;
+}
+function appendFleetEvent(state, eventType, node = null, options = {}) {
+  const { businessState = null, incrementNodeRevision = true, ...details } = options;
+  if (node !== null && incrementNodeRevision) {
+    node.revision = positiveInt(node.revision) + 1;
+  }
+  state.revision = positiveInt(state.revision) + 1;
+  const timestamp = utcNow();
+  const nodeState = pyStr(node !== null ? node.state : state.run_state || "unknown");
+  const business = businessState || (Object.hasOwn(BUSINESS_STATE_BY_NODE_STATE, nodeState) ? BUSINESS_STATE_BY_NODE_STATE[nodeState] : nodeState);
+  const cursorRevision = positiveInt(state.event_revision) + 1;
+  state.event_revision = cursorRevision;
+  const event = {
+    at: timestamp,
+    timestamp,
+    type: eventType,
+    run_id: pyStr(state.run_id || ""),
+    node_id: node !== null ? pyStr(node.id || "") : "",
+    task_id: node !== null ? node.task_id ?? null : null,
+    revision: node !== null ? positiveInt(node.revision) : positiveInt(state.revision),
+    node_revision: node !== null ? positiveInt(node.revision) : null,
+    fleet_revision: cursorRevision,
+    cursor: `${state.run_id}+${cursorRevision}`,
+    state: nodeState,
+    business_state: business,
+    ...details
+  };
+  let events = state.events;
+  if (!Array.isArray(events)) {
+    events = [];
+    state.events = events;
+  }
+  events.push(event);
+  if (events.length > 200) events.splice(0, events.length - 200);
+  return event;
+}
+function setNodeState(state, node, nodeState, options = {}) {
+  const { eventType = "agent_progress", businessState = null, ...details } = options;
+  const before = pyStr(node.state || "");
+  node.state = nodeState;
+  node.updated_at = utcNow();
+  if (before !== nodeState || ["agent_started", "agent_settled", "reducer_settled"].includes(eventType)) {
+    appendFleetEvent(state, eventType, node, { businessState, ...details });
+  }
+  return before !== nodeState;
+}
+function setFailureFuse(state, { nodeIdValue, reason, blocker = null } = {}) {
+  let fuse = state.failure_fuse;
+  if (!isRecord(fuse)) {
+    fuse = {};
+    state.failure_fuse = fuse;
+  }
+  fuse.status = "tripped";
+  fuse.reason = reason;
+  fuse.tripped_by = blocker || nodeIdValue;
+  if (!Object.hasOwn(fuse, "blocked_nodes")) fuse.blocked_nodes = [];
+  const blockedNodes = fuse.blocked_nodes;
+  if (Array.isArray(blockedNodes) && !blockedNodes.includes(nodeIdValue)) blockedNodes.push(nodeIdValue);
+  return null;
+}
+function rebuildReadyQueue(state, manifestNodesList, { preserveExisting = true } = {}) {
+  const byId = indexNodes(state);
+  const [layers] = topologicalLayers(manifestNodesList);
+  const criticality = api.downstreamCounts(manifestNodesList);
+  const layerIndex = /* @__PURE__ */ Object.create(null);
+  layers.forEach((layer, index) => {
+    for (const nid of layer) layerIndex[nid] = index;
+  });
+  const existing = preserveExisting ? state.ready_queue : [];
+  const existingIds = Array.isArray(existing) ? existing.map((item) => pyStr(item)) : [];
+  const candidates = /* @__PURE__ */ new Set();
+  for (const [nid, node] of Object.entries(byId)) {
+    if (node.state === "pending" && api.dependenciesReady(node, byId)) candidates.add(pyStr(nid));
+  }
+  const ordered = existingIds.filter((nid) => candidates.has(nid));
+  for (const nid of candidates) {
+    if (!ordered.includes(nid)) ordered.push(nid);
+  }
+  ordered.sort((left, right) => {
+    const leftKey = [-(criticality[left] ?? 0), layerIndex[left] ?? 0, left];
+    const rightKey = [-(criticality[right] ?? 0), layerIndex[right] ?? 0, right];
+    for (let i = 0; i < 3; i += 1) {
+      if (leftKey[i] < rightKey[i]) return -1;
+      if (leftKey[i] > rightKey[i]) return 1;
+    }
+    return 0;
+  });
+  state.ready_queue = ordered;
+  state.ready_queue_revision = positiveInt(state.revision);
+  return ordered;
+}
+function startRun(manifestFile, runIdArg, root, force, dispatchOverrides = null) {
+  const resolvedRoot = requireRepoInternal(root, "state root");
+  const manifest = loadManifest(manifestFile);
+  const validation = validateManifest(manifest);
+  if (validation.status !== "ok") {
+    throw new ToolError(`fleet manifest failed validation: ${validation.errors.join("; ")}`);
+  }
+  const stem = path22.basename(pyStr(manifestFile)).replace(/\.[^.\\/]*$/, "");
+  const runId = safeId(runIdArg || pyStr(manifest.run_id || stem));
+  const directory = runDir(resolvedRoot, runId);
+  if (existsSync12(directory) && !force) throw new ToolError(`fleet run already exists: ${rel(directory)}`);
+  if (existsSync12(api.cancellationPath(resolvedRoot, runId))) throw new ToolError("cancelled fleet records are retained; use a new run_id");
+  if (existsSync12(directory) && force) rmSync5(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  mkdirSync12(directory, { recursive: true });
+  writeJson2(manifestSnapshotPath(resolvedRoot, runId), manifest);
+  const state = createInitialState(
+    manifest,
+    resolveLikePython(manifestFile),
+    runId,
+    resolvedRoot,
+    dispatchOverrides
+  );
+  state.run_state = "running";
+  appendFleetEvent(state, "fleet_started", null, {
+    businessState: "running",
+    incrementNodeRevision: false,
+    manifest: pyStr(manifestFile)
+  });
+  rebuildReadyQueue(state, Array.isArray(manifest.nodes) ? [...manifest.nodes] : [], { preserveExisting: false });
+  writeJson2(statePath(resolvedRoot, runId), state);
+  return {
+    status: "ok",
+    run_id: runId,
+    state_path: rel(statePath(resolvedRoot, runId)),
+    nodes: state.nodes.length
+  };
+}
+var BUSINESS_STATE_BY_NODE_STATE;
+var init_state = __esm({
+  async "ops/tools/dispatch-core/fleet/state.mjs"() {
+    init_api();
+    init_py();
+    init_tool_common();
+    await init_fleet_manifest_check();
+    init_constants();
+    init_paths();
+    init_py_utils();
+    await init_route();
+    BUSINESS_STATE_BY_NODE_STATE = {
+      done: "completed",
+      failed: "failed",
+      cancelled: "cancelled",
+      blocked: "blocked",
+      needs_parent_review: "needs_owner",
+      running: "running",
+      queued: "queued",
+      submitted: "submitted",
+      pending: "pending"
+    };
+    Object.assign(api, {
+      createInitialState,
+      indexNodes,
+      appendFleetEvent,
+      setNodeState,
+      setFailureFuse,
+      rebuildReadyQueue,
+      startRun,
+      BUSINESS_STATE_BY_NODE_STATE
+    });
+  }
+});
+
+// ops/tools/dispatch-core/fleet/dag.mjs
+import path23 from "node:path";
+function acceptanceLeafExpectedIds(manifestNode) {
+  const seed = nodeSeed(manifestNode);
+  const contract = isRecord(seed.contract) ? seed.contract : {};
+  const context = isRecord(contract.acceptance_context) ? contract.acceptance_context : {};
+  const items = Array.isArray(context.items) ? context.items : [];
+  let ids2 = items.filter((item) => isRecord(item) && item.acceptance_id).map((item) => pyStr(item.acceptance_id));
+  if (!ids2.length && context.acceptance_id) ids2 = [pyStr(context.acceptance_id)];
+  return ids2;
+}
+function acceptanceResultsBlockIssue(reportPath, expectedIds) {
+  let text3;
+  try {
+    text3 = pyReadText(reportPath);
+  } catch {
+    return `report not readable: ${rel(reportPath)}`;
+  }
+  const match = ACCEPTANCE_RESULTS_BLOCK.exec(text3);
+  if (!match) return "missing ```json acceptance_results block";
+  let payload;
+  try {
+    payload = pyJsonLoads(match[1]);
+  } catch (error) {
+    if (error?.name !== "JSONDecodeError") throw error;
+    return `acceptance_results block is invalid JSON: ${error.message}`;
+  }
+  const entries = isRecord(payload) ? payload.acceptance_results : null;
+  if (!Array.isArray(entries)) return "acceptance_results block root must contain an acceptance_results list";
+  const seen = [];
+  for (const entry of entries) {
+    if (!isRecord(entry)) return "acceptance_results entries must be objects";
+    if (!["pass", "fail", "needs_owner"].includes(entry.gate)) {
+      return `acceptance_results gate invalid: ${pyStr(entry.gate ?? null)}`;
+    }
+    seen.push(pyStr(entry.acceptance_id ?? null));
+  }
+  const seenSorted = sortedStrings2(new Set(seen));
+  const expectedSorted = sortedStrings2(new Set(expectedIds));
+  if (!pyDictEqual(seenSorted, expectedSorted) || seen.length !== new Set(seen).size) {
+    return `acceptance_results ids mismatch: got ${pyRepr(sortedStrings2(seen))}, expected ${pyRepr(sortedStrings2(expectedIds))}`;
+  }
+  return null;
+}
+function enforceAcceptanceResultsGate(state, manifestById, { reportRoot = null } = {}) {
+  if (!Object.values(manifestById).some((node) => nodeIsReducer(node))) return [];
+  const actions = [];
+  const byId = api.indexNodes(state);
+  for (const [nid, manifestNode] of Object.entries(manifestById)) {
+    if (nodeIsReducer(manifestNode)) continue;
+    const expectedIds = acceptanceLeafExpectedIds(manifestNode);
+    if (!expectedIds.length) continue;
+    const node = byId[nid];
+    if (!node || node.state !== "done") continue;
+    const taskId = pyStr(node.task_id || "");
+    if (!taskId || node.acceptance_results_checked === taskId) continue;
+    const slug = pyStr(nodeSeed(manifestNode).slug || "");
+    const reportPath = path23.join(reportRoot || path23.join(ROOT, "notes", "verify"), `${slug}.md`);
+    const issue = acceptanceResultsBlockIssue(reportPath, expectedIds);
+    node.acceptance_results_checked = taskId;
+    if (issue === null) {
+      delete node.acceptance_results_block;
+      continue;
+    }
+    node.acceptance_results_block = issue;
+    actions.push({ node: nid, action: "derive_from_prose", issue });
+  }
+  return actions;
+}
+function downstreamCounts(manifestNodesList) {
+  const ids2 = manifestNodesList.map((node) => nodeId(node));
+  const reverse = /* @__PURE__ */ new Map();
+  for (const nid of ids2) if (!reverse.has(nid)) reverse.set(nid, /* @__PURE__ */ new Set());
+  for (const node of manifestNodesList) {
+    const nid = nodeId(node);
+    for (const dep of nodeDependsOn(node)) {
+      if (reverse.has(dep)) reverse.get(dep).add(nid);
+    }
+  }
+  const memo = /* @__PURE__ */ new Map();
+  const visit = (nid) => {
+    if (memo.has(nid)) return memo.get(nid);
+    const children = /* @__PURE__ */ new Set();
+    memo.set(nid, children);
+    for (const child of reverse.get(nid) ?? /* @__PURE__ */ new Set()) {
+      children.add(child);
+      for (const item of visit(child)) children.add(item);
+    }
+    memo.set(nid, children);
+    return children;
+  };
+  const out = /* @__PURE__ */ Object.create(null);
+  for (const nid of ids2) out[nid] = visit(nid).size;
+  return out;
+}
+function dependenciesReady(node, byId) {
+  const policy = pyStr(node.dependency_policy || "all_succeeded");
+  for (const dep of node.depends_on || []) {
+    const depNode = byId[dep] ?? {};
+    const depState = depNode.state;
+    if (depNode.kind === "gate") {
+      if (depState !== "done") return false;
+      continue;
+    }
+    if (depState === "needs_parent_review" && api.requiresSafetyReview(depNode.last_status || {})) return false;
+    if (policy === "all_settled") {
+      if (!TERMINAL_STATES.has(depState)) return false;
+    } else if (depState !== "done") {
+      return false;
+    }
+  }
+  return true;
+}
+function blockedByFailedDependency(node, byId) {
+  const toleratesFailure = pyStr(node.dependency_policy || "all_succeeded") === "all_settled" || pyStr(node.failure_policy || "success_only") === "all_settled";
+  for (const dep of node.depends_on || []) {
+    const depNode = byId[dep] ?? {};
+    const depState = depNode.state;
+    if (!FAILED_DEPENDENCY_STATES.has(depState)) continue;
+    if (depNode.kind === "gate" || !toleratesFailure) return pyStr(dep);
+  }
+  return null;
+}
+function registerAllSettledConsumers(state) {
+  const byId = api.indexNodes(state);
+  const consumersByDependency = /* @__PURE__ */ new Map();
+  for (const consumer of Array.isArray(state.nodes) ? state.nodes : []) {
+    if (!isRecord(consumer) || consumer.dependency_policy !== "all_settled") continue;
+    const consumerId = pyStr(consumer.id || "");
+    for (const dependencyId of consumer.depends_on || []) {
+      const key = pyStr(dependencyId);
+      if (!consumersByDependency.has(key)) consumersByDependency.set(key, []);
+      consumersByDependency.get(key).push(consumerId);
+    }
+  }
+  const changed = [];
+  for (const [dependencyId, consumerIds] of consumersByDependency) {
+    const dependency = byId[dependencyId];
+    if (!dependency || !TERMINAL_STATES.has(dependency.state)) continue;
+    if (dependency.kind === "gate" || api.requiresSafetyReview(dependency.last_status || {})) {
+      continue;
+    }
+    const normalizedConsumers = sortedStrings2(new Set(consumerIds));
+    if (!pyDictEqual(dependency.all_settled_consumers ?? null, normalizedConsumers)) {
+      dependency.all_settled_consumers = normalizedConsumers;
+      changed.push(dependencyId);
+    }
+    if (dependency.state === "needs_parent_review") {
+      const lastStatus = isRecord(dependency.last_status) ? dependency.last_status : {};
+      const executionState = lastStatus.state;
+      if (!ASYNC_TERMINAL_STATES.has(executionState)) continue;
+      api.setNodeState(state, dependency, executionState, {
+        eventType: "agent_settled",
+        businessState: pyStr(lastStatus.business_state || "") || null,
+        review_deferred_to: normalizedConsumers
+      });
+      dependency.review_required = false;
+      dependency.review_decision = null;
+      dependency.review_deferred_to = normalizedConsumers;
+      changed.push(dependencyId);
+    }
+    dependency.updated_at = utcNow();
+  }
+  return sortedStrings2(new Set(changed));
+}
+function releaseResolvedDependencyBlocks(state, byId) {
+  const released = [];
+  for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
+    if (!isRecord(node) || node.state !== "blocked") continue;
+    const blocker = pyStr(node.blocked_by || "");
+    const dependencies = new Set((node.depends_on || []).map((dep) => pyStr(dep)));
+    if (!dependencies.has(blocker)) continue;
+    const blockerState = (byId[blocker] ?? {}).state;
+    if (pyStr(node.dependency_policy || "all_succeeded") !== "all_settled" && FAILED_DEPENDENCY_STATES.has(blockerState)) {
+      continue;
+    }
+    node.state = "pending";
+    delete node.blocked_by;
+    node.updated_at = utcNow();
+    released.push(pyStr(node.id || ""));
+  }
+  return released;
+}
+var ACCEPTANCE_RESULTS_BLOCK;
+var init_dag = __esm({
+  async "ops/tools/dispatch-core/fleet/dag.mjs"() {
+    init_api();
+    init_py();
+    init_tool_common();
+    await init_fleet_manifest_check();
+    init_constants();
+    init_py_utils();
+    ACCEPTANCE_RESULTS_BLOCK = /```json[ \t]+acceptance_results[^\n]*\n([\s\S]*?)\n```/i;
+    Object.assign(api, {
+      acceptanceLeafExpectedIds,
+      acceptanceResultsBlockIssue,
+      enforceAcceptanceResultsGate,
+      downstreamCounts,
+      dependenciesReady,
+      blockedByFailedDependency,
+      registerAllSettledConsumers,
+      releaseResolvedDependencyBlocks,
+      ACCEPTANCE_RESULTS_BLOCK
+    });
+  }
+});
+
+// ops/tools/async-core/runtime/shared.mjs
+var HOST_REBOOT_MARGIN_MS;
+var init_shared = __esm({
+  "ops/tools/async-core/runtime/shared.mjs"() {
+    HOST_REBOOT_MARGIN_MS = 5e3;
+  }
+});
+
+// ops/tools/dispatch-core/fleet/cancel.mjs
+import { existsSync as existsSync13, writeFileSync as writeFileSync8 } from "node:fs";
+import path24 from "node:path";
+import process12 from "node:process";
+function settleFleetIfNeeded(state) {
+  const terminal = (Array.isArray(state.nodes) ? state.nodes : []).every(
+    (node) => isRecord(node) && TERMINAL_STATES.has(node.state)
+  );
+  if (!terminal) return false;
+  const outcomeState = api.driverOutcome(state);
+  state.run_state = outcomeState;
+  let previousOutcome = null;
+  const events = state.events;
+  if (Array.isArray(events)) {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (isRecord(event) && event.type === "fleet_settled") {
+        previousOutcome = event.business_state ?? null;
+        break;
+      }
+    }
+  }
+  if (previousOutcome === outcomeState) {
+    state.fleet_settled_emitted = true;
+    return false;
+  }
+  api.appendFleetEvent(state, "fleet_settled", null, {
+    businessState: outcomeState,
+    incrementNodeRevision: false,
+    counts: api.stateCounts(state)
+  });
+  state.fleet_settled_emitted = true;
+  return true;
+}
+function cancellationPath(root, runId) {
+  return path24.join(runDir(root, runId), "cancel-request.json");
+}
+function cancelRun(runId, root, reason) {
+  const resolvedRoot = requireRepoInternal(root, "state root");
+  if (!String(reason || "").trim()) throw new ToolError("cancellation reason is required");
+  loadJson(statePath(resolvedRoot, runId));
+  try {
+    writeFileSync8(cancellationPath(resolvedRoot, runId), JSON.stringify({ reason, requested_at: utcNow() }), { flag: "wx" });
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+  }
+  try {
+    return runMutationLock(resolvedRoot, runId, () => {
+      const state = loadJson(statePath(resolvedRoot, runId));
+      return settleCancellation(state);
+    }, { timeoutSeconds: 5 });
+  } catch (error) {
+    if (!String(error.message).startsWith("fleet run mutation lock busy:")) throw error;
+    return { status: "cancelling", run_id: runId, reason: "waiting_for_inflight_operation", submitted: [] };
+  }
+}
+function missingTaskStoppedByReboot(state, node, taskRoot, failures) {
+  if (failures.length !== 1) return false;
+  let lookup;
+  try {
+    lookup = JSON.parse(failures[0]);
+  } catch {
+    return false;
+  }
+  if (lookup?.error !== `Unknown task_id: ${node.task_id}`) return false;
+  if (existsSync13(path24.join(taskRoot, node.task_id))) return false;
+  const started = (state.events || []).filter((event) => event.type === "agent_started" && event.node_id === node.id && event.task_id === node.task_id);
+  if (started.length !== 1) return false;
+  const dispatchedAt = Date.parse(started[0].at || started[0].timestamp || "");
+  const bootTime = Number(deps3.bootTimeMs());
+  return Number.isFinite(dispatchedAt) && Number.isFinite(bootTime) && dispatchedAt + HOST_REBOOT_MARGIN_MS < bootTime && !(state.events || []).some((event) => event.node_id === node.id && event.task_id === node.task_id && event.type !== "agent_started" && Date.parse(event.at || event.timestamp || "") >= bootTime);
+}
+function settleCancellation(state) {
+  const errors = [];
+  for (const node of state.nodes || []) {
+    if ((ACTIVE_STATES.has(node.state) || node.state === "paused" || node.resource_quarantined) && node.task_id) {
+      const taskRoot = api.nodeTaskRoot(state, node);
+      try {
+        node.cancel_reason = "user_requested";
+        const [statuses, failures] = api.asyncInternalBatch("get", taskRoot, [node.task_id]);
+        let status = statuses[node.task_id];
+        if (!status && missingTaskStoppedByReboot(state, node, taskRoot, failures)) {
+          api.setNodeState(state, node, "cancelled", {
+            eventType: "agent_settled",
+            businessState: "unknown",
+            source: "host_reboot_missing_task"
+          });
+          node.missing_task_evidence = { task_id: node.task_id, source: "host_reboot", outcome: "unknown" };
+          node.resource_quarantined = false;
+          continue;
+        }
+        errors.push(...failures);
+        if (!status) continue;
+        if (!ASYNC_TERMINAL_STATES.has(status.state) || node.resource_quarantined) {
+          const result = deps3.runCommand([
+            process12.execPath,
+            hostPaths.ASYNC_SERVICE_PATH,
+            "internal",
+            "cancel",
+            "--task-root",
+            taskRoot,
+            "--task-id",
+            node.task_id,
+            "--expected-revision",
+            String(status.revision),
+            "--reason",
+            "user_requested"
+          ], ROOT);
+          if (result.exit_code !== 0) errors.push((result.stderr || result.stdout).slice(0, 600));
+          const [latest, refreshErrors] = api.asyncInternalBatch("get", taskRoot, [node.task_id]);
+          errors.push(...refreshErrors);
+          status = latest[node.task_id];
+        }
+        if (status) api.applyAsyncStatus(node, status, "fleet_cancel", state);
+      } catch (error) {
+        errors.push(`${node.id}: ${error.message}`);
+      }
+    } else if (ACTIVE_STATES.has(node.state) || node.resource_quarantined) {
+      errors.push(`${node.id}: active execution has no confirmed termination`);
+    } else if (node.state === "paused") {
+      errors.push(`${node.id}: paused execution has no task_id; not marked cancelled`);
+    } else if (!TERMINAL_STATES.has(node.state)) {
+      api.setNodeState(state, node, "cancelled", { eventType: "agent_settled", businessState: "cancelled" });
+      node.cancel_reason = "user_requested";
+      node.not_executed = true;
+    }
+  }
+  state.ready_queue = [];
+  const active = (state.nodes || []).filter((node) => ACTIVE_STATES.has(node.state) || node.resource_quarantined);
+  state.run_state = active.length || errors.length ? "cancelling" : "cancelled";
+  state.cancellation = { ...loadJson(cancellationPath(state.state_root, state.run_id)), errors };
+  state.updated_at = utcNow();
+  writeJson2(statePath(state.state_root, state.run_id), state);
+  if (state.run_state === "cancelled") {
+    const driverFile = driverStatusPath(state.state_root, state.run_id);
+    const driver = existsSync13(driverFile) ? loadJson(driverFile) : {};
+    writeJson2(driverFile, {
+      ...driver,
+      run_id: state.run_id,
+      status: "cancelled",
+      counts: api.stateCounts(state),
+      updated_at: utcNow()
+    });
+  }
+  return { status: state.run_state, run_id: state.run_id, active: active.map((node) => node.id), errors, submitted: [] };
+}
+var init_cancel = __esm({
+  "ops/tools/dispatch-core/fleet/cancel.mjs"() {
+    init_api();
+    init_tool_common();
+    init_shared();
+    init_constants();
+    init_deps();
+    init_host_paths();
+    init_locks();
+    init_paths();
+    Object.assign(api, {
+      settleFleetIfNeeded,
+      cancellationPath,
+      cancelRun,
+      missingTaskStoppedByReboot,
+      settleCancellation
+    });
+  }
+});
+
+// ops/tools/dispatch-core/fleet/summary.mjs
+import { existsSync as existsSync14 } from "node:fs";
 function stateCounts(state) {
   const counts = /* @__PURE__ */ Object.create(null);
   for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
@@ -10960,11 +10673,11 @@ function loadManifestSnapshotForStatus(state) {
   const pathText = state.manifest_snapshot;
   if (!pathText) return null;
   const resolved = requireRepoInternal(resolveUnder(pyStr(pathText), ROOT), "manifest snapshot");
-  if (!existsSync9(resolved)) return null;
+  if (!existsSync14(resolved)) return null;
   return loadJson(resolved);
 }
 function orderedPendingIds(state, manifest) {
-  const byId = indexNodes(state);
+  const byId = api.indexNodes(state);
   const pendingIds = (Array.isArray(state.nodes) ? state.nodes : []).filter((node) => isRecord(node) && node.state === "pending").map((node) => pyStr(node.id ?? null));
   if (!manifest) return pendingIds;
   const manifestNodesList = (Array.isArray(manifest.nodes) ? manifest.nodes : []).filter((node) => isRecord(node));
@@ -10979,7 +10692,7 @@ function orderedPendingIds(state, manifest) {
   layers.forEach((layer, index) => {
     for (const nid of layer) layerIndex[nid] = index;
   });
-  const criticality = downstreamCounts(manifestNodesList);
+  const criticality = api.downstreamCounts(manifestNodesList);
   const ordered = layers.flat().filter((nid) => Object.hasOwn(byId, nid) && byId[nid].state === "pending");
   const seen = new Set(ordered);
   for (const nid of pendingIds) {
@@ -10997,26 +10710,26 @@ function orderedPendingIds(state, manifest) {
   return ordered;
 }
 function nextReadySummary(state, manifest) {
-  const byId = indexNodes(state);
-  const activeScopes = activeWriteScopes(state);
+  const byId = api.indexNodes(state);
+  const activeScopes = api.activeWriteScopes(state);
   const ready = [];
   const blockedReady = [];
   let submittedThisTick = 0;
   for (const nid of orderedPendingIds(state, manifest)) {
     const node = byId[nid];
     if (!node) continue;
-    const badDep = blockedByFailedDependency(node, byId);
+    const badDep = api.blockedByFailedDependency(node, byId);
     if (badDep) {
       blockedReady.push({ id: nid, reason: `blocked_dependency:${badDep}` });
       continue;
     }
-    if (!dependenciesReady(node, byId)) continue;
-    const lockedBy = writeLocked(node, activeScopes);
+    if (!api.dependenciesReady(node, byId)) continue;
+    const lockedBy = api.writeLocked(node, activeScopes);
     if (lockedBy) {
       blockedReady.push({ id: nid, reason: `write_locked_by:${lockedBy}` });
       continue;
     }
-    const [ok, reason] = budgetAllows(node, state, submittedThisTick);
+    const [ok, reason] = api.budgetAllows(node, state, submittedThisTick);
     if (!ok) {
       blockedReady.push({ id: nid, reason });
       continue;
@@ -11046,7 +10759,7 @@ function buildStatusSummary(state, manifest) {
   return {
     total: nodes.length,
     counts,
-    run_state: state.state_root && state.run_id && existsSync9(cancellationPath(state.state_root, state.run_id)) ? state.run_state === "cancelled" ? "cancelled" : "cancelling" : state.run_state ?? null,
+    run_state: state.state_root && state.run_id && existsSync14(api.cancellationPath(state.state_root, state.run_id)) ? state.run_state === "cancelled" ? "cancelled" : "cancelling" : state.run_state ?? null,
     ...state.cancellation ? { cancellation: { ...state.cancellation, errors: (state.cancellation.errors || []).slice(0, SUMMARY_NODE_LIMIT) } } : {},
     revision: Object.hasOwn(state, "revision") ? state.revision : 0,
     event_revision: Object.hasOwn(state, "event_revision") ? state.event_revision : 0,
@@ -11104,42 +10817,747 @@ function statusRun(runId, root, summary = false) {
   data.state = state;
   return data;
 }
-var DEFAULT_STATE_ROOT, DEFAULT_ASYNC_TASK_ROOT, TERMINAL_STATES, ASYNC_TERMINAL_STATES, ACTIVE_STATES, FAILED_DEPENDENCY_STATES, SUMMARY_NODE_LIMIT, SUMMARY_EVENT_LIMIT, SAFE_ID_RE, INITIAL_LIVENESS_GRACE_SECONDS, RUN_LOCK_TIMEOUT_SECONDS, LIVENESS_RECHECK_SECONDS, DISPATCH_PREPARE_TIMEOUT_SECONDS, MAX_RUNTIME_EVIDENCE_BYTES, MAX_RUNTIME_USAGE_VALUE, RUNTIME_USAGE_FIELDS, ROUTE_KEYS, SCHEDULER_CLI_PATH, DISPATCH_PREPARE_PATH, ASYNC_SERVICE_PATH, deps3, BUSINESS_STATE_BY_NODE_STATE, ACCEPTANCE_RESULTS_BLOCK, PAUSE_UNCONFIRMED_NEXT_STEP, RESUME_SEAM_NEXT_STEP;
+var init_summary = __esm({
+  async "ops/tools/dispatch-core/fleet/summary.mjs"() {
+    init_api();
+    init_py();
+    init_tool_common();
+    await init_fleet_manifest_check();
+    init_constants();
+    init_paths();
+    init_py_utils();
+    await init_route();
+    Object.assign(api, {
+      stateCounts,
+      shortText,
+      compactNode,
+      compactEvent,
+      loadManifestSnapshotForStatus,
+      orderedPendingIds,
+      nextReadySummary,
+      buildStatusSummary,
+      stableSortDesc,
+      formatStatusSummary,
+      statusRun
+    });
+  }
+});
+
+// ops/tools/dispatch-core/fleet/review.mjs
+import { existsSync as existsSync15 } from "node:fs";
+function reviewEvidencePath(value) {
+  if (!pyStrip(value)) throw new ToolError("review evidence is required");
+  const resolved = requireRepoInternal(resolveUnder(pyStrip(value), ROOT), "review evidence");
+  if (!existsSync15(resolved)) throw new ToolError(`review evidence does not exist: ${rel(resolved)}`);
+  return rel(resolved);
+}
+function appendReviewRecord(node, record2) {
+  if (!Object.hasOwn(node, "review_history")) node.review_history = [];
+  const history = node.review_history;
+  if (Array.isArray(history)) {
+    history.push(record2);
+    if (history.length > 20) history.splice(0, history.length - 20);
+  }
+  node.review = record2;
+  node.review_decision = record2.decision;
+  node.review_required = false;
+  node.reviewed_at = record2.reviewed_at;
+  return null;
+}
+function reviewRun(runId, root, nodeIdValue, decision, evidence, reason) {
+  const resolvedRoot = requireRepoInternal(root, "state root");
+  return runMutationLock(resolvedRoot, runId, () => reviewRunLocked(runId, resolvedRoot, nodeIdValue, decision, evidence, reason));
+}
+function reviewRunLocked(runId, root, nodeIdValue, decision, evidence, reason) {
+  const resolvedRoot = requireRepoInternal(root, "state root");
+  const target = statePath(resolvedRoot, runId);
+  const state = loadJson(target);
+  const node = indexNodes(state)[nodeIdValue];
+  if (!node) throw new ToolError(`node not found: ${nodeIdValue}`);
+  if (existsSync15(cancellationPath(resolvedRoot, runId))) throw new ToolError("fleet cancellation requested; start a new run instead of reviewing this run");
+  const currentState = node.state;
+  const settledRequeue = decision === "requeued" && ["done", "blocked", "failed", "cancelled"].includes(currentState);
+  if (node.resource_quarantined || currentState !== "needs_parent_review" && !settledRequeue) {
+    throw new ToolError(`node is not waiting for parent review: ${nodeIdValue} state=${pyStr(node.state ?? null)}`);
+  }
+  const evidencePath = decision === "requeued" && !pyStrip(evidence) ? null : reviewEvidencePath(evidence);
+  const record2 = {
+    decision,
+    evidence_path: evidencePath,
+    reason: pyStrip(reason),
+    reviewed_at: utcNow(),
+    previous_state: node.state ?? null,
+    previous_task_id: node.task_id ?? null
+  };
+  let reviewRound = positiveInt(node.review_round);
+  if (decision !== "accepted") reviewRound += 1;
+  node.review_round = reviewRound;
+  record2.round = reviewRound;
+  appendReviewRecord(node, record2);
+  const fuseTripped = false;
+  if (decision === "accepted") {
+    setNodeState(state, node, "done", { eventType: "agent_settled", businessState: "completed" });
+    delete node.blocked_by;
+  } else if (decision === "blocked") {
+    setNodeState(state, node, "blocked", { eventType: "agent_settled", businessState: "blocked" });
+    node.blocked_by = "parent_review";
+  } else if (decision === "requeued") {
+    const previousTaskId = pyStr(node.task_id || "");
+    if (previousTaskId) {
+      if (!Object.hasOwn(node, "superseded_task_ids")) node.superseded_task_ids = [];
+      const superseded = node.superseded_task_ids;
+      if (Array.isArray(superseded) && !superseded.includes(previousTaskId)) {
+        superseded.push(previousTaskId);
+        if (superseded.length > 20) superseded.splice(0, superseded.length - 20);
+      }
+    }
+    node.task_id = null;
+    node.receipt_task_id = null;
+    node.dispatch = null;
+    node.last_status = null;
+    node.review_required = false;
+    node.review_decision = null;
+    node.review = null;
+    delete node.reviewed_at;
+    delete node.next_liveness_check_at;
+    delete node.blocked_by;
+    setNodeState(state, node, "pending", { eventType: "agent_progress", businessState: "queued" });
+  } else {
+    throw new ToolError("review decision must be accepted, blocked or requeued");
+  }
+  node.updated_at = utcNow();
+  state.updated_at = utcNow();
+  appendFleetEvent(state, "review", node, {
+    incrementNodeRevision: false,
+    decision,
+    evidence_path: evidencePath,
+    review_round: reviewRound,
+    fuse_tripped: fuseTripped
+  });
+  const manifest = loadManifestSnapshotForStatus(state);
+  if (manifest) rebuildReadyQueue(state, Array.isArray(manifest.nodes) ? [...manifest.nodes] : []);
+  writeJson2(target, state);
+  return {
+    status: "ok",
+    run_id: runId,
+    node_id: nodeIdValue,
+    decision,
+    node_state: node.state,
+    review_round: reviewRound,
+    fuse_tripped: fuseTripped,
+    state_path: rel(target)
+  };
+}
+var init_review = __esm({
+  async "ops/tools/dispatch-core/fleet/review.mjs"() {
+    init_py();
+    init_tool_common();
+    init_cancel();
+    init_locks();
+    init_paths();
+    init_py_utils();
+    await init_state();
+    await init_summary();
+  }
+});
+
+// ops/tools/dispatch-core/fleet/admission.mjs
+import { existsSync as existsSync16 } from "node:fs";
+import path25 from "node:path";
+function activeWriteScopes(state) {
+  const scopes = [];
+  for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
+    if (isRecord(node) && (ACTIVE_STATES.has(node.state) || node.resource_quarantined)) {
+      scopes.push([pyStr(node.id ?? null), [...node.write_scope || []]]);
+    }
+  }
+  return scopes;
+}
+function activeResourceLocks(state) {
+  const locks = [];
+  for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
+    if (isRecord(node) && (ACTIVE_STATES.has(node.state) || node.resource_quarantined)) {
+      const raw = node.resource_locks;
+      const values = Array.isArray(raw) ? sortedStrings2(new Set(raw.map((item) => pyStrip(pyStr(item))).filter((item) => item))) : [];
+      if (values.length) locks.push([pyStr(node.id || ""), values]);
+    }
+  }
+  return locks;
+}
+function writeLocked(node, active) {
+  const scope = [...node.write_scope || []];
+  if (!scope.length) return null;
+  for (const [owner, otherScope] of active) {
+    for (const left of scope) {
+      for (const right of otherScope) {
+        if (pathConflict(left, right)) return owner;
+      }
+    }
+  }
+  return null;
+}
+function resourceLocked(node, active) {
+  const requested = new Set(
+    (node.resource_locks || []).map((item) => pyStrip(pyStr(item))).filter((item) => item)
+  );
+  if (!requested.size) return null;
+  for (const [owner, held] of active) {
+    if (held.some((item) => requested.has(item))) return owner;
+  }
+  return null;
+}
+function budgetAllows(node, state, submittedThisTick) {
+  const budget = isRecord(state.budget) ? state.budget : {};
+  const activeNodes = (Array.isArray(state.nodes) ? state.nodes : []).filter(
+    (n) => isRecord(n) && ACTIVE_STATES.has(n.state)
+  );
+  const maxTotal = pyInt(budget.max_running_total || 8);
+  const maxTick = pyInt(budget.max_submitted_per_tick || maxTotal);
+  if (activeNodes.length >= maxTotal) return [false, `max_running_total ${maxTotal} reached`];
+  if (submittedThisTick >= maxTick) return [false, `max_submitted_per_tick ${maxTick} reached`];
+  const roleLimits = isRecord(budget.max_running_by_role) ? budget.max_running_by_role : {};
+  const role = pyStr(node.role || "");
+  const roleLimit = roleLimits[role];
+  if (typeof roleLimit === "number" && Number.isInteger(roleLimit) && typeof roleLimit !== "boolean" && roleLimit > 0) {
+    const roleActive = activeNodes.filter((n) => n.role === role).length;
+    if (roleActive >= roleLimit) return [false, `max_running_by_role.${role} ${roleLimit} reached`];
+  }
+  return [true, ""];
+}
+function ensureWorktree(state, node) {
+  const worktreeRoot = path25.join(runDir(pyStr(state.state_root), state.run_id), "worktrees");
+  const worktree = path25.join(worktreeRoot, safeId(pyStr(node.id)));
+  if (node.worktree_path) return pyStr(node.worktree_path);
+  if (existsSync16(worktree)) throw new ToolError(`worktree path already exists before dispatch: ${rel(worktree)}`);
+  const result = deps3.runCommand(["git", "worktree", "add", "--detach", worktree, "HEAD"], ROOT, { timeout: 120 });
+  if (result.exit_code !== 0) {
+    throw new ToolError(`git worktree add failed for ${node.id}: ${result.stderr.slice(0, 600)}`);
+  }
+  node.worktree_path = worktree;
+  return worktree;
+}
+function dependencyResultEntries(state, node, manifestNode) {
+  const requested = nodeDependencyArtifacts(manifestNode);
+  const policy = nodeDependencyPolicy(manifestNode);
+  const byId = api.indexNodes(state);
+  const resolved = [];
+  const entries = [];
+  for (const dependencyId of node.depends_on || []) {
+    const dependency = byId[pyStr(dependencyId)] ?? {};
+    const lastStatus = isRecord(dependency.last_status) ? dependency.last_status : {};
+    const dispatch = isRecord(dependency.dispatch) ? dependency.dispatch : {};
+    const businessOutput = isRecord(dispatch.business_output) ? dispatch.business_output : {};
+    const artifactPaths = {};
+    const missingArtifacts = [];
+    const requestedForDep = dependency.kind === "gate" ? [] : requested;
+    for (const artifact of requestedForDep) {
+      const candidates = artifact === "report" ? [
+        lastStatus.business_report_path,
+        lastStatus.report_path,
+        lastStatus.declared_report_path,
+        businessOutput.expected_report_path
+      ] : [
+        lastStatus.business_handoff_path,
+        lastStatus.handoff_path,
+        lastStatus.declared_handoff_path,
+        businessOutput.expected_handoff_path
+      ];
+      let selected = "";
+      for (const candidate of candidates) {
+        if (typeof candidate !== "string" || !pyStrip(candidate)) continue;
+        const target = resolveUnder(candidate, ROOT);
+        if (existsSync16(target)) {
+          selected = target;
+          break;
+        }
+      }
+      if (!selected) {
+        missingArtifacts.push(artifact);
+        if (policy !== "all_settled") {
+          throw new ToolError(
+            `node ${pyStr(node.id ?? null)} dependency ${dependencyId} has no durable ${artifact} artifact`
+          );
+        }
+        continue;
+      }
+      artifactPaths[artifact] = selected;
+      if (!resolved.includes(selected)) resolved.push(selected);
+    }
+    let artifactState;
+    if (!requestedForDep.length) artifactState = "not_requested";
+    else if (!missingArtifacts.length) artifactState = "available";
+    else if (Object.keys(artifactPaths).length) artifactState = "partial";
+    else artifactState = "missing";
+    const entry = {
+      node_id: pyStr(dependencyId),
+      execution_state: lastStatus.state || dependency.state || "unknown",
+      orchestration_state: dependency.state || "unknown",
+      business_state: lastStatus.business_state || "unknown",
+      artifact_state: artifactState,
+      artifacts: artifactPaths,
+      missing_artifacts: missingArtifacts
+    };
+    for (const key of ["contract_state", "failure_type", "error"]) {
+      const value = lastStatus[key];
+      if (notEmptyPy(value)) entry[key] = typeof value === "string" ? api.shortText(value) : value;
+    }
+    const blockIssue = dependency.acceptance_results_block;
+    if (blockIssue) {
+      entry.acceptance_results_block = typeof blockIssue === "string" ? api.shortText(blockIssue) : blockIssue;
+    }
+    entries.push(entry);
+  }
+  return [resolved, entries];
+}
+function writeDependencyResultIndex(state, node, manifestNode, entries) {
+  const root = pyStr(state.state_root);
+  const target = dependencyResultIndexPath(root, pyStr(state.run_id), pyStr(node.id));
+  writeJson2(target, {
+    schema_version: 1,
+    consumer_node_id: pyStr(node.id),
+    dependency_policy: "all_settled",
+    requested_artifacts: nodeDependencyArtifacts(manifestNode),
+    dependencies: entries
+  });
+  return resolveLikePython(target);
+}
+function seedWithDependencyArtifacts(state, node, manifestNode, manifest = {}) {
+  const seed = nodeSeed(manifestNode);
+  const writes = [...stringList2(manifestNode.write_scope), ...stringList2(manifestNode.write_domains)];
+  if (writes.length && nodeIsolation(manifestNode, manifest) !== "read_only" && nodeTargetIsolation(manifestNode, manifest) !== "read_only") {
+    seed.scope ??= {};
+    seed.scope.write_extra = dedupe([...seed.scope.write_extra || [], ...writes]);
+  }
+  let [artifacts, entries] = dependencyResultEntries(state, node, manifestNode);
+  if (nodeDependencyPolicy(manifestNode) === "all_settled") {
+    const indexPath = writeDependencyResultIndex(state, node, manifestNode, entries);
+    artifacts = [indexPath, ...artifacts];
+  }
+  if (!artifacts.length) return seed;
+  if (!Object.hasOwn(seed, "scope")) seed.scope = {};
+  const scope = seed.scope;
+  if (!isRecord(scope)) throw new ToolError(`node ${pyStr(node.id ?? null)} seed.scope must be an object`);
+  const reads = Object.hasOwn(scope, "read") ? scope.read : [];
+  if (!Array.isArray(reads)) throw new ToolError(`node ${pyStr(node.id ?? null)} seed.scope.read must be a list`);
+  scope.read = dedupe([...artifacts, ...reads]);
+  const layers = seed.read_scope_layers;
+  if (isRecord(layers)) {
+    const entry = Object.hasOwn(layers, "entry") ? layers.entry : [];
+    if (!Array.isArray(entry)) {
+      throw new ToolError(`node ${pyStr(node.id ?? null)} seed.read_scope_layers.entry must be a list`);
+    }
+    layers.entry = dedupe([...artifacts, ...entry]);
+  }
+  return seed;
+}
+function markFailure(node, { contractState, failureType, error, fleetState = null } = {}) {
+  node.state = "failed";
+  node.review_required = false;
+  node.review_decision = null;
+  node.last_status = {
+    source: "fleet_scheduler",
+    state: "failed",
+    business_state: "failed",
+    contract_state: contractState,
+    failure_type: failureType,
+    error
+  };
+  node.updated_at = utcNow();
+  if (fleetState) api.appendFleetEvent(fleetState, "agent_settled", node, {
+    businessState: "failed",
+    contract_state: contractState,
+    failure_type: failureType,
+    error,
+    attention_required: true,
+    route: routeSnapshot(node)
+  });
+}
+function markParentReview(node, { contractState, failureType, error, fleetState = null } = {}) {
+  node.state = "needs_parent_review";
+  node.review_required = true;
+  node.review_decision = "pending";
+  node.last_status = {
+    source: "fleet_scheduler",
+    state: "failed",
+    business_state: "failed",
+    contract_state: contractState,
+    failure_type: failureType,
+    requires_parent_review: true,
+    safety_review: true,
+    error
+  };
+  node.updated_at = utcNow();
+  if (fleetState !== null && fleetState !== void 0) {
+    api.appendFleetEvent(fleetState, "agent_settled", node, {
+      businessState: "needs_owner",
+      contract_state: contractState,
+      failure_type: failureType,
+      error,
+      route: routeSnapshot(node)
+    });
+  }
+  return null;
+}
+function promoteLegacyDispatchFailureBlocks(state) {
+  const promoted = [];
+  for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
+    if (!isRecord(node) || node.state !== "blocked") continue;
+    if (node.task_id || node.blocked_by || node.last_status) continue;
+    const dispatch = node.dispatch;
+    if (!isRecord(dispatch)) continue;
+    let error = pyStrip(pyStr(dispatch.error || dispatch.stdout || ""));
+    if (!error) error = "legacy dispatch failure recorded without output";
+    markFailure(node, {
+      contractState: "dispatch_prepare_failed",
+      failureType: "legacy_dispatch_failure",
+      error,
+      fleetState: state
+    });
+    promoted.push(pyStr(node.id || ""));
+  }
+  return promoted;
+}
+var init_admission = __esm({
+  async "ops/tools/dispatch-core/fleet/admission.mjs"() {
+    init_api();
+    init_py();
+    init_tool_common();
+    await init_fleet_manifest_check();
+    init_constants();
+    init_deps();
+    init_paths();
+    init_py_utils();
+    await init_route();
+    Object.assign(api, {
+      activeWriteScopes,
+      activeResourceLocks,
+      writeLocked,
+      resourceLocked,
+      budgetAllows,
+      ensureWorktree,
+      dependencyResultEntries,
+      writeDependencyResultIndex,
+      seedWithDependencyArtifacts,
+      markFailure,
+      markParentReview,
+      promoteLegacyDispatchFailureBlocks
+    });
+  }
+});
+
+// ops/tools/dispatch-core/fleet/pause.mjs
+import { existsSync as existsSync17, rmSync as rmSync6 } from "node:fs";
+import path26 from "node:path";
+import process13 from "node:process";
+function pauseRequestPath(root, runId) {
+  return path26.join(runDir(root, runId), "pause-request.json");
+}
+function readPauseIntent(root, runId) {
+  const target = pauseRequestPath(root, runId);
+  return existsSync17(target) ? loadJson(target) : null;
+}
+function parseControlReply(result, label) {
+  if (!result || result.exit_code !== 0) return null;
+  try {
+    const data = pyJsonLoads(String(result.stdout ?? ""));
+    return isRecord(data) ? data : null;
+  } catch {
+    return null;
+  }
+}
+function controlFailureDetail(result) {
+  return String(result?.stderr || result?.stdout || "").trim().slice(0, 300);
+}
+function runAsyncControl(operation, taskRoot, taskId, { expectedRevision = "", reason = "" } = {}) {
+  const argv = [
+    process13.execPath,
+    hostPaths.ASYNC_SERVICE_PATH,
+    "internal",
+    operation,
+    "--task-root",
+    pyStr(taskRoot),
+    "--task-id",
+    pyStr(taskId)
+  ];
+  if (expectedRevision) argv.push("--expected-revision", pyStr(expectedRevision));
+  if (reason) argv.push("--reason", pyStr(reason));
+  const result = deps3.runCommand(argv, ROOT);
+  return { reply: parseControlReply(result, `async internal ${operation}`), detail: controlFailureDetail(result) };
+}
+function settlePause(state, { reason = null } = {}) {
+  const errors = [];
+  const root = pyStr(state.state_root);
+  const runId = pyStr(state.run_id);
+  const intent = readPauseIntent(root, runId);
+  const intentReason = pyStr(reason || intent?.reason || state.pause_request?.reason || "pause_requested");
+  const recorded = new Set(
+    [...intent?.task_ids ?? [], ...state.pause_request?.task_ids ?? []].map((item) => pyStr(item)).filter(Boolean)
+  );
+  const independent = new Set(
+    [...intent?.independent_task_ids ?? [], ...state.pause_request?.independent_task_ids ?? []].map((item) => pyStr(item)).filter(Boolean)
+  );
+  const nodes = (Array.isArray(state.nodes) ? state.nodes : []).filter((node) => isRecord(node));
+  if (existsSync17(api.cancellationPath(root, runId))) {
+    const cancellation = loadJson(api.cancellationPath(root, runId));
+    const cancellationState = ["cancelled", "cancelling"].includes(pyStr(state.run_state)) ? pyStr(state.run_state) : "cancelling";
+    return {
+      run_id: runId,
+      accepted: false,
+      state: cancellationState,
+      reason: "cancel_priority",
+      paused_task_ids: [],
+      pending_task_ids: [],
+      next_step: `\u5DF2\u5B58\u5728\u53D6\u6D88\u8BF7\u6C42\uFF08${pyStr(cancellation?.reason || "")}\uFF09\uFF0C\u6682\u505C\u4E0D\u518D\u6267\u884C\uFF1B\u7528 status \u89C2\u5BDF\u53D6\u6D88\u6536\u655B\uFF0C\u53D6\u6D88\u5B8C\u6210\u540E\u9700\u8981\u7EE7\u7EED\u65F6\u6309\u65B0 run \u5904\u7406\u3002`
+    };
+  }
+  if (nodes.length && nodes.every((node) => TERMINAL_STATES.has(node.state))) {
+    const settled = api.driverOutcome({ ...state, run_state: "running" });
+    state.run_state = settled;
+    state.updated_at = utcNow();
+    return {
+      run_id: runId,
+      accepted: true,
+      state: settled,
+      reason: "run_already_settled",
+      paused_task_ids: [],
+      pending_task_ids: []
+    };
+  }
+  for (const node of nodes) {
+    const taskId = pyStr(node.task_id || "");
+    if (!taskId) continue;
+    if (!(ACTIVE_STATES.has(node.state) || node.state === "paused")) continue;
+    const taskRoot = api.nodeTaskRoot(state, node);
+    const [statuses, failures] = api.asyncInternalBatch("get", taskRoot, [taskId], { detail: "diagnostic" });
+    errors.push(...failures);
+    const status = statuses[taskId];
+    if (!status) {
+      errors.push(`${pyStr(node.id)}: async get missing task ${taskId}`);
+      continue;
+    }
+    if (status.state === "paused") {
+      if (!recorded.has(taskId)) independent.add(taskId);
+      api.applyAsyncStatus(node, status, "fleet_pause", state);
+      continue;
+    }
+    if (!ACTIVE_STATES.has(status.state)) {
+      api.applyAsyncStatus(node, status, "fleet_pause", state);
+      continue;
+    }
+    if (node.pause_requested) continue;
+    const control = runAsyncControl("pause", taskRoot, taskId, {
+      expectedRevision: pyStr(status.revision),
+      reason: intentReason
+    });
+    if (!control.reply) {
+      errors.push(`${pyStr(node.id)}: internal pause \u672A\u53D6\u5F97\u56DE\u6267${control.detail ? `\uFF1A${control.detail}` : ""}`);
+      continue;
+    }
+    node.pause_request_reason = pyStr(control.reply.reason || "");
+    if (control.reply.reason === "already_paused") {
+      independent.add(taskId);
+      continue;
+    }
+    if (control.reply.accepted === false || control.reply.ok === false) {
+      errors.push(`${pyStr(node.id)}: ${pyStr(control.reply.reason || "pause_rejected")}${control.reply.next_step ? ` \u2014 ${pyStr(control.reply.next_step)}` : ""}`);
+      continue;
+    }
+    node.pause_requested = true;
+    recorded.add(taskId);
+  }
+  const pausedTaskIds = [];
+  const pendingTaskIds = [];
+  for (const taskId of [...recorded]) {
+    const node = nodes.find((item) => pyStr(item.task_id || "") === taskId);
+    if (!node) {
+      pendingTaskIds.push(taskId);
+      continue;
+    }
+    const [statuses, failures] = api.asyncInternalBatch("get", api.nodeTaskRoot(state, node), [taskId], { detail: "diagnostic" });
+    errors.push(...failures);
+    const status = statuses[taskId];
+    if (status) api.applyAsyncStatus(node, status, "fleet_pause", state);
+    if (status?.state === "paused") pausedTaskIds.push(taskId);
+    else if (!status || !TERMINAL_STATES.has(status.state)) pendingTaskIds.push(taskId);
+  }
+  const unmanagedActive = nodes.filter((node) => ACTIVE_STATES.has(node.state) && !pyStr(node.task_id || "")).map((node) => pyStr(node.id));
+  const activeAny = nodes.some((node) => ACTIVE_STATES.has(node.state));
+  const runState = pendingTaskIds.length || activeAny ? "pausing" : "paused";
+  state.pause_request = {
+    reason: intentReason,
+    requested_at: pyStr(intent?.requested_at || state.pause_request?.requested_at || utcNow()),
+    task_ids: [...recorded],
+    independent_task_ids: [...independent],
+    paused_task_ids: pausedTaskIds,
+    pending_task_ids: pendingTaskIds,
+    updated_at: utcNow()
+  };
+  state.run_state = runState;
+  state.updated_at = utcNow();
+  if (intent) {
+    writeJson2(pauseRequestPath(root, runId), {
+      ...intent,
+      reason: intentReason,
+      task_ids: [...recorded],
+      independent_task_ids: [...independent],
+      updated_at: utcNow()
+    });
+  }
+  const receipt = {
+    run_id: runId,
+    accepted: true,
+    state: runState,
+    reason: pendingTaskIds.length ? "pause_requested" : recorded.size ? "pause_confirmed" : "pause_idle",
+    paused_task_ids: pausedTaskIds,
+    pending_task_ids: pendingTaskIds
+  };
+  if (errors.length) {
+    receipt.errors = errors.slice(0, 20);
+    receipt.next_step = PAUSE_UNCONFIRMED_NEXT_STEP;
+  } else if (unmanagedActive.length) {
+    receipt.next_step = `\u8282\u70B9 ${unmanagedActive.join(", ")} \u4E3A\u540C\u6B65\u6267\u884C\uFF0C\u4E0D\u80FD\u534F\u4F5C\u6682\u505C\uFF1B\u7B49\u5176\u672C\u8F6E\u7ED3\u675F\u4E14\u65E0\u5176\u4ED6\u6D3B\u52A8\u6267\u884C\u540E run \u624D\u8FDB\u5165 paused\u3002`;
+  }
+  return receipt;
+}
+function pauseRun(runId, root, reason) {
+  const resolvedRoot = requireRepoInternal(root, "state root");
+  const text3 = String(reason || "").trim();
+  if (!text3) throw new ToolError("pause reason is required");
+  loadJson(statePath(resolvedRoot, runId));
+  const intentPath = pauseRequestPath(resolvedRoot, runId);
+  if (!existsSync17(intentPath)) {
+    writeJson2(intentPath, { reason: text3, requested_at: utcNow(), task_ids: [], independent_task_ids: [] });
+  }
+  try {
+    return runMutationLock(resolvedRoot, runId, () => {
+      const state = loadJson(statePath(resolvedRoot, runId));
+      state.resume_pending = false;
+      const receipt = settlePause(state, { reason: text3 });
+      writeJson2(statePath(resolvedRoot, runId), state);
+      if (receipt.reason === "cancel_priority") rmSync6(intentPath, { force: true });
+      return receipt;
+    }, { timeoutSeconds: 15 });
+  } catch (error) {
+    if (!String(error.message).startsWith("fleet run mutation lock busy:")) throw error;
+    return {
+      run_id: runId,
+      accepted: true,
+      state: "pausing",
+      reason: "waiting_for_inflight_operation",
+      paused_task_ids: [],
+      pending_task_ids: [],
+      next_step: "\u8C03\u5EA6\u5668\u6B63\u5728\u5904\u7406\u672C\u8F6E\u6D3E\u53D1\uFF0C\u505C\u6D3E\u610F\u56FE\u5DF2\u843D\u76D8\uFF1Bdriver \u4E0B\u4E00\u8F6E tick \u4F1A\u7EE7\u7EED\u534F\u4F5C\u6682\u505C\uFF0C\u7528 status \u89C2\u5BDF\u6536\u655B\u3002"
+    };
+  }
+}
+function resumePausedTasks(state, intent) {
+  const errors = [];
+  const pendingTaskIds = [];
+  const nodes = (Array.isArray(state.nodes) ? state.nodes : []).filter((node) => isRecord(node));
+  for (const rawTaskId of intent?.task_ids ?? []) {
+    const taskId = pyStr(rawTaskId);
+    if (!taskId) continue;
+    const node = nodes.find((item) => pyStr(item.task_id || "") === taskId);
+    if (!node) {
+      pendingTaskIds.push(taskId);
+      errors.push(`${taskId}: \u5DF2\u4E0D\u518D\u7ED1\u5B9A\u5230\u4EFB\u4F55\u8282\u70B9\uFF0C\u672A\u6062\u590D`);
+      continue;
+    }
+    const taskRoot = api.nodeTaskRoot(state, node);
+    const [statuses, failures] = api.asyncInternalBatch("get", taskRoot, [taskId], { detail: "diagnostic" });
+    errors.push(...failures);
+    const status = statuses[taskId];
+    if (!status) {
+      pendingTaskIds.push(taskId);
+      errors.push(`${taskId}: async get missing task`);
+      continue;
+    }
+    if (status.state !== "paused") {
+      api.applyAsyncStatus(node, status, "fleet_resume", state);
+      if (ACTIVE_STATES.has(status.state) && node.pause_requested) pendingTaskIds.push(taskId);
+      continue;
+    }
+    const control = runAsyncControl("resume", taskRoot, taskId, { expectedRevision: pyStr(status.revision) });
+    if (!control.reply || control.reply.ok === false || control.reply.accepted === false) {
+      pendingTaskIds.push(taskId);
+      const reason = control.reply ? pyStr(control.reply.reason || "resume_rejected") : `internal resume \u672A\u53D6\u5F97\u56DE\u6267${control.detail ? `\uFF1A${control.detail}` : ""}`;
+      errors.push(`${taskId}: ${reason}`);
+      continue;
+    }
+    node.pause_requested = false;
+    node.pause_request_reason = null;
+  }
+  return { pending_task_ids: pendingTaskIds, errors };
+}
+var PAUSE_UNCONFIRMED_NEXT_STEP, RESUME_SEAM_NEXT_STEP;
+var init_pause = __esm({
+  "ops/tools/dispatch-core/fleet/pause.mjs"() {
+    init_api();
+    init_py();
+    init_tool_common();
+    init_constants();
+    init_deps();
+    init_host_paths();
+    init_locks();
+    init_paths();
+    PAUSE_UNCONFIRMED_NEXT_STEP = "\u5DF2\u767B\u8BB0\u7684\u6682\u505C\u8BF7\u6C42\u5C1A\u672A\u786E\u8BA4\u505C\u6B62\uFF1A\u7528 status \u89C2\u5BDF\u6536\u655B\uFF0C\u6216\u7B49\u4EFB\u52A1\u4F1A\u8BDD\u4FDD\u5B58\u5B8C\u6210\uFF1BFleet \u4E0D\u81EA\u52A8\u5F3A\u6740\uFF0C\u4E5F\u4E0D\u91CA\u653E\u672A\u505C\u6B62\u4EFB\u52A1\u7684\u5199\u57DF\uFF1B\u786E\u5B9E\u9700\u8981\u7EC8\u6B62\u8BF7\u663E\u5F0F cancel\u3002";
+    RESUME_SEAM_NEXT_STEP = "\u6062\u590D\u5C1A\u672A\u5B8C\u6210\uFF0C\u505C\u6D3E\u610F\u56FE\u548C\u672A\u6062\u590D\u4EFB\u52A1\u5DF2\u4FDD\u7559\uFF1B\u6839\u636E errors \u6392\u9664\u539F\u56E0\u540E\u91CD\u8BD5 resume\u3002";
+    Object.assign(api, {
+      pauseRequestPath,
+      readPauseIntent,
+      parseControlReply,
+      controlFailureDetail,
+      runAsyncControl,
+      settlePause,
+      pauseRun,
+      resumePausedTasks,
+      PAUSE_UNCONFIRMED_NEXT_STEP,
+      RESUME_SEAM_NEXT_STEP
+    });
+  }
+});
+
+// ops/tools/dispatch-core/fleet_scheduler.mjs
+import { spawn as spawn2 } from "node:child_process";
+import { existsSync as existsSync18 } from "node:fs";
+import path27 from "node:path";
+import { uptime } from "node:os";
+import process14 from "node:process";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
+var SCHEDULER_CLI_PATH, DISPATCH_PREPARE_PATH, ASYNC_SERVICE_PATH;
 var init_fleet_scheduler = __esm({
   async "ops/tools/dispatch-core/fleet_scheduler.mjs"() {
-    init_file_lock();
-    init_shared();
     init_tool_common();
-    init_py();
     await init_fleet_manifest_check();
-    DEFAULT_STATE_ROOT = path16.join(ROOT, ".runtime", "cockpit", "fleet_runs");
-    DEFAULT_ASYNC_TASK_ROOT = path16.join(ROOT, ".runtime", "cockpit", "async_tasks");
-    TERMINAL_STATES = /* @__PURE__ */ new Set(["done", "failed", "cancelled", "blocked", "needs_parent_review"]);
-    ASYNC_TERMINAL_STATES = /* @__PURE__ */ new Set(["done", "failed", "cancelled"]);
-    ACTIVE_STATES = /* @__PURE__ */ new Set(["submitted", "queued", "running", "cancel_requested"]);
-    FAILED_DEPENDENCY_STATES = /* @__PURE__ */ new Set(["failed", "cancelled", "blocked"]);
-    SUMMARY_NODE_LIMIT = 8;
-    SUMMARY_EVENT_LIMIT = 8;
-    SAFE_ID_RE = /[^A-Za-z0-9_.-]+/g;
-    INITIAL_LIVENESS_GRACE_SECONDS = 10 * 60;
-    RUN_LOCK_TIMEOUT_SECONDS = 30;
-    LIVENESS_RECHECK_SECONDS = 5 * 60;
-    DISPATCH_PREPARE_TIMEOUT_SECONDS = 5 * 60;
-    MAX_RUNTIME_EVIDENCE_BYTES = 128 * 1024;
-    MAX_RUNTIME_USAGE_VALUE = 2147483647;
-    RUNTIME_USAGE_FIELDS = [
-      "total_tokens",
-      "input_tokens",
-      "cached_input_tokens",
-      "output_tokens",
-      "reasoning_output_tokens",
-      "model_context_window"
-    ];
-    ROUTE_KEYS = ["executor", "model", "effort"];
-    SCHEDULER_CLI_PATH = process8.argv[1] && /^fleet_scheduler(?:\.bundle)?\.mjs$/.test(path16.basename(process8.argv[1])) ? path16.resolve(process8.argv[1]) : path16.join(path16.dirname(path16.dirname(fileURLToPath3(import.meta.url))), "fleet_scheduler.mjs");
-    DISPATCH_PREPARE_PATH = existsSync9(path16.join(RUNTIME_ROOT, "ops/dist/dispatch_prepare.bundle.mjs")) ? path16.join(RUNTIME_ROOT, "ops/dist/dispatch_prepare.bundle.mjs") : path16.join(RUNTIME_ROOT, "ops/tools/dispatch_prepare.mjs");
-    ASYNC_SERVICE_PATH = existsSync9(path16.join(RUNTIME_ROOT, "ops/tools/subagent_service.mjs")) ? path16.join(RUNTIME_ROOT, "ops/tools/subagent_service.mjs") : path16.join(RUNTIME_ROOT, "ops/dist/subagent_service.bundle.mjs");
-    deps3 = {
+    init_py_utils();
+    init_locks();
+    await init_async_runtime();
+    await init_dispatch();
+    await init_driver();
+    init_deps();
+    init_host_paths();
+    init_constants();
+    init_paths();
+    init_locks();
+    await init_route();
+    await init_state();
+    await init_async_runtime();
+    await init_dag();
+    await init_review();
+    await init_admission();
+    await init_dispatch();
+    init_cancel();
+    init_pause();
+    await init_driver();
+    await init_summary();
+    init_py_utils();
+    SCHEDULER_CLI_PATH = process14.argv[1] && /^fleet_scheduler(?:\.bundle)?\.mjs$/.test(path27.basename(process14.argv[1])) ? path27.resolve(process14.argv[1]) : path27.join(path27.dirname(path27.dirname(fileURLToPath3(import.meta.url))), "fleet_scheduler.mjs");
+    DISPATCH_PREPARE_PATH = existsSync18(path27.join(RUNTIME_ROOT, "ops/dist/dispatch_prepare.bundle.mjs")) ? path27.join(RUNTIME_ROOT, "ops/dist/dispatch_prepare.bundle.mjs") : path27.join(RUNTIME_ROOT, "ops/tools/dispatch_prepare.mjs");
+    ASYNC_SERVICE_PATH = existsSync18(path27.join(RUNTIME_ROOT, "ops/tools/subagent_service.mjs")) ? path27.join(RUNTIME_ROOT, "ops/tools/subagent_service.mjs") : path27.join(RUNTIME_ROOT, "ops/dist/subagent_service.bundle.mjs");
+    hostPaths.SCHEDULER_CLI_PATH = SCHEDULER_CLI_PATH;
+    hostPaths.DISPATCH_PREPARE_PATH = DISPATCH_PREPARE_PATH;
+    hostPaths.ASYNC_SERVICE_PATH = ASYNC_SERVICE_PATH;
+    Object.assign(deps3, {
       runCommand: runCommandImpl,
       asyncInternalBatch: asyncInternalBatchImpl,
       processAlive: processAliveImpl,
@@ -11149,28 +11567,14 @@ var init_fleet_scheduler = __esm({
       spawnDriver: spawn2,
       sleep: sleepSeconds,
       monotonic: monotonicSeconds
-    };
-    BUSINESS_STATE_BY_NODE_STATE = {
-      done: "completed",
-      failed: "failed",
-      cancelled: "cancelled",
-      blocked: "blocked",
-      needs_parent_review: "needs_owner",
-      running: "running",
-      queued: "queued",
-      submitted: "submitted",
-      pending: "pending"
-    };
-    ACCEPTANCE_RESULTS_BLOCK = /```json[ \t]+acceptance_results[^\n]*\n([\s\S]*?)\n```/i;
-    PAUSE_UNCONFIRMED_NEXT_STEP = "\u5DF2\u767B\u8BB0\u7684\u6682\u505C\u8BF7\u6C42\u5C1A\u672A\u786E\u8BA4\u505C\u6B62\uFF1A\u7528 status \u89C2\u5BDF\u6536\u655B\uFF0C\u6216\u7B49\u4EFB\u52A1\u4F1A\u8BDD\u4FDD\u5B58\u5B8C\u6210\uFF1BFleet \u4E0D\u81EA\u52A8\u5F3A\u6740\uFF0C\u4E5F\u4E0D\u91CA\u653E\u672A\u505C\u6B62\u4EFB\u52A1\u7684\u5199\u57DF\uFF1B\u786E\u5B9E\u9700\u8981\u7EC8\u6B62\u8BF7\u663E\u5F0F cancel\u3002";
-    RESUME_SEAM_NEXT_STEP = "\u6062\u590D\u5C1A\u672A\u5B8C\u6210\uFF0C\u505C\u6D3E\u610F\u56FE\u548C\u672A\u6062\u590D\u4EFB\u52A1\u5DF2\u4FDD\u7559\uFF1B\u6839\u636E errors \u6392\u9664\u539F\u56E0\u540E\u91CD\u8BD5 resume\u3002";
+    });
   }
 });
 
 // ops/tools/fleet_scheduler.selftest.mjs
-import { existsSync as existsSync10, mkdirSync as mkdirSync9, mkdtempSync, rmSync as rmSync5, writeFileSync as writeFileSync7 } from "node:fs";
-import path17 from "node:path";
-import process9 from "node:process";
+import { existsSync as existsSync19, mkdirSync as mkdirSync13, mkdtempSync, rmSync as rmSync7, writeFileSync as writeFileSync9 } from "node:fs";
+import path28 from "node:path";
+import process15 from "node:process";
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object") {
@@ -11243,19 +11647,19 @@ function stPrimaryRun(root, manifestFile, reviewEvidence) {
   const compactOutcomeSample = compactDispatchOutcome(fullOutcomeSample);
   const state = loadJson(statePath(root, started.run_id));
   const scanA = indexNodes(state)["scan-a"];
-  const taskRoot = path17.join(runDir(root, started.run_id), "async_tasks");
+  const taskRoot = path28.join(runDir(root, started.run_id), "async_tasks");
   scanA.state = "running";
   scanA.task_id = "task-self-test-a";
   scanA.task_root = taskRoot;
   const inbox = asyncCompletionInbox(taskRoot);
-  mkdirSync9(inbox, { recursive: true });
-  writeJson2(path17.join(inbox, "task-self-test-a.json"), {
+  mkdirSync13(inbox, { recursive: true });
+  writeJson2(path28.join(inbox, "task-self-test-a.json"), {
     task_id: "task-self-test-a",
     state: "done",
     write_domain_scope_compliant: false,
     requires_parent_review: true,
-    report_path: path17.join(root, "report.md"),
-    handoff_path: path17.join(root, "handoff.md")
+    report_path: path28.join(root, "report.md"),
+    handoff_path: path28.join(root, "handoff.md")
   });
   const waitedNotice = waitForCompletionNotices(state, 0);
   const timeoutState = {
@@ -11312,23 +11716,23 @@ function stPrimaryRun(root, manifestFile, reviewEvidence) {
 }
 function stBatchGetTelemetry(root) {
   const listRunId = "fleet-scheduler-list-self-test";
-  const listTaskRoot = path17.join(runDir(root, listRunId), "async_tasks");
-  const listTaskDir = path17.join(listTaskRoot, "task-self-test-list");
-  mkdirSync9(listTaskDir, { recursive: true });
-  writeJson2(path17.join(listTaskDir, "task.json"), {
+  const listTaskRoot = path28.join(runDir(root, listRunId), "async_tasks");
+  const listTaskDir = path28.join(listTaskRoot, "task-self-test-list");
+  mkdirSync13(listTaskDir, { recursive: true });
+  writeJson2(path28.join(listTaskDir, "task.json"), {
     task_id: "task-self-test-list",
     task_root: listTaskRoot,
     task_dir: listTaskDir,
     target_cwd: ROOT
   });
-  writeJson2(path17.join(listTaskDir, "status.json"), {
+  writeJson2(path28.join(listTaskDir, "status.json"), {
     task_id: "task-self-test-list",
     state: "running",
     created_at: utcNow(),
     updated_at: utcNow(),
     requires_parent_review: false
   });
-  writeJson2(path17.join(listTaskDir, "child-task-live.json"), {
+  writeJson2(path28.join(listTaskDir, "child-task-live.json"), {
     rev: 5,
     status: "running",
     phase: "tool_call",
@@ -11385,7 +11789,7 @@ function stCriticality(root) {
       }
     ]
   };
-  const criticalManifestFile = path17.join(root, "critical-manifest.json");
+  const criticalManifestFile = path28.join(root, "critical-manifest.json");
   writeJson2(criticalManifestFile, criticalManifest);
   const criticalStarted = startRun(criticalManifestFile, "", root, false);
   const criticalTicked = tickRun(criticalStarted.run_id, root, true);
@@ -11434,20 +11838,20 @@ function stReviewRequeue(root, manifestFile, reviewEvidence) {
   const requeuedState = loadJson(statePath(root, requeueStarted.run_id));
   const requeuedScanA = indexNodes(requeuedState)["scan-a"];
   const requeueResetVerified = requeuedReview.node_state === "pending" && requeuedScanA.task_id === null && requeuedScanA.dispatch === null && requeuedScanA.last_status === null && requeuedScanA.review_required === false && requeuedScanA.review_decision === null && Array.isArray(requeuedScanA.review_history) && requeuedScanA.review_history[requeuedScanA.review_history.length - 1].decision === "requeued" && requeuedScanA.superseded_task_ids[requeuedScanA.superseded_task_ids.length - 1] === "task-review-requeue";
-  const requeueTaskRoot = path17.join(runDir(root, requeueStarted.run_id), "async_tasks");
+  const requeueTaskRoot = path28.join(runDir(root, requeueStarted.run_id), "async_tasks");
   requeuedScanA.task_root = requeueTaskRoot;
   const requeueInbox = asyncCompletionInbox(requeueTaskRoot);
-  mkdirSync9(requeueInbox, { recursive: true });
+  mkdirSync13(requeueInbox, { recursive: true });
   requeuedScanA.state = "running";
   requeuedScanA.task_id = "task-review-requeue-fresh";
   requeuedScanA.receipt_task_id = "task-review-requeue-fresh";
-  writeJson2(path17.join(requeueInbox, "task-review-requeue.json"), {
+  writeJson2(path28.join(requeueInbox, "task-review-requeue.json"), {
     task_id: "task-review-requeue",
     state: "done"
   });
   const staleReceiptRefresh = refreshActiveNodes(requeuedState);
   const staleReceiptIgnored = staleReceiptRefresh.inbox === 0 && requeuedScanA.state === "running" && (requeuedScanA.last_status ?? null) === null;
-  writeJson2(path17.join(requeueInbox, "task-review-requeue-fresh.json"), {
+  writeJson2(path28.join(requeueInbox, "task-review-requeue-fresh.json"), {
     task_id: "task-review-requeue-fresh",
     state: "done"
   });
@@ -11565,8 +11969,8 @@ function stDriverOutcomes() {
   };
 }
 function stDependencyArtifacts(root, manifest) {
-  const dependencyReport = path17.join(root, "dependency-report.md");
-  writeFileSync7(dependencyReport, "# dependency report\n", "utf8");
+  const dependencyReport = path28.join(root, "dependency-report.md");
+  writeFileSync9(dependencyReport, "# dependency report\n", "utf8");
   const artifactState = {
     nodes: [
       { id: "upstream", state: "done", last_status: { report_path: dependencyReport } },
@@ -11606,8 +12010,8 @@ function stDependencyArtifacts(root, manifest) {
   };
 }
 function stAllSettled(root, manifest) {
-  const settledReport = path17.join(root, "settled-partial-report.md");
-  writeFileSync7(settledReport, "# partial but consumable\n", "utf8");
+  const settledReport = path28.join(root, "settled-partial-report.md");
+  writeFileSync9(settledReport, "# partial but consumable\n", "utf8");
   const settledState = {
     state_root: root,
     run_id: "all-settled-partial",
@@ -11698,7 +12102,7 @@ function stAllSettled(root, manifest) {
 function stStateRootGuard() {
   let rejected;
   try {
-    stateRoot(path17.dirname(ROOT));
+    stateRoot(path28.dirname(ROOT));
     rejected = false;
   } catch (error) {
     if (error?.name !== "ToolError") throw error;
@@ -11707,7 +12111,7 @@ function stStateRootGuard() {
   return { external_state_root_rejected: rejected };
 }
 function stAcceptanceGate() {
-  const gateRoot = mkdtempSync(path17.join(selfTestRoot(), "fleet-acceptance-gate-"));
+  const gateRoot = mkdtempSync(path28.join(selfTestRoot(), "fleet-acceptance-gate-"));
   try {
     const gateManifestById = {
       "verify-a": {
@@ -11765,8 +12169,8 @@ function stAcceptanceGate() {
       null,
       2
     );
-    writeFileSync7(
-      path17.join(gateRoot, "gate-leaf.md"),
+    writeFileSync9(
+      path28.join(gateRoot, "gate-leaf.md"),
       `# report
 
 \`\`\`json acceptance_results
@@ -11785,7 +12189,7 @@ ${block}
       acceptance_gate_passes_valid_block: gatePassesValidBlock
     };
   } finally {
-    rmSync5(gateRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    rmSync7(gateRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   }
 }
 function stCompaction() {
@@ -11802,7 +12206,7 @@ function stCompaction() {
   };
 }
 function stCommandNodes(root) {
-  const marker = path17.join(root, "command-marker.txt");
+  const marker = path28.join(root, "command-marker.txt");
   const manifest = {
     schema_version: MANIFEST_SCHEMA_VERSION,
     run_id: "fleet-command-self-test",
@@ -11834,7 +12238,7 @@ function stCommandNodes(root) {
       }
     ]
   };
-  const manifestFile = path17.join(root, "command-manifest.json");
+  const manifestFile = path28.join(root, "command-manifest.json");
   writeJson2(manifestFile, manifest);
   const dryStarted = startRun(manifestFile, "fleet-command-dry-self-test", root, false);
   const dryTick = tickRun(dryStarted.run_id, root, true, true);
@@ -11858,13 +12262,13 @@ function stCommandNodes(root) {
       }
     ]
   };
-  const failFile = path17.join(root, "command-fail-manifest.json");
+  const failFile = path28.join(root, "command-fail-manifest.json");
   writeJson2(failFile, failManifest);
   const failStarted = startRun(failFile, "", root, false);
   tickRun(failStarted.run_id, root, false);
   const boom = indexNodes(loadJson(statePath(root, failStarted.run_id))).boom;
-  const dependencyReport = path17.join(root, "command-dependency-report.md");
-  writeFileSync7(dependencyReport, "# upstream report\n", "utf8");
+  const dependencyReport = path28.join(root, "command-dependency-report.md");
+  writeFileSync9(dependencyReport, "# upstream report\n", "utf8");
   const indexState = {
     state_root: root,
     run_id: "command-index-self-test",
@@ -11891,10 +12295,10 @@ function stCommandNodes(root) {
   const indexNode = indexNodes(indexState)["check-index"];
   const indexOutcome = dispatchNode(indexState, manifest, indexNode, indexManifestNode, { dryRun: false });
   return {
-    command_node_executes_and_completes: first.status === "ok" && produceNode.state === "done" && (produceNode.last_status ?? {}).source === "fleet_command" && existsSync10(marker),
+    command_node_executes_and_completes: first.status === "ok" && produceNode.state === "done" && (produceNode.last_status ?? {}).source === "fleet_command" && existsSync19(marker),
     command_completion_releases_downstream: second.submitted.some((item) => item.node_id === "consume") && consumeNode.state === "done" && stateAfterSecond.run_state === "completed",
     command_dry_run_reports_argv: dryTick.dry_run === true && Boolean(dryDispatch.would_run) && dryDispatch.would_run[0] === NODE,
-    command_stdout_persisted: Boolean(stdoutLog) && existsSync10(stdoutLog),
+    command_stdout_persisted: Boolean(stdoutLog) && existsSync19(stdoutLog),
     command_failure_settles_without_review: boom.state === "failed" && (boom.last_status ?? {}).contract_state === "command_failed" && boom.review_required === false,
     command_receives_dependency_result_index: indexOutcome.status === "ok" && indexNode.state === "done"
   };
@@ -11918,9 +12322,9 @@ function stGateNodes(root) {
       }
     ]
   });
-  const evidence = path17.join(root, "gate-review-evidence.md");
-  writeFileSync7(evidence, "# gate decision evidence\n", "utf8");
-  const acceptFile = path17.join(root, "gate-accept-manifest.json");
+  const evidence = path28.join(root, "gate-review-evidence.md");
+  writeFileSync9(evidence, "# gate decision evidence\n", "utf8");
+  const acceptFile = path28.join(root, "gate-accept-manifest.json");
   writeJson2(acceptFile, gateManifest("fleet-gate-accept-self-test"));
   const started = startRun(acceptFile, "", root, false);
   tickRun(started.run_id, root, false);
@@ -11932,7 +12336,7 @@ function stGateNodes(root) {
   const accepted = reviewRun(started.run_id, root, "confirm", "accepted", evidence, "gate accept");
   tickRun(started.run_id, root, false);
   const finalState = loadJson(statePath(root, started.run_id));
-  const blockFile = path17.join(root, "gate-block-manifest.json");
+  const blockFile = path28.join(root, "gate-block-manifest.json");
   writeJson2(blockFile, gateManifest("fleet-gate-block-self-test"));
   const blockStarted = startRun(blockFile, "", root, false);
   tickRun(blockStarted.run_id, root, false);
@@ -11969,9 +12373,9 @@ function stGateAllSettled(root) {
       }
     ]
   });
-  const evidence = path17.join(root, "gate-all-settled-evidence.md");
-  writeFileSync7(evidence, "# gate all_settled evidence\n", "utf8");
-  const acceptFile = path17.join(root, "gate-all-settled-manifest.json");
+  const evidence = path28.join(root, "gate-all-settled-evidence.md");
+  writeFileSync9(evidence, "# gate all_settled evidence\n", "utf8");
+  const acceptFile = path28.join(root, "gate-all-settled-manifest.json");
   writeJson2(acceptFile, bypassManifest("fleet-gate-all-settled-self-test"));
   const started = startRun(acceptFile, "", root, false);
   tickRun(started.run_id, root, false);
@@ -11986,12 +12390,12 @@ function stGateAllSettled(root) {
   const finalState = loadJson(statePath(root, started.run_id));
   const afterFinal = indexNodes(finalState).after;
   const indexFile = dependencyResultIndexPath(root, loadJson(statePath(root, started.run_id)).run_id, "after");
-  const indexData = existsSync10(indexFile) ? loadJson(indexFile) : { dependencies: [] };
+  const indexData = existsSync19(indexFile) ? loadJson(indexFile) : { dependencies: [] };
   const entries = {};
   for (const entry of indexData.dependencies ?? []) entries[entry.node_id] = entry;
   const beforeEntry = entries.before ?? {};
   const confirmEntry = entries.confirm ?? {};
-  const blockFile = path17.join(root, "gate-all-settled-block-manifest.json");
+  const blockFile = path28.join(root, "gate-all-settled-block-manifest.json");
   writeJson2(blockFile, bypassManifest("fleet-gate-all-settled-block-self-test"));
   const blockStarted = startRun(blockFile, "", root, false);
   tickRun(blockStarted.run_id, root, false);
@@ -12026,7 +12430,7 @@ function stDriverChain(root) {
       }
     ]
   };
-  const manifestFile = path17.join(root, "driver-chain-manifest.json");
+  const manifestFile = path28.join(root, "driver-chain-manifest.json");
   writeJson2(manifestFile, manifest);
   const started = startRun(manifestFile, "", root, false);
   const outcome = driveRun(started.run_id, root, 1e3);
@@ -12036,19 +12440,19 @@ function stDriverChain(root) {
   };
 }
 function selfTestRoot() {
-  const testRoot = path17.join(ROOT, ".runtime", "self-tests", "migration-lock");
-  mkdirSync9(testRoot, { recursive: true });
+  const testRoot = path28.join(ROOT, ".runtime", "self-tests", "migration-lock");
+  mkdirSync13(testRoot, { recursive: true });
   return testRoot;
 }
 function selfTest() {
   const manifest = selfTestTwoNodeManifest();
   const testRoot = selfTestRoot();
-  const root = mkdtempSync(path17.join(testRoot, "fleet-self-test-"));
+  const root = mkdtempSync(path28.join(testRoot, "fleet-self-test-"));
   try {
-    const manifestFile = path17.join(root, "manifest.json");
+    const manifestFile = path28.join(root, "manifest.json");
     writeJson2(manifestFile, manifest);
-    const reviewEvidence = path17.join(root, "review-evidence.md");
-    writeFileSync7(reviewEvidence, "self-test review evidence\n", "utf8");
+    const reviewEvidence = path28.join(root, "review-evidence.md");
+    writeFileSync9(reviewEvidence, "self-test review evidence\n", "utf8");
     const scenarios = [
       () => stMutationLock(root),
       () => stPrimaryRun(root, manifestFile, reviewEvidence),
@@ -12089,7 +12493,7 @@ function selfTest() {
       }
     };
   } finally {
-    rmSync5(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    rmSync7(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   }
 }
 var NODE;
@@ -12098,7 +12502,7 @@ var init_fleet_scheduler_selftest = __esm({
     await init_fleet_scheduler();
     init_tool_common();
     await init_fleet_manifest_check();
-    NODE = process9.execPath;
+    NODE = process15.execPath;
   }
 });
 
@@ -12107,11 +12511,11 @@ init_tool_common();
 init_py();
 await init_fleet_scheduler();
 await init_fleet_scheduler_selftest();
-import process10 from "node:process";
+import process16 from "node:process";
 
 // ops/tools/dispatch-core/fleet-command-worker.mjs
 import { spawn as spawn4 } from "node:child_process";
-import { existsSync as existsSync11, readFileSync as readFileSync11, writeFileSync as writeFileSync8 } from "node:fs";
+import { existsSync as existsSync20, readFileSync as readFileSync12, writeFileSync as writeFileSync10 } from "node:fs";
 
 // ops/tools/pi_child_bash_process_tree.mjs
 import * as piChildBashProcess from "node:child_process";
@@ -12194,9 +12598,9 @@ function spawnFleetCommand(argv, options) {
   return spawn4(command, args, options);
 }
 async function runFleetCommand(specPath) {
-  const spec = JSON.parse(readFileSync11(specPath, "utf8"));
-  if (existsSync11(spec.cancel_path)) {
-    writeFileSync8(spec.result_path, JSON.stringify({ cancelled: true, confirmed: true, not_executed: true }));
+  const spec = JSON.parse(readFileSync12(specPath, "utf8"));
+  if (existsSync20(spec.cancel_path)) {
+    writeFileSync10(spec.result_path, JSON.stringify({ cancelled: true, confirmed: true, not_executed: true }));
     return 0;
   }
   const child = spawnFleetCommand(spec.argv, {
@@ -12211,7 +12615,7 @@ async function runFleetCommand(specPath) {
   let timedOut = false;
   const started = Date.now();
   const timer = setInterval(() => {
-    cancelled ||= existsSync11(spec.cancel_path);
+    cancelled ||= existsSync20(spec.cancel_path);
     timedOut ||= Date.now() - started >= spec.timeout_ms;
     if ((cancelled || timedOut) && child.exitCode === null && child.signalCode === null && child.pid) {
       proof = terminateChildProcessTree(child.pid);
@@ -12222,7 +12626,7 @@ async function runFleetCommand(specPath) {
       child.once("error", (error) => resolve({ error: error.message, error_code: error.code }));
       child.once("exit", (code, signal) => resolve({ code, signal }));
     });
-    writeFileSync8(spec.result_path, JSON.stringify({ ...result, cancelled, timed_out: timedOut, confirmed: proof?.confirmed ?? !(cancelled || timedOut), proof }));
+    writeFileSync10(spec.result_path, JSON.stringify({ ...result, cancelled, timed_out: timedOut, confirmed: proof?.confirmed ?? !(cancelled || timedOut), proof }));
     return result.code ?? 1;
   } finally {
     clearInterval(timer);
@@ -12337,18 +12741,18 @@ var COMMANDS = {
 };
 var USAGE = `usage: ${PROGRAM} [-h] {start,tick,wait,resume,run,drive,status,review,cancel,pause,self-test} ...`;
 function argparseError(message) {
-  process10.stderr.write(`${USAGE}
+  process16.stderr.write(`${USAGE}
 ${PROGRAM}: error: ${message}
 `);
-  process10.exit(2);
+  process16.exit(2);
 }
 function parseArgs(argv) {
   if (argv.includes("-h") || argv.includes("--help")) {
-    process10.stdout.write(`${USAGE}
+    process16.stdout.write(`${USAGE}
 
 Run a bounded tick-based scheduler for fleet dispatch manifests.
 `);
-    process10.exit(0);
+    process16.exit(0);
   }
   const command = argv.length ? String(argv[0]) : null;
   if (command === null) return { command: null, format: "text" };
@@ -12402,7 +12806,7 @@ Run a bounded tick-based scheduler for fleet dispatch manifests.
   return args;
 }
 async function main() {
-  const args = parseArgs(process10.argv.slice(2));
+  const args = parseArgs(process16.argv.slice(2));
   const fmt = Object.hasOwn(args, "format") ? args.format : "text";
   try {
     if (args.command === "command-worker") return await runFleetCommand(args.spec);
@@ -12503,4 +12907,4 @@ async function main() {
     return emit({ status: "failed", error: String(error.message) }, fmt, `failed: ${error.message}`);
   }
 }
-process10.exitCode = await main();
+process16.exitCode = await main();

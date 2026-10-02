@@ -40,7 +40,7 @@ OUTPUT: 固定对比表，「自己写」固定为一行基线
 | 源码核查 | 读过的源码位置与结论 |
 | 待实测 | 需要 `local_probe` 才能关闭的缺口 |
 
-- 派发时指定模型 `openai-codex/gpt-6-sol`（fleet 的 `route.model` 或 `--async-model`）；research-agent 角色默认仍是 Luna，Sol 在其候选池中。
+- 派发时指定模型 `openai-codex/gpt-6.1-sol`（fleet 的 `route.model` 或 `--async-model`）；research-agent 角色默认仍是 Luna，Sol 在其候选池中。
 - 查轮子不持有 bash 与安装权限；「待实测」列的缺口交 §4。
 - 不新写组件且没有 `tech_route` 时，`wheel` 写 `not_needed: <理由>`；存在已锁定的 `tech_route` 时 guard 不接受 `not_needed`。
 - 只需要轮子对比、不形成规格时，直接派该能力，不启动对齐。

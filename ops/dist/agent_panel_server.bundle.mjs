@@ -229,7 +229,7 @@ async function createAsyncTaskService({ paths, asyncCorePath, asyncCoreModule, r
 // src/agent-panel/src/server/projection.mjs
 import {
   existsSync as existsSync3,
-  mkdirSync,
+  mkdirSync as mkdirSync2,
   readdirSync,
   readFileSync as readFileSync3,
   statSync as statSync2
@@ -238,10 +238,27 @@ import path4 from "node:path";
 
 // ops/tools/fleet-tools-core.mjs
 import { spawn as spawn2 } from "node:child_process";
-import { existsSync as existsSync2, readFileSync } from "node:fs";
+import { existsSync as existsSync2, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path2 from "node:path";
 import process2 from "node:process";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
+
+// ops/tools/pi_fast_mode.mjs
+var FAST_MODE_EXTENSION_NAMES = Object.freeze([
+  "pi_fast_mode.mjs",
+  "pi_fast_mode.bundle.mjs"
+]);
+function fastModeSeed(seed, fast) {
+  const runtime = { ...seed.runtime_context };
+  if (fast === true) runtime.fast = true;
+  else delete runtime.fast;
+  return { ...seed, runtime_context: runtime };
+}
+
+// ops/tools/fleet-tools-core.mjs
+function fastFleetManifest(manifest, fast) {
+  return { ...manifest, nodes: manifest.nodes.map((node) => node.seed ? { ...node, seed: fastModeSeed(node.seed, fast) } : node) };
+}
 var FLEET_TOOL_NAMES = Object.freeze(["fleet_start", "fleet_status", "fleet_wait", "fleet_review", "fleet_cancel"]);
 var FLEET_DECISIONS = Object.freeze(["accept", "block", "requeue"]);
 var FLEET_WAIT_MS_MIN = 1e3;
@@ -484,23 +501,37 @@ function createFleetCore({
     });
   };
   const runStatus = (runId) => runTool(scheduler, ["status", "--run-id", runId, "--summary", "--format", "json"]);
-  async function fleet_start({ manifest_path, run_id } = {}) {
+  async function fleet_start({ manifest_path, run_id, fast = false } = {}) {
     const manifestPath = String(manifest_path ?? "").trim();
     if (!manifestPath) return failure("invalid_input", "manifest_path is required");
+    if (typeof fast !== "boolean") return failure("invalid_input", "fast must be a boolean");
     const checked = await runTool(manifestChecker, ["--manifest", manifestPath, "--format", "json"]);
     if (!checked.ok) return checked;
-    const launched = await runTool(scheduler, [
-      "run",
-      "--manifest",
-      manifestPath,
-      ...run_id ? ["--run-id", String(run_id)] : [],
-      "--format",
-      "json"
-    ]);
+    const inputsDir = path2.join(spawnCwd, ".runtime", "cockpit", "fleet-inputs");
+    mkdirSync(inputsDir, { recursive: true });
+    const inputDir = mkdtempSync(path2.join(inputsDir, "run-"));
+    const projectedPath = path2.join(inputDir, path2.basename(manifestPath));
+    let launched;
+    try {
+      const manifest2 = JSON.parse(readFileSync(path2.resolve(spawnCwd, manifestPath), "utf8"));
+      writeFileSync(projectedPath, `${JSON.stringify(fastFleetManifest(manifest2, fast))}
+`, "utf8");
+      launched = await runTool(scheduler, [
+        "run",
+        "--manifest",
+        projectedPath,
+        ...run_id ? ["--run-id", String(run_id)] : [],
+        "--format",
+        "json"
+      ]);
+    } finally {
+      rmSync(inputDir, { recursive: true, force: true });
+    }
     if (!launched.ok) return launched;
     const statePath = String(launched.payload.state_path ?? "");
     return {
       ok: true,
+      fast,
       run_id: String(launched.payload.run_id ?? run_id ?? ""),
       state_root: path2.posix.dirname(path2.posix.dirname(statePath)),
       node_count: Array.isArray(checked.payload.nodes) ? checked.payload.nodes.length : 0,
@@ -1553,7 +1584,7 @@ var PanelProjection = class {
 };
 function ensurePanelLogDirectory(stateRoot = "") {
   const logRoot = path4.join(resolvePanelStateRoot(stateRoot), "logs");
-  mkdirSync(logRoot, { recursive: true });
+  mkdirSync2(logRoot, { recursive: true });
   return logRoot;
 }
 function assertRuntimePathInside(root, candidate) {
@@ -1582,7 +1613,7 @@ import { Worker } from "node:worker_threads";
 // src/agent-panel/src/server/config-store.mjs
 import { spawn as spawn4, spawnSync as spawnSync2 } from "node:child_process";
 import { createHash as createHash4, randomBytes as randomBytes3 } from "node:crypto";
-import { copyFileSync, existsSync as existsSync8, readFileSync as readFileSync9, readdirSync as readdirSync4, realpathSync as realpathSync3, renameSync as renameSync3, rmSync as rmSync2, writeFileSync as writeFileSync3 } from "node:fs";
+import { copyFileSync, existsSync as existsSync8, readFileSync as readFileSync9, readdirSync as readdirSync4, realpathSync as realpathSync3, renameSync as renameSync3, rmSync as rmSync3, writeFileSync as writeFileSync4 } from "node:fs";
 import os3 from "node:os";
 import path10 from "node:path";
 import { pathToFileURL as pathToFileURL3 } from "node:url";
@@ -1783,7 +1814,7 @@ function resolveModelConfigSources({ roots = [], projectRoot: projectRoot2 } = {
 
 // src/agent-panel/src/server/config-sync.mjs
 import { createHash as createHash2, randomBytes as randomBytes2 } from "node:crypto";
-import { mkdirSync as mkdirSync2, readFileSync as readFileSync5, readdirSync as readdirSync2, realpathSync, renameSync, rmSync, statSync as statSync4, writeFileSync } from "node:fs";
+import { mkdirSync as mkdirSync3, readFileSync as readFileSync5, readdirSync as readdirSync2, realpathSync, renameSync, rmSync as rmSync2, statSync as statSync4, writeFileSync as writeFileSync2 } from "node:fs";
 import os2 from "node:os";
 import path6 from "node:path";
 var SYNC_STATUS_REASONS = Object.freeze(["differs", "missing", "unreadable"]);
@@ -2115,7 +2146,7 @@ function createConfigSync(options = {}) {
   }
   function cleanupTemp(tempPath) {
     try {
-      rmSync(tempPath, { force: true });
+      rmSync2(tempPath, { force: true });
     } catch (error) {
       if (error?.code === "ENOENT" || WRITE_FAILURE_CODES.has(error?.code)) return;
       throw error;
@@ -2132,14 +2163,14 @@ function createConfigSync(options = {}) {
     if (inspectPath(slot).kind !== "directory") return { slot, file, ok: false, reason: "write_failed" };
     const destDir = path6.dirname(destPath);
     try {
-      mkdirSync2(destDir, { recursive: true });
+      mkdirSync3(destDir, { recursive: true });
     } catch (error) {
       if (WRITE_FAILURE_CODES.has(error?.code)) return { slot, file, ok: false, reason: "write_failed" };
       throw error;
     }
     const tempPath = path6.join(destDir, `.panel-sync-${randomBytes2(8).toString("hex")}.tmp`);
     try {
-      writeFileSync(tempPath, bytes);
+      writeFileSync2(tempPath, bytes);
       renameSync(tempPath, destPath);
       return { slot, file, ok: true, reason: null };
     } catch (error) {
@@ -8762,7 +8793,7 @@ import {
   fstatSync,
   fsyncSync,
   lstatSync,
-  mkdirSync as mkdirSync3,
+  mkdirSync as mkdirSync4,
   openSync,
   readFileSync as readFileSync6,
   readSync,
@@ -9032,7 +9063,7 @@ function loadPick(item, index, file, role, notes, known, ids) {
   if (item.capability !== void 0 && !text2(item.capability)) bad("value_invalid", "capability", "\u4E0D\u80FD\u4E3A\u7A7A\uFF1B\u9002\u7528\u5168\u90E8\u4EFB\u52A1\u65F6\u5220\u9664\u8BE5\u5B57\u6BB5");
   const capability = item.capability === void 0 ? null : item.capability.trim();
   if (capability && !known.has(capability)) bad("capability_unknown", "capability", `${capability} \u4E0D\u662F\u8BE5\u89D2\u8272\u5DF2\u6709\u4EFB\u52A1\u7C7B\u578B`);
-  if (!text2(item.model) || !item.model.includes("/")) bad("value_invalid", "model", "\u5FC5\u987B\u662F Pi \u6A21\u578B\u5168\u540D\uFF0C\u4F8B\u5982 openai-codex/gpt-6-sol");
+  if (!text2(item.model) || !item.model.includes("/")) bad("value_invalid", "model", "\u5FC5\u987B\u662F Pi \u6A21\u578B\u5168\u540D\uFF0C\u4F8B\u5982 openai-codex/gpt-6.1-sol");
   const model = item.model.trim();
   const levels = {};
   for (const key of ["effort", "effort_min", "effort_max"]) {
@@ -9239,7 +9270,7 @@ function projectCatalog(config, { piModels = null, role: roleFilter = "", capabi
 
 // ops/tools/pi_worker_resources.mjs
 import { spawn as spawn3 } from "node:child_process";
-import { existsSync as existsSync7, mkdirSync as mkdirSync4, readFileSync as readFileSync8, statSync as statSync6, writeFileSync as writeFileSync2 } from "node:fs";
+import { existsSync as existsSync7, mkdirSync as mkdirSync5, readFileSync as readFileSync8, statSync as statSync6, writeFileSync as writeFileSync3 } from "node:fs";
 import { homedir } from "node:os";
 import path9 from "node:path";
 import { fileURLToPath as fileURLToPath4, pathToFileURL as pathToFileURL2 } from "node:url";
@@ -9373,8 +9404,8 @@ function probeRegisteredTools({ extensions, piCli = PI_CLI, cacheFile, cwd = pro
 ${key}`;
   if (!probes.has(id)) {
     probes.set(id, runToolProbe(extensions, piCli, cwd).then((tools) => {
-      mkdirSync4(path9.dirname(cacheFile), { recursive: true });
-      writeFileSync2(cacheFile, JSON.stringify({ key, tools }));
+      mkdirSync5(path9.dirname(cacheFile), { recursive: true });
+      writeFileSync3(cacheFile, JSON.stringify({ key, tools }));
       return tools;
     }).finally(() => probes.delete(id)));
   }
@@ -9564,7 +9595,7 @@ function saveTextTransactional(filePath, candidate, pythonCommand, faultInjector
     return { state: "validation_error" };
   }
   if (faultInjector === "external-edit-before-recheck") {
-    writeFileSync3(filePath, `${readFileSync9(filePath, "utf8")}# external-edit
+    writeFileSync4(filePath, `${readFileSync9(filePath, "utf8")}# external-edit
 `, "utf8");
   }
   if (expectedRevision !== null) {
@@ -9580,7 +9611,7 @@ function saveTextTransactional(filePath, candidate, pythonCommand, faultInjector
   let failureReason = "write_failed";
   try {
     if (faultInjector === "after-backup") throw new Error("fault: after-backup");
-    writeFileSync3(tempPath, candidate, "utf8");
+    writeFileSync4(tempPath, candidate, "utf8");
     renameSync3(tempPath, filePath);
     if (faultInjector === "after-replace") throw new Error("fault: after-replace");
     const reread = readFileSync9(filePath, "utf8");
@@ -9595,16 +9626,16 @@ function saveTextTransactional(filePath, candidate, pythonCommand, faultInjector
         throw new Error("semantic verification failed");
       }
     }
-    rmSync2(backupPath, { force: true });
+    rmSync3(backupPath, { force: true });
     return { state: "saved", text: candidate, parsed };
   } catch {
     try {
-      rmSync2(tempPath, { force: true });
+      rmSync3(tempPath, { force: true });
     } catch {
     }
     try {
       copyFileSync(backupPath, filePath);
-      rmSync2(backupPath, { force: true });
+      rmSync3(backupPath, { force: true });
       return { state: "save_error_restored", reason: failureReason };
     } catch {
       return { state: "save_error_restore_failed", reason: failureReason, backup_path: path10.basename(backupPath) };
@@ -10133,17 +10164,17 @@ function createConfigStore(options = {}) {
     const candidate = `${JSON.stringify(data, null, 2)}
 `;
     const temporary = `${file}.panel-tmp-${randomBytes3(4).toString("hex")}`;
-    writeFileSync3(temporary, candidate, "utf8");
+    writeFileSync4(temporary, candidate, "utf8");
     try {
       loadWorkerResourcesConfig(temporary);
     } catch (error) {
-      rmSync2(temporary, { force: true });
+      rmSync3(temporary, { force: true });
       if (!error.field) throw error;
       return invalid(error.code, error.field, error.message.slice(error.message.indexOf("\uFF1A") + 1));
     }
     const fresh = readFileSync9(file, "utf8");
     if (revisionOf(fresh) !== expectedRevision) {
-      rmSync2(temporary, { force: true });
+      rmSync3(temporary, { force: true });
       return { state: "revision_conflict", current_revision: revisionOf(fresh) };
     }
     renameSync3(temporary, file);
@@ -10155,7 +10186,7 @@ function createConfigStore(options = {}) {
 // src/agent-panel/src/server/selection-store.mjs
 import { spawnSync as spawnSync3 } from "node:child_process";
 import { createHash as createHash5, randomBytes as randomBytes4 } from "node:crypto";
-import { copyFileSync as copyFileSync2, existsSync as existsSync9, mkdirSync as mkdirSync5, mkdtempSync, readFileSync as readFileSync10, readdirSync as readdirSync5, renameSync as renameSync4, rmSync as rmSync3, writeFileSync as writeFileSync4 } from "node:fs";
+import { copyFileSync as copyFileSync2, existsSync as existsSync9, mkdirSync as mkdirSync6, mkdtempSync as mkdtempSync2, readFileSync as readFileSync10, readdirSync as readdirSync5, renameSync as renameSync4, rmSync as rmSync4, writeFileSync as writeFileSync5 } from "node:fs";
 import os4 from "node:os";
 import path11 from "node:path";
 var NOTES = "ops/model-notes.toml";
@@ -10369,15 +10400,15 @@ function createSelectionStore(options = {}) {
     return Object.entries(target.notes).every(([model, note]) => equalData(data.notes?.[model]?.efforts, note.efforts));
   }
   function validateCandidates(snapshot, candidates, picksOf) {
-    const root = mkdtempSync(path11.join(os4.tmpdir(), "panel-selection-"));
+    const root = mkdtempSync2(path11.join(os4.tmpdir(), "panel-selection-"));
     try {
       for (const file of snapshot.files) {
-        mkdirSync5(path11.dirname(absolute(root, file)), { recursive: true });
-        writeFileSync4(absolute(root, file), candidates[file] ?? snapshot.texts[file]);
+        mkdirSync6(path11.dirname(absolute(root, file)), { recursive: true });
+        writeFileSync5(absolute(root, file), candidates[file] ?? snapshot.texts[file]);
       }
       const routes = absolute(snapshot.root, ROUTES);
       if (existsSync9(routes)) {
-        mkdirSync5(absolute(root, ROUTES), { recursive: true });
+        mkdirSync6(absolute(root, ROUTES), { recursive: true });
         for (const name of readdirSync5(routes).filter((item) => item.endsWith(".md"))) copyFileSync2(path11.join(routes, name), path11.join(absolute(root, ROUTES), name));
       }
       try {
@@ -10396,7 +10427,7 @@ function createSelectionStore(options = {}) {
       const mismatch = Object.keys(candidates).find((file) => !equalData(parse2(candidates[file]), python[file]));
       return mismatch ? { code: "SELECTION_SEMANTIC_MISMATCH", file: mismatch, field: null, message: "\u5019\u9009\u6587\u4EF6\u53CC\u89E3\u6790\u7ED3\u679C\u4E0D\u4E00\u81F4" } : null;
     } finally {
-      rmSync3(root, { recursive: true, force: true });
+      rmSync4(root, { recursive: true, force: true });
     }
   }
   function saveSelection({ draft, expected_revision: expectedRevision } = {}, configState = {}, monitorRoot = null) {
@@ -10446,7 +10477,7 @@ function createSelectionStore(options = {}) {
         const backup = `${destination}.panel-bak-${suffix}`;
         copyFileSync2(destination, backup);
         staged.push({ file, destination, temporary, backup });
-        writeFileSync4(temporary, candidates[file], "utf8");
+        writeFileSync5(temporary, candidates[file], "utf8");
       }
       for (const item of staged) {
         faultInjector?.({ op: "before-rename", file: item.file });
@@ -10470,8 +10501,8 @@ function createSelectionStore(options = {}) {
       );
     } finally {
       for (const item of staged) {
-        rmSync3(item.temporary, { force: true });
-        if (existsSync9(item.backup) && !restoreErrors.some((failure2) => failure2.file === item.file)) rmSync3(item.backup, { force: true });
+        rmSync4(item.temporary, { force: true });
+        if (existsSync9(item.backup) && !restoreErrors.some((failure2) => failure2.file === item.file)) rmSync4(item.backup, { force: true });
       }
       cached = null;
     }
@@ -10784,7 +10815,9 @@ async function routeHandler(projection, projectionWorker, configStore, config, r
       resolved_loopback_url: config.resolvedLoopbackUrl,
       // panel_root 是稳定实例身份（面板资产根）；control_repo_path 只展示当前监控仓，切仓会变。
       panel_root: config.panelRoot,
-      control_repo_path: config.controlRepoPath
+      control_repo_path: config.controlRepoPath,
+      // 进程启动时读一次发布清单。健康请求本身不读盘，手动启动器用它判断要不要换掉旧面板。
+      runtime_build_id: config.runtimeBuildId
     });
     return;
   }
@@ -11014,6 +11047,14 @@ async function routeHandler(projection, projectionWorker, configStore, config, r
     error: { code: "NOT_FOUND", message: "\u63A5\u53E3\u4E0D\u5B58\u5728", scope: "local", details: null }
   });
 }
+function readPublishedBuildId(runtimeRoot2) {
+  try {
+    const payload = JSON.parse(readFileSync11(path12.join(runtimeRoot2, "ops", "dist", "subagent_service.manifest.json"), "utf8"));
+    return typeof payload?.build_id === "string" && payload.build_id.length > 0 ? payload.build_id : null;
+  } catch {
+    return null;
+  }
+}
 async function createPanelServer(options = {}) {
   const panelRoot = resolvePanelRoot(options.panelRoot);
   const panelStateRoot = resolvePanelStateRoot(options.panelStateRoot);
@@ -11075,9 +11116,11 @@ async function createPanelServer(options = {}) {
   if (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) {
     throw new PanelError("PORT_INVALID", "loopback \u7AEF\u53E3\u65E0\u6548", { status: 500 });
   }
+  const runtimeAssetRoot = resolveRuntimeAssetRoot(options.runtimeRoot ?? options.runtimeAssetRoot);
   const config = {
     panelRoot,
     panelStateRoot,
+    runtimeBuildId: readPublishedBuildId(runtimeAssetRoot),
     webRoot,
     controlRepoPath,
     paths,

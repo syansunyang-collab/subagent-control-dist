@@ -685,6 +685,7 @@ function registerFleetTools(server) {
       project_root: projectRootSchema,
       manifest_path: z.string().min(1),
       run_id: z.string().min(1).optional(),
+      fast: z.boolean().optional().describe(FAST_MODE_DESCRIPTION),
     }).strict(),
     outputSchema: fleetOutputSchema,
     annotations: { ...fleetAnnotations, readOnlyHint: false, idempotentHint: false },

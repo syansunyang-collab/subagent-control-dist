@@ -7,8 +7,8 @@
     "async-dispatch/v1",
     "async-dispatch/v2"
   ],
-  "build_id": "4b56503931d4522a",
-  "built_at": "2026-10-02T14:49:42.304Z",
+  "build_id": "ff504565ca3e8c85",
+  "built_at": "2026-10-02T16:56:46.460Z",
   "node_target": ">=18",
   "public_tools": [
     "subagent_prepare",

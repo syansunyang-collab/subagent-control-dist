@@ -73,7 +73,8 @@ async function main(argv) {
       reusable: Boolean(validManifest().executable),
     };
   } else {
-    result = await ensureAgentPanel();
+    // 无 flag 即桌面快捷方式的手动启动：旧发布的面板会被换掉；派单路径不传此项。
+    result = await ensureAgentPanel({ replaceStaleBuild: true });
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   return ["failed", "fail"].includes(result.status) ? 1 : 0;

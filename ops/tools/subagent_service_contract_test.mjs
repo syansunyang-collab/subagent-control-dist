@@ -304,6 +304,8 @@ async function main() {
       && pauseReceipt.next_step.includes("subagent_get")
       && pauseReceipt.next_step.includes("具体原因");
     const cliEnvironment = { ...process.env, SUBAGENT_ALLOW_CUSTOM_RUNNER: "0" };
+    // 缺省 task_root 挂在仓内 .runtime；父进程继承的 SUBAGENT_TASK_ROOT 不能把缺省值带到发布侧任务根。
+    delete cliEnvironment.SUBAGENT_TASK_ROOT;
     const cli = spawnSync(process.execPath, [source], {
       cwd: repoRoot,
       env: cliEnvironment,
@@ -320,7 +322,7 @@ async function main() {
         path.dirname(source),
         path.basename(source).includes(".bundle.") ? "run-pi-task.bundle.mjs" : "run-pi-task.mjs",
       ),
-      model: "openai-codex/gpt-6-sol",
+      model: "openai-codex/gpt-6.1-sol",
       effort: "max",
       context_mode: "isolated",
     };
@@ -806,9 +808,9 @@ async function main() {
       configuredPiOptions.defaultRunnerPath === configuredPiPath
       && Object.keys(configuredPiOptions.runnerCatalog).join(",") === "pi"
       && configuredPiOptions.defaultRunnerEntry.executor === "pi"
-      && configuredPiOptions.defaultRunnerEntry.defaultModel === "openai-codex/gpt-6-sol"
+      && configuredPiOptions.defaultRunnerEntry.defaultModel === "openai-codex/gpt-6.1-sol"
       && configuredPiOptions.defaultRunnerEntry.defaultEffort === "max"
-      && configuredPiOptions.defaultModel === "openai-codex/gpt-6-sol"
+      && configuredPiOptions.defaultModel === "openai-codex/gpt-6.1-sol"
       && configuredPiOptions.defaultEffort === "max"
       && resolveTrustedRunnerPath(configuredPiOptions, "") === configuredPiPath
     );
@@ -861,16 +863,16 @@ async function main() {
     checks.external_pi_basename_infers_pi_metadata = (
       externalPiOptions.defaultRunnerPath === externalPiRunner
       && externalPiOptions.defaultRunnerEntry.executor === "pi"
-      && externalPiOptions.defaultRunnerEntry.defaultModel === "openai-codex/gpt-6-sol"
+      && externalPiOptions.defaultRunnerEntry.defaultModel === "openai-codex/gpt-6.1-sol"
       && externalPiOptions.defaultRunnerEntry.defaultEffort === "max"
-      && externalPiOptions.defaultModel === "openai-codex/gpt-6-sol"
+      && externalPiOptions.defaultModel === "openai-codex/gpt-6.1-sol"
       && externalPiOptions.defaultEffort === "max"
       && isTrustedRunnerPath(externalPiOptions, externalPiRunner) === false
     );
     checks.unknown_custom_runner_uses_default_runner_defaults = (
       unknownRunnerOptions.defaultRunnerPath === unknownRunner
       && unknownRunnerOptions.defaultRunnerEntry.executor === "pi"
-      && unknownRunnerOptions.defaultModel === "openai-codex/gpt-6-sol"
+      && unknownRunnerOptions.defaultModel === "openai-codex/gpt-6.1-sol"
       && unknownRunnerOptions.defaultEffort === "max"
     );
     checks.external_catalog_runner_is_not_trusted = (
@@ -913,7 +915,7 @@ async function main() {
       "utf8",
     ));
     checks.pi_runner_gets_pi_default_model_effort = (
-      piTask.model === "openai-codex/gpt-6-sol" && piTask.effort === "max"
+      piTask.model === "openai-codex/gpt-6.1-sol" && piTask.effort === "max"
     );
     await client.callTool({
       name: "subagent_wait",

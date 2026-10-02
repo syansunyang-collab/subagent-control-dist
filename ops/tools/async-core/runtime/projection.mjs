@@ -36,11 +36,16 @@ export function createProjection(ctx, rt) {
     };
     const rawFailureSummary = failureSummary(status);
     const taskOutcome = displayTaskOutcome(status);
+    const { summary, ...facts } = taskOutcome;
+    const outcomes = [taskOutcome, facts, { ...facts, object_gate: { value: facts.object_gate.value } }];
     const profiles = [
+      ...outcomes.map(outcome => ({ batch: 120, slice: 120, title: 120, failure: 180, outcome })),
       { batch: 120, slice: 120, title: 120, failure: 180 },
       { batch: 72, slice: 72, title: 96, failure: 120 },
       { batch: 36, slice: 36, title: 72, failure: 96 },
-      { batch: 0, slice: 0, title: 48, failure: 72 },
+      { batch: 0, slice: 0, title: 48, failure: 96 },
+      { batch: 0, slice: 0, title: 0, failure: 96 },
+      { batch: 0, slice: 0, title: 0, failure: 72 },
       { batch: 0, slice: 0, title: 0, failure: 48 },
       { batch: 0, slice: 0, title: 0, failure: 0 },
     ];
@@ -59,7 +64,7 @@ export function createProjection(ctx, rt) {
         contract_state: status.contract_state ?? null,
         business_state: status.business_state ?? null,
         review_gate: reviewGate(status),
-        task_outcome: taskOutcome,
+        ...(profile.outcome ? { task_outcome: profile.outcome } : {}),
         revision: String(status.rev ?? 0),
         updated_at: status.updated_at ?? null,
         failure_summary: optionalText(rawFailureSummary, profile.failure),
@@ -81,14 +86,7 @@ export function createProjection(ctx, rt) {
       minimal = compact;
       if (estimateTokens(compact) <= TOKEN_BUDGETS.getPerTask) return compact;
     }
-    // The projection is display data: overflow must not reject a previously valid compact status.
-    // Diagnostic retains the full projection, including gate identity and provenance; receipts are independently bounded.
-    const { summary, ...facts } = minimal.task_outcome;
-    minimal.task_outcome = facts;
-    if (estimateTokens(minimal) <= TOKEN_BUDGETS.getPerTask) return minimal;
-    minimal.task_outcome = { ...facts, object_gate: { value: facts.object_gate.value } };
-    if (estimateTokens(minimal) <= TOKEN_BUDGETS.getPerTask) return minimal;
-    delete minimal.task_outcome;
+    // Diagnostic retains the full outcome; compact prioritizes the actionable failure reason.
     return assertTokenBudget(`get compact ${status.task_id}`, minimal, TOKEN_BUDGETS.getPerTask);
   }
 

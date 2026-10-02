@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { isFastPayload } from "../../../ops/tools/pi_fast_mode.mjs";
+import { installFastMode, GROK_MODEL_ID, GROK_FAST_MODEL_ID } from "../../../ops/tools/pi_fast_mode.mjs";
 import { summarizeTaskOutcome } from "../../../ops/tools/task-outcome.mjs";
 import { createFleetCore } from "../../../ops/tools/fleet-tools-core.mjs";
 import { installDelegateWork } from "./delegate-work-extension.mjs";
@@ -376,6 +376,77 @@ export default function controlDelegateExtension(pi, {
   const notifiedRecoveryFaults = new Set();
   let sessionContext = null;
   let sessionFast = false;
+  let autoGrok = false;
+  let switchingFastModel = false;
+  const fastEntryType = "subagent-control-fast";
+  const isGrok = (model, id) => model?.provider === "xai" && model.id === id;
+  const saveFast = (ctx) => pi.appendEntry?.(fastEntryType, {
+    session_id: sessionIdFrom(ctx), enabled: sessionFast, autoGrok,
+  });
+  const fastStatus = (model) => {
+    if (!sessionFast) return isGrok(model, GROK_FAST_MODEL_ID)
+      ? "快速模式：关 · 当前模型为 Grok 快版（2 倍价格）"
+      : "快速模式：关 · 未注入请求提速";
+    if (isGrok(model, GROK_FAST_MODEL_ID)) return "快速模式：开 · Grok 快版（2 倍价格）";
+    if (["openai", "openai-codex"].includes(model?.provider)
+      && ["openai-responses", "openai-codex-responses"].includes(model?.api)) {
+      return "快速模式：开 · OpenAI priority（约 2.5 倍额度，已有 tier 保留）";
+    }
+    return "快速模式：开 · 当前模型未提速";
+  };
+  const fastWidget = (ctx, model = ctx?.model) => {
+    if (ctx?.hasUI) ctx.ui.setWidget("subagent-control-fast", sessionFast ? [fastStatus(model)] : undefined);
+  };
+  const switchGrok = async (ctx, id) => {
+    const target = ctx.modelRegistry.find("xai", id);
+    if (!target) {
+      ctx.ui.notify(`缺少 xai/${id}；运行 bootstrap 登记模型后重启 Pi。`, "error");
+      return null;
+    }
+    switchingFastModel = true;
+    try {
+      if (!await pi.setModel(target)) throw new Error(`无法切换到 xai/${id}；请检查 xai 登录。`);
+      return target;
+    } finally { switchingFastModel = false; }
+  };
+  const syncFastModel = async (ctx, model = ctx?.model) => {
+    if (sessionFast && isGrok(model, GROK_MODEL_ID)) {
+      const target = await switchGrok(ctx, GROK_FAST_MODEL_ID);
+      if (target) {
+        autoGrok = true;
+        saveFast(ctx);
+        model = target;
+      }
+    }
+    fastWidget(ctx, model);
+    return model;
+  };
+  const fastCommand = async (args, ctx) => {
+    const action = String(args ?? "").trim().toLowerCase();
+    if (!["", "on", "off", "status"].includes(action)) {
+      ctx.ui.notify("用 /fast on、off 或 status；空参数切换。", "warning");
+      return;
+    }
+    let model = ctx.model;
+    if (action !== "status") {
+      sessionFast = action === "" ? !sessionFast : action === "on";
+      if (!sessionFast && autoGrok && isGrok(model, GROK_FAST_MODEL_ID)) {
+        model = await switchGrok(ctx, GROK_MODEL_ID) ?? model;
+      }
+      if (!sessionFast) autoGrok = false;
+      model = await syncFastModel(ctx, model);
+      saveFast(ctx);
+    }
+    ctx.ui.notify(fastStatus(model), "info");
+  };
+  for (const [name, action, description] of [
+    ["fast", null, "切换快速模式；on/off/status"],
+    ["fast-on", "on", "开启快速模式"],
+    ["fast-off", "off", "关闭快速模式"],
+    ["fast-status", "status", "查看快速模式"],
+  ]) {
+    pi.registerCommand?.(name, { description, handler: (args, ctx) => fastCommand(action ?? args, ctx) });
+  }
   let branchBinding = null;
   let livenessLease = null;
   const releaseSessionLiveness = () => {
@@ -615,6 +686,14 @@ export default function controlDelegateExtension(pi, {
     releaseSessionLiveness();
     sessionContext = ctx ?? {};
     sessionFast = false;
+    autoGrok = false;
+    for (const entry of trackingEntries(ctx)) {
+      if (entry?.type !== "custom" || entry.customType !== fastEntryType
+        || entry.data?.session_id !== sessionIdFrom(ctx)) continue;
+      sessionFast = entry.data?.enabled === true;
+      autoGrok = entry.data?.autoGrok === true;
+    }
+    await syncFastModel(ctx);
     branchBinding = workBranchBinding(sessionIdFrom(ctx)) ?? null;
     branchBinding?.attachServices({ asyncService: durableAsyncService, fleetCore: resolvedFleetCore });
     completionDelivery.reset();
@@ -672,9 +751,12 @@ export default function controlDelegateExtension(pi, {
     runtimeRoot, projectRoot, mode, manifest, ...delegateWorkOptions,
   }) : null;
 
-  pi.on("before_provider_request", (event) => {
-    sessionFast = isFastPayload(event.payload);
-    return undefined;
+  installFastMode(pi, () => sessionFast);
+  pi.on("model_select", async (event, ctx) => {
+    if (switchingFastModel) return;
+    autoGrok = false;
+    await syncFastModel(ctx, event.model);
+    saveFast(ctx);
   });
   pi.on("session_start", startSession);
   pi.on("agent_settled", () => completionDelivery.schedule());
@@ -698,7 +780,9 @@ export default function controlDelegateExtension(pi, {
     const observed = observeReads(lifecycleTool);
     pi.registerTool(delegateWork ? delegateWork.wrapControl(observed) : observed);
   }
-  for (const fleetTool of createFleetTools({ core: resolvedFleetCore, onRunStarted: handleFleetStarted })) {
+  for (const fleetTool of createFleetTools({
+    core: resolvedFleetCore, onRunStarted: handleFleetStarted, currentFast: () => sessionFast,
+  })) {
     pi.registerTool(fleetTool);
   }
 

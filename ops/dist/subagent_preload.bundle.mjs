@@ -2310,6 +2310,8 @@ function resolveDeps(overrides = {}) {
   deps2.acquireBuildLock ??= () => acquireBuildLock({ deps: deps2 });
   deps2.startShell ??= (executable, endpoint) => startShell(executable, endpoint, { deps: deps2 });
   deps2.startBackgroundBuild ??= () => startBackgroundBuild({ deps: deps2 });
+  deps2.killProcessTree ??= killProcessTree;
+  deps2.sleep ??= (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   return deps2;
 }
 function spawnDetached(argv, { cwd, env, windowsHide = true } = {}) {
@@ -2501,7 +2503,24 @@ function startBackgroundBuild({ deps: deps2 } = {}) {
   });
   return child.pid;
 }
-async function ensureAgentPanel({ deps: deps2 } = {}) {
+function killProcessTree(pid) {
+  if (process5.platform === "win32") spawnSync2("taskkill", ["/F", "/T", "/PID", String(pid)], { windowsHide: true });
+  else process5.kill(pid, "SIGTERM");
+}
+async function stopStalePanel(resolved, health, port) {
+  const previous = health.runtime_build_id;
+  const current = runtimeBuildId({ deps: resolved });
+  if (!previous || !current || previous === current) return null;
+  const shell = resolved.runningShell();
+  if (filled(shell)) resolved.killProcessTree(shell.pid);
+  const deadline = Date.now() + PANEL_STOP_TIMEOUT_MS;
+  while (!await resolved.portIsFree(port)) {
+    if (Date.now() > deadline) throw pyError("RuntimeError", `\u65E7\u9762\u677F\uFF08\u6784\u5EFA ${previous}\uFF09\u672A\u9000\u51FA\uFF0C\u672A\u542F\u52A8\u5F53\u524D\u6784\u5EFA`);
+    await resolved.sleep(100);
+  }
+  return { previous_build_id: previous, runtime_build_id: current };
+}
+async function ensureAgentPanel({ deps: deps2, replaceStaleBuild = false } = {}) {
   const resolved = resolveDeps(deps2);
   try {
     if (!isFile3(resolved.paths.projectFile)) {
@@ -2511,13 +2530,16 @@ async function ensureAgentPanel({ deps: deps2 } = {}) {
     const endpoint = await resolved.allocateEndpoint();
     const manifest = resolved.validManifest();
     const health = await resolved.probeHealth(Number(pyGetItem(endpoint, "port")));
-    if (resolved.isOurPanel(health, endpoint)) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
-    const shell = resolved.runningShell();
+    const ours = resolved.isOurPanel(health, endpoint);
+    const replaced = ours && replaceStaleBuild ? await stopStalePanel(resolved, health, Number(pyGetItem(endpoint, "port"))) : null;
+    if (ours && !replaced) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
+    const shell = replaced ? {} : resolved.runningShell();
     if (filled(shell)) return { status: "starting", pid: shell.pid, ...endpoint };
-    if (filled(manifest)) return resolved.startShell(String(pyGetItem(manifest, "executable")), endpoint);
-    if (resolved.buildRunning()) return { status: "build_started", build_in_progress: true, ...endpoint };
-    const pid = resolved.startBackgroundBuild();
-    return { status: "build_started", pid, log_path: String(resolved.paths.buildLogPath), ...endpoint };
+    let launched;
+    if (filled(manifest)) launched = resolved.startShell(String(pyGetItem(manifest, "executable")), endpoint);
+    else if (resolved.buildRunning()) launched = { status: "build_started", build_in_progress: true, ...endpoint };
+    else launched = { status: "build_started", pid: resolved.startBackgroundBuild(), log_path: String(resolved.paths.buildLogPath), ...endpoint };
+    return replaced ? { ...launched, ...replaced } : launched;
   } catch (error) {
     return { status: "failed", error: errorText(error), log_path: String(resolved.paths.buildLogPath) };
   }
@@ -2540,7 +2562,7 @@ function acquireBuildLock({ deps: deps2 } = {}) {
   }
   return null;
 }
-var MONITOR_ROOT, PANEL_STATE_ROOT, PANEL_ASSET_ROOT, PANEL_ROOT, SHELL_ROOT, PROJECT_FILE, RUNTIME_ROOT2, ENDPOINT_PATH, MANIFEST_PATH, BUILD_STATE_PATH, BUILD_LOG_PATH, BUILD_LOCK_PATH, SHELL_STATE_PATH, PORT_BASE, PORT_SPAN, DEFAULT_PATHS, STILL_ACTIVE_LOCK_STALE_SECONDS;
+var MONITOR_ROOT, PANEL_STATE_ROOT, PANEL_ASSET_ROOT, PANEL_ROOT, SHELL_ROOT, PROJECT_FILE, RUNTIME_ROOT2, ENDPOINT_PATH, MANIFEST_PATH, BUILD_STATE_PATH, BUILD_LOG_PATH, BUILD_LOCK_PATH, SHELL_STATE_PATH, PORT_BASE, PORT_SPAN, DEFAULT_PATHS, STILL_ACTIVE_LOCK_STALE_SECONDS, PANEL_STOP_TIMEOUT_MS;
 var init_agent_panel_launcher = __esm({
   "ops/tools/dispatch-core/agent_panel_launcher.mjs"() {
     init_tool_common();
@@ -2577,6 +2599,7 @@ var init_agent_panel_launcher = __esm({
       buildScript: path6.join(PANEL_ASSET_ROOT, "ops", "dist", "agent_panel_launcher.bundle.mjs")
     });
     STILL_ACTIVE_LOCK_STALE_SECONDS = 600;
+    PANEL_STOP_TIMEOUT_MS = 5e3;
   }
 });
 

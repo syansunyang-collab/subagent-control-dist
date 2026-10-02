@@ -324,6 +324,8 @@ function resolveDeps(overrides = {}) {
   deps.acquireBuildLock ??= () => acquireBuildLock({ deps });
   deps.startShell ??= (executable, endpoint) => startShell(executable, endpoint, { deps });
   deps.startBackgroundBuild ??= () => startBackgroundBuild({ deps });
+  deps.killProcessTree ??= killProcessTree;
+  deps.sleep ??= (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   return deps;
 }
 function spawnDetached(argv, { cwd, env, windowsHide = true } = {}) {
@@ -515,7 +517,25 @@ function startBackgroundBuild({ deps } = {}) {
   });
   return child.pid;
 }
-async function ensureAgentPanel({ deps } = {}) {
+var PANEL_STOP_TIMEOUT_MS = 5e3;
+function killProcessTree(pid) {
+  if (process2.platform === "win32") spawnSync("taskkill", ["/F", "/T", "/PID", String(pid)], { windowsHide: true });
+  else process2.kill(pid, "SIGTERM");
+}
+async function stopStalePanel(resolved, health, port) {
+  const previous = health.runtime_build_id;
+  const current = runtimeBuildId({ deps: resolved });
+  if (!previous || !current || previous === current) return null;
+  const shell = resolved.runningShell();
+  if (filled(shell)) resolved.killProcessTree(shell.pid);
+  const deadline = Date.now() + PANEL_STOP_TIMEOUT_MS;
+  while (!await resolved.portIsFree(port)) {
+    if (Date.now() > deadline) throw pyError("RuntimeError", `\u65E7\u9762\u677F\uFF08\u6784\u5EFA ${previous}\uFF09\u672A\u9000\u51FA\uFF0C\u672A\u542F\u52A8\u5F53\u524D\u6784\u5EFA`);
+    await resolved.sleep(100);
+  }
+  return { previous_build_id: previous, runtime_build_id: current };
+}
+async function ensureAgentPanel({ deps, replaceStaleBuild = false } = {}) {
   const resolved = resolveDeps(deps);
   try {
     if (!isFile(resolved.paths.projectFile)) {
@@ -525,13 +545,16 @@ async function ensureAgentPanel({ deps } = {}) {
     const endpoint = await resolved.allocateEndpoint();
     const manifest = resolved.validManifest();
     const health = await resolved.probeHealth(Number(pyGetItem(endpoint, "port")));
-    if (resolved.isOurPanel(health, endpoint)) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
-    const shell = resolved.runningShell();
+    const ours = resolved.isOurPanel(health, endpoint);
+    const replaced = ours && replaceStaleBuild ? await stopStalePanel(resolved, health, Number(pyGetItem(endpoint, "port"))) : null;
+    if (ours && !replaced) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
+    const shell = replaced ? {} : resolved.runningShell();
     if (filled(shell)) return { status: "starting", pid: shell.pid, ...endpoint };
-    if (filled(manifest)) return resolved.startShell(String(pyGetItem(manifest, "executable")), endpoint);
-    if (resolved.buildRunning()) return { status: "build_started", build_in_progress: true, ...endpoint };
-    const pid = resolved.startBackgroundBuild();
-    return { status: "build_started", pid, log_path: String(resolved.paths.buildLogPath), ...endpoint };
+    let launched;
+    if (filled(manifest)) launched = resolved.startShell(String(pyGetItem(manifest, "executable")), endpoint);
+    else if (resolved.buildRunning()) launched = { status: "build_started", build_in_progress: true, ...endpoint };
+    else launched = { status: "build_started", pid: resolved.startBackgroundBuild(), log_path: String(resolved.paths.buildLogPath), ...endpoint };
+    return replaced ? { ...launched, ...replaced } : launched;
   } catch (error) {
     return { status: "failed", error: errorText(error), log_path: String(resolved.paths.buildLogPath) };
   }
@@ -721,7 +744,7 @@ options:
       reusable: Boolean(validManifest().executable)
     };
   } else {
-    result = await ensureAgentPanel();
+    result = await ensureAgentPanel({ replaceStaleBuild: true });
   }
   process3.stdout.write(`${JSON.stringify(result, null, 2)}
 `);

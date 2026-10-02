@@ -7112,7 +7112,7 @@ var init_shared = __esm({
 });
 
 // ops/tools/async-core/runtime/utilities.mjs
-import { renameSync, statSync, writeFileSync as writeFileSync2 } from "node:fs";
+import { renameSync, statSync, writeFileSync as writeFileSync3 } from "node:fs";
 import path5 from "node:path";
 function createUtilities(ctx, rt) {
   const statusTask = (...args) => rt.statusTask(...args);
@@ -7163,7 +7163,7 @@ function createUtilities(ctx, rt) {
   function writeJson(file, data) {
     ensureDir(path5.dirname(file));
     const tmp = `${file}.${ctx.host.pid}.tmp`;
-    writeFileSync2(tmp, `${JSON.stringify(data, null, 2)}
+    writeFileSync3(tmp, `${JSON.stringify(data, null, 2)}
 `, "utf8");
     renameWithRetry(tmp, file);
   }
@@ -7438,7 +7438,7 @@ var init_utilities = __esm({
 });
 
 // ops/tools/async-core/runtime/registry.mjs
-import { existsSync as existsSync3, rmSync } from "node:fs";
+import { existsSync as existsSync3, rmSync as rmSync2 } from "node:fs";
 import path6 from "node:path";
 function createRegistry(ctx, rt) {
   const writeJson = (...args) => rt.writeJson(...args);
@@ -7496,7 +7496,7 @@ function createRegistry(ctx, rt) {
     });
   }
   function unregisterTaskLocation(registryRoot, taskId) {
-    rmSync(registryFile(registryRoot, taskId), { force: true });
+    rmSync2(registryFile(registryRoot, taskId), { force: true });
   }
   function locateTask(input = {}, taskId = "") {
     const explicitRoot = pick2(input, ["task-root", "task_root", "taskRoot"], "");
@@ -7558,7 +7558,7 @@ var init_registry = __esm({
 });
 
 // ops/tools/async-core/runtime/process-tree.mjs
-import { rmSync as rmSync2 } from "node:fs";
+import { rmSync as rmSync3 } from "node:fs";
 function createProcessTree(ctx, rt) {
   const isoNow = (...args) => rt.isoNow(...args);
   const registerTaskLocation = (...args) => rt.registerTaskLocation(...args);
@@ -7693,7 +7693,7 @@ function createProcessTree(ctx, rt) {
       let taskDirRemoved = false;
       let registryEntryRemoved = false;
       try {
-        rmSync2(dir, { recursive: true, force: true });
+        rmSync3(dir, { recursive: true, force: true });
         taskDirRemoved = true;
       } catch (error2) {
         cleanupErrors.push(error2);
@@ -7997,9 +7997,9 @@ import {
   readdirSync as readdirSync2,
   realpathSync as realpathSync2,
   renameSync as renameSync2,
-  rmSync as rmSync3,
+  rmSync as rmSync4,
   statSync as statSync2,
-  writeFileSync as writeFileSync3
+  writeFileSync as writeFileSync4
 } from "node:fs";
 import path8 from "node:path";
 function createClaims(ctx, rt) {
@@ -8178,7 +8178,7 @@ function createClaims(ctx, rt) {
         }
         throw error2;
       }
-      rmSync3(tombstone, { force: true });
+      rmSync4(tombstone, { force: true });
     }
   }
   function writeClaimLockIsStale(lockFile, record2, staleMs) {
@@ -8207,7 +8207,7 @@ function createClaims(ctx, rt) {
       try {
         fd = openSync(lockFile, "wx");
         created = true;
-        writeFileSync3(fd, JSON.stringify({
+        writeFileSync4(fd, JSON.stringify({
           pid: ctx.host.pid,
           host: ctx.host.hostname,
           token,
@@ -8223,7 +8223,7 @@ function createClaims(ctx, rt) {
           }
         }
         if (created) {
-          rmSync3(lockFile, { force: true });
+          rmSync4(lockFile, { force: true });
         }
         if (error2?.code !== "EEXIST") {
           throw error2;
@@ -8240,7 +8240,7 @@ function createClaims(ctx, rt) {
           } catch {
             continue;
           }
-          rmSync3(tombstone, { force: true });
+          rmSync4(tombstone, { force: true });
           continue;
         }
         if (ctx.host.nowMs() >= deadline) {
@@ -8263,7 +8263,7 @@ function createClaims(ctx, rt) {
       } catch {
       }
       if (!existsSync5(lockFile) || current.token === token) {
-        rmSync3(lockFile, { force: true });
+        rmSync4(lockFile, { force: true });
       }
     }
   }
@@ -8365,7 +8365,7 @@ function createClaims(ctx, rt) {
       if (isUnconfirmedRetainedProcessTree(status) || status && !isTerminalState(status.state) && status.state !== "paused") {
         return false;
       }
-      rmSync3(expectedClaimPath, { force: true });
+      rmSync4(expectedClaimPath, { force: true });
       return true;
     });
   }
@@ -8604,7 +8604,7 @@ var init_pi_write_domain_extension = __esm({
 });
 
 // ops/tools/async-core/runtime/submit.mjs
-import { existsSync as existsSync6, readFileSync as readFileSync6, rmSync as rmSync4, writeFileSync as writeFileSync4 } from "node:fs";
+import { existsSync as existsSync6, readFileSync as readFileSync6, rmSync as rmSync5, writeFileSync as writeFileSync5 } from "node:fs";
 import path9 from "node:path";
 function createSubmit(ctx, rt) {
   const resolveSubmitBudget = (...args) => rt.resolveSubmitBudget(...args);
@@ -8718,7 +8718,7 @@ function createSubmit(ctx, rt) {
         ensureDir(dir);
         const workerTaskPackagePath = taskPackagePath ? files.taskPackage : null;
         if (workerTaskPackagePath) {
-          writeFileSync4(workerTaskPackagePath, readFileSync6(taskPackagePath));
+          writeFileSync5(workerTaskPackagePath, readFileSync6(taskPackagePath));
         }
         const prompt = buildPrompt({ taskText, targetCwd, producerRoot });
         const task = {
@@ -8765,7 +8765,7 @@ function createSubmit(ctx, rt) {
           report_path: files.report,
           handoff_path: files.handoff
         };
-        writeFileSync4(files.prompt, prompt, "utf8");
+        writeFileSync5(files.prompt, prompt, "utf8");
         writeJson(files.writeDomain, {
           contract_version: PI_CHILD_WRITE_DOMAIN_PROFILE,
           task_id: taskId,
@@ -8808,7 +8808,7 @@ function createSubmit(ctx, rt) {
         const rollbackComplete = error2?.rollback_complete === true;
         const noWriterCanRemain = error2?.no_writer_can_remain === true;
         if (writeClaimPath && !retainedWorker && (!launchAttempted || rollbackComplete || noWriterCanRemain)) {
-          rmSync4(writeClaimPath, { force: true });
+          rmSync5(writeClaimPath, { force: true });
         }
         throw error2;
       }
@@ -8837,7 +8837,7 @@ var init_submit = __esm({
 });
 
 // ops/tools/async-core/runtime/notifications.mjs
-import { existsSync as existsSync7, rmSync as rmSync5, watch } from "node:fs";
+import { existsSync as existsSync7, rmSync as rmSync6, watch } from "node:fs";
 import path10 from "node:path";
 function createNotifications(ctx, rt) {
   const pickBool = (...args) => rt.pickBool(...args);
@@ -9207,7 +9207,7 @@ function createNotifications(ctx, rt) {
     const clearStall = (status) => {
       if (!status.stall) return;
       updateStatus(files, { stall: null });
-      rmSync5(noticePath, { force: true });
+      rmSync6(noticePath, { force: true });
     };
     const schedule = () => {
       if (stopped) return;
@@ -9801,7 +9801,7 @@ var init_collection = __esm({
 });
 
 // ops/tools/async-core/runtime/lifecycle.mjs
-import { existsSync as existsSync11, readFileSync as readFileSync9, rmSync as rmSync6, statSync as statSync3 } from "node:fs";
+import { existsSync as existsSync11, readFileSync as readFileSync9, rmSync as rmSync7, statSync as statSync3 } from "node:fs";
 import path14 from "node:path";
 function createLifecycle(ctx, rt) {
   const writeJson = (...args) => rt.writeJson(...args);
@@ -9942,11 +9942,11 @@ function createLifecycle(ctx, rt) {
       let launchAttempted = false;
       try {
         const staleNotice = status.completion_notice_path || completionNoticePath(task);
-        rmSync6(staleNotice, { force: true });
-        rmSync6(completionNoticePath(task), { force: true });
-        rmSync6(stallNoticePath(task), { force: true });
-        rmSync6(files.cancelRequest, { force: true });
-        if (existsSync11(files.result)) rmSync6(files.result, { force: true });
+        rmSync7(staleNotice, { force: true });
+        rmSync7(completionNoticePath(task), { force: true });
+        rmSync7(stallNoticePath(task), { force: true });
+        rmSync7(files.cancelRequest, { force: true });
+        if (existsSync11(files.result)) rmSync7(files.result, { force: true });
         updateStatus(files, {
           resume_requested_session: sessionFile,
           pause_requested_at: null,
@@ -9992,7 +9992,7 @@ function createLifecycle(ctx, rt) {
       } catch (error2) {
         if (!launchAttempted || error2?.no_writer_can_remain === true) {
           updateStatus(files, { ...status, error: String(error2.message), resume_requested_session: null });
-          if (claimPath) rmSync6(claimPath, { force: true });
+          if (claimPath) rmSync7(claimPath, { force: true });
         }
         throw error2;
       }
@@ -10163,11 +10163,16 @@ function createProjection(ctx, rt) {
     };
     const rawFailureSummary = failureSummary(status);
     const taskOutcome = displayTaskOutcome(status);
+    const { summary, ...facts } = taskOutcome;
+    const outcomes = [taskOutcome, facts, { ...facts, object_gate: { value: facts.object_gate.value } }];
     const profiles = [
+      ...outcomes.map((outcome) => ({ batch: 120, slice: 120, title: 120, failure: 180, outcome })),
       { batch: 120, slice: 120, title: 120, failure: 180 },
       { batch: 72, slice: 72, title: 96, failure: 120 },
       { batch: 36, slice: 36, title: 72, failure: 96 },
-      { batch: 0, slice: 0, title: 48, failure: 72 },
+      { batch: 0, slice: 0, title: 48, failure: 96 },
+      { batch: 0, slice: 0, title: 0, failure: 96 },
+      { batch: 0, slice: 0, title: 0, failure: 72 },
       { batch: 0, slice: 0, title: 0, failure: 48 },
       { batch: 0, slice: 0, title: 0, failure: 0 }
     ];
@@ -10186,7 +10191,7 @@ function createProjection(ctx, rt) {
         contract_state: status.contract_state ?? null,
         business_state: status.business_state ?? null,
         review_gate: reviewGate(status),
-        task_outcome: taskOutcome,
+        ...profile.outcome ? { task_outcome: profile.outcome } : {},
         revision: String(status.rev ?? 0),
         updated_at: status.updated_at ?? null,
         failure_summary: optionalText(rawFailureSummary, profile.failure),
@@ -10208,12 +10213,6 @@ function createProjection(ctx, rt) {
       minimal = compact;
       if (estimateTokens(compact) <= TOKEN_BUDGETS.getPerTask) return compact;
     }
-    const { summary, ...facts } = minimal.task_outcome;
-    minimal.task_outcome = facts;
-    if (estimateTokens(minimal) <= TOKEN_BUDGETS.getPerTask) return minimal;
-    minimal.task_outcome = { ...facts, object_gate: { value: facts.object_gate.value } };
-    if (estimateTokens(minimal) <= TOKEN_BUDGETS.getPerTask) return minimal;
-    delete minimal.task_outcome;
     return assertTokenBudget(`get compact ${status.task_id}`, minimal, TOKEN_BUDGETS.getPerTask);
   }
   function diagnosticTaskStatus(status, { minimal = false, includeRequest = true } = {}) {
@@ -10856,7 +10855,7 @@ var init_attempt_policy = __esm({
 });
 
 // ops/tools/async-core/runtime/artifacts.mjs
-import { existsSync as existsSync14, writeFileSync as writeFileSync5 } from "node:fs";
+import { existsSync as existsSync14, writeFileSync as writeFileSync6 } from "node:fs";
 import path18 from "node:path";
 function createArtifacts(ctx, rt) {
   const writeJson = (...args) => rt.writeJson(...args);
@@ -10889,7 +10888,7 @@ function createArtifacts(ctx, rt) {
       "This runtime file is a pointer only. The actual business report was written to the durable path above.",
       ""
     ].join("\n");
-    writeFileSync5(runtimePath, body, "utf8");
+    writeFileSync6(runtimePath, body, "utf8");
     return true;
   }
   function escapeRegex2(text) {
@@ -10938,7 +10937,7 @@ function createArtifacts(ctx, rt) {
         finalText.trim(),
         ""
       ].join("\n");
-      writeFileSync5(files.report, body, "utf8");
+      writeFileSync6(files.report, body, "utf8");
       written.push("report");
     }
     if (!existsSync14(files.handoff)) {
@@ -10958,7 +10957,7 @@ function createArtifacts(ctx, rt) {
         `child_final_path: ${finalPath}`,
         ""
       ].join("\n");
-      writeFileSync5(files.handoff, body, "utf8");
+      writeFileSync6(files.handoff, body, "utf8");
       written.push("handoff");
     }
     return written;
@@ -11115,7 +11114,7 @@ var init_artifacts = __esm({
 });
 
 // ops/tools/async-core/runtime/child-attempt.mjs
-import { appendFileSync, existsSync as existsSync15, readFileSync as readFileSync11, renameSync as renameSync3, rmSync as rmSync7, statSync as statSync4 } from "node:fs";
+import { appendFileSync, existsSync as existsSync15, readFileSync as readFileSync11, renameSync as renameSync3, rmSync as rmSync8, statSync as statSync4 } from "node:fs";
 import path19 from "node:path";
 function createChildAttempt(ctx, rt) {
   const writeJson = (...args) => rt.writeJson(...args);
@@ -11295,7 +11294,7 @@ function createChildAttempt(ctx, rt) {
     const cancellationStatus = readJson(files.status, {});
     const cancellationRequest = readJson(files.cancelRequest, null);
     const cancellationBound = Boolean(cancellationStatus.cancel_reason && cancellationStatus.cancel_requested_at) && String(cancellationStatus.active_attempt_id || "") === attempt.attempt_id;
-    if (cancellationRequest?.attempt_id === attempt.attempt_id) rmSync7(files.cancelRequest, { force: true });
+    if (cancellationRequest?.attempt_id === attempt.attempt_id) rmSync8(files.cancelRequest, { force: true });
     updateStatus(files, { runner_spawn_pending: false, child_pid: null });
     const childResult = readJson(files.childResult, null);
     const childWriteDomain = objectOrEmpty(childResult?.write_domain);
@@ -11489,7 +11488,7 @@ var init_child_attempt = __esm({
 });
 
 // ops/tools/async-core/runtime/worker.mjs
-import { existsSync as existsSync16, rmSync as rmSync8, writeFileSync as writeFileSync6 } from "node:fs";
+import { existsSync as existsSync16, rmSync as rmSync9, writeFileSync as writeFileSync7 } from "node:fs";
 function createWorker(ctx, rt) {
   const isoNow = (...args) => rt.isoNow(...args);
   const resolveTaskRoot = (...args) => rt.resolveTaskRoot(...args);
@@ -11588,7 +11587,7 @@ function createWorker(ctx, rt) {
       effort: task.effort,
       ...resumeSession ? { resume_session: resumeSession } : {}
     };
-    if (startingStatus.state !== "cancel_requested") rmSync8(files.cancelRequest, { force: true });
+    if (startingStatus.state !== "cancel_requested") rmSync9(files.cancelRequest, { force: true });
     attempts.push(runningAttempt(task, primaryAttempt));
     updateStatus(files, {
       attempts,
@@ -11715,7 +11714,7 @@ function createWorker(ctx, rt) {
       active_attempt_id: null,
       retained_worker: outcome.retained_worker === true
     });
-    rmSync8(stallNoticePath(task), { force: true });
+    rmSync9(stallNoticePath(task), { force: true });
     writeResultReceipt(files, task);
     writeCompletionNotice(files, task);
   }
@@ -11739,7 +11738,7 @@ function createWorker(ctx, rt) {
         "```",
         ""
       ].join("\n");
-      writeFileSync6(files.report, body, "utf8");
+      writeFileSync7(files.report, body, "utf8");
     }
     if (!existsSync16(files.handoff)) {
       const body = [
@@ -11754,16 +11753,16 @@ function createWorker(ctx, rt) {
         `  - ${error2 || childResult?.error || `child runner exited ${exit.code}`}`,
         ""
       ].join("\n");
-      writeFileSync6(files.handoff, body, "utf8");
+      writeFileSync7(files.handoff, body, "utf8");
     }
   }
   function writeFailureFiles(files, task, message) {
-    writeFileSync6(
+    writeFileSync7(
       files.report,
       [`# ${task.task_id} report`, "", "## failure", "", message, ""].join("\n"),
       "utf8"
     );
-    writeFileSync6(
+    writeFileSync7(
       files.handoff,
       [
         "verdict: failed",
@@ -11796,7 +11795,7 @@ var selftest_exports = {};
 __export(selftest_exports, {
   runAsyncTaskCoreSelfTest: () => runAsyncTaskCoreSelfTest
 });
-import { existsSync as existsSync17, readFileSync as readFileSync12, readdirSync as readdirSync4, rmSync as rmSync9, writeFileSync as writeFileSync7 } from "node:fs";
+import { existsSync as existsSync17, readFileSync as readFileSync12, readdirSync as readdirSync4, rmSync as rmSync10, writeFileSync as writeFileSync8 } from "node:fs";
 import path20 from "node:path";
 async function runAsyncTaskCoreSelfTest(options) {
   const ctx = createContext(options);
@@ -12087,7 +12086,7 @@ async function runAsyncTaskCoreSelfTest(options) {
       const resolved = path20.resolve(noticePath);
       const expected = expectedNoticeSet.has(resolved);
       try {
-        rmSync9(noticePath, { force: true });
+        rmSync10(noticePath, { force: true });
         completionNoticesRemoved += 1;
         if (!expected) {
           const name = path20.basename(noticePath);
@@ -12110,7 +12109,7 @@ async function runAsyncTaskCoreSelfTest(options) {
       }
     };
     try {
-      rmSync9(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+      rmSync10(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     } catch (error2) {
       cleanupErrors.push(error2);
     }
@@ -12133,7 +12132,7 @@ async function runAsyncTaskCoreSelfTest(options) {
       cleanupErrors.push(error2);
     }
     try {
-      rmSync9(selfTestRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+      rmSync10(selfTestRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     } catch (error2) {
       cleanupErrors.push(error2);
     }
@@ -12165,7 +12164,7 @@ async function runAsyncTaskCoreSelfTest(options) {
   };
   ensureDir3(root);
   try {
-    writeFileSync7(failureRunner, "export {};\\n", "utf8");
+    writeFileSync8(failureRunner, "export {};\\n", "utf8");
     const crossRepoTarget = path20.join(root, "target-repo");
     const preparedDir = path20.join(root, "tmp", "dispatch_prepare");
     const crossRepoTaskFile = path20.join(preparedDir, "cross-repo.task.md");
@@ -12173,7 +12172,7 @@ async function runAsyncTaskCoreSelfTest(options) {
     const crossRepoTaskRoot = path20.join(root, ".runtime", "async_tasks");
     ensureDir3(crossRepoTarget);
     ensureDir3(preparedDir);
-    writeFileSync7(crossRepoTaskFile, "# cross-repo read-only self-test\n", "utf8");
+    writeFileSync8(crossRepoTaskFile, "# cross-repo read-only self-test\n", "utf8");
     writeJson(crossRepoDispatchFile, {
       contract_version: DISPATCH_ENVELOPE_VERSION,
       producer_root: root,
@@ -12246,7 +12245,7 @@ async function runAsyncTaskCoreSelfTest(options) {
       unregisteredMessage = String(error2?.message ?? error2);
     }
     const corruptRegistryTaskId = selfTestTaskId("corrupt-registry-record-self-test");
-    writeFileSync7(registryFile(testRegistryRoot, corruptRegistryTaskId), JSON.stringify({ task_id: corruptRegistryTaskId }), "utf8");
+    writeFileSync8(registryFile(testRegistryRoot, corruptRegistryTaskId), JSON.stringify({ task_id: corruptRegistryTaskId }), "utf8");
     let corruptRegistryMessage = "";
     try {
       statusTask({ registry_root: testRegistryRoot, task_id: corruptRegistryTaskId });
@@ -12300,8 +12299,8 @@ async function runAsyncTaskCoreSelfTest(options) {
     const retainedFailureStatus = readJson2(taskFiles(workerTerminationFailureDir).status, {});
     const workerTerminationFailurePreservesTask = existsSync17(workerTerminationFailureDir) && existsSync17(registryFile(testRegistryRoot, workerTerminationFailureId)) && retainedFailureStatus.state === "cancel_requested" && retainedFailureStatus.failure_type === "worker_start_cleanup_failed" && workerTerminationFailureCode === RETAINED_WORKER_ERROR_CODE;
     unregisterTaskLocation(testRegistryRoot, workerTerminationFailureId);
-    rmSync9(workerTerminationFailureDir, { recursive: true, force: true });
-    writeFileSync7(
+    rmSync10(workerTerminationFailureDir, { recursive: true, force: true });
+    writeFileSync8(
       fakeRunner,
       [
         "import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';",
@@ -12448,7 +12447,7 @@ async function runAsyncTaskCoreSelfTest(options) {
     const formalHandoff = path20.join(root, "business-handoff.md");
     const packagePath = path20.join(root, "fake.task-package.json");
     const taskFile = path20.join(root, "fake.task-package.task.md");
-    writeFileSync7(
+    writeFileSync8(
       packagePath,
       JSON.stringify(
         {
@@ -12475,8 +12474,8 @@ async function runAsyncTaskCoreSelfTest(options) {
       "utf8"
     );
     const bareTaskFile = path20.join(root, "bare-no-package.task.md");
-    writeFileSync7(bareTaskFile, "self-test bare fake child task without task package", "utf8");
-    writeFileSync7(taskFile, "self-test fake child task", "utf8");
+    writeFileSync8(bareTaskFile, "self-test bare fake child task without task package", "utf8");
+    writeFileSync8(taskFile, "self-test fake child task", "utf8");
     const deadTaskId = selfTestTaskId("dead-worker-self-test");
     const deadTaskDir = taskDir(root, deadTaskId);
     additionalNoticeOwners.push({ task_root: root, task_id: deadTaskId });
@@ -12500,8 +12499,8 @@ async function runAsyncTaskCoreSelfTest(options) {
     writeInitialStatus(deadFiles, deadTask);
     updateStatus(deadFiles, { state: "running", pid: 2147483647, started_at: isoNow() });
     const deadWorkerStatus = reconcileTask({ task_root: root, task_id: deadTaskId });
-    writeFileSync7(formalReport, "# business report\n\nformal report wins.\n", "utf8");
-    writeFileSync7(
+    writeFileSync8(formalReport, "# business report\n\nformal report wins.\n", "utf8");
+    writeFileSync8(
       formalHandoff,
       [
         "FINAL_HANDOFF:",
@@ -12541,14 +12540,14 @@ async function runAsyncTaskCoreSelfTest(options) {
       packageData.task_package.expected_output.resolved_file_path = variantReport;
       packageData.task_package.handoff_contract.handoff_file = variantHandoff;
       packageData.task_package.handoff_contract.resolved_handoff_file = variantHandoff;
-      writeFileSync7(variantReport, readFileSync12(formalReport, "utf8"), "utf8");
-      writeFileSync7(
+      writeFileSync8(variantReport, readFileSync12(formalReport, "utf8"), "utf8");
+      writeFileSync8(
         variantHandoff,
         readFileSync12(formalHandoff, "utf8").replaceAll(formalReport, variantReport).replaceAll(formalHandoff, variantHandoff),
         "utf8"
       );
       writeJson(variantPackage, packageData);
-      writeFileSync7(variantTaskFile, `self-test ${label} fake child task`, "utf8");
+      writeFileSync8(variantTaskFile, `self-test ${label} fake child task`, "utf8");
       return variantTaskFile;
     };
     const promptContractTaskFile = createFormalTaskVariant("prompt-contract");
@@ -12562,13 +12561,13 @@ async function runAsyncTaskCoreSelfTest(options) {
     const invalidHandoff = path20.join(root, "invalid-handoff.md");
     const invalidHandoffPackage = path20.join(root, "invalid-handoff.json");
     const invalidHandoffTaskFile = path20.join(root, "invalid-handoff.task.md");
-    writeFileSync7(invalidHandoffReport, "# invalid handoff fixture\n", "utf8");
-    writeFileSync7(
+    writeFileSync8(invalidHandoffReport, "# invalid handoff fixture\n", "utf8");
+    writeFileSync8(
       invalidHandoff,
       "FINAL_HANDOFF:\n  package_id: invalid-handoff-package\n  verdict: done\n  validation:\n    mechanical_check: pass\n",
       "utf8"
     );
-    writeFileSync7(
+    writeFileSync8(
       invalidHandoffPackage,
       JSON.stringify(
         {
@@ -12594,7 +12593,7 @@ async function runAsyncTaskCoreSelfTest(options) {
       ),
       "utf8"
     );
-    writeFileSync7(invalidHandoffTaskFile, "self-test invalid mandatory handoff", "utf8");
+    writeFileSync8(invalidHandoffTaskFile, "self-test invalid mandatory handoff", "utf8");
     const submit = submitSelfTest({
       task_file: taskFile,
       task_root: root,
@@ -13719,7 +13718,7 @@ var init_runtime = __esm({
 
 // ops/tools/subagent_service.mjs
 import { spawn as spawn5 } from "node:child_process";
-import { appendFileSync as appendFileSync2, existsSync as existsSync18, readFileSync as readFileSync13, rmSync as rmSync10, writeFileSync as writeFileSync8 } from "node:fs";
+import { appendFileSync as appendFileSync2, existsSync as existsSync18, readFileSync as readFileSync13, rmSync as rmSync11, writeFileSync as writeFileSync9 } from "node:fs";
 import { homedir } from "node:os";
 import path23 from "node:path";
 import process5 from "node:process";
@@ -27957,7 +27956,6 @@ var FAST_MODE_EXTENSION_NAMES = Object.freeze([
   "pi_fast_mode.bundle.mjs"
 ]);
 var FAST_MODE_DESCRIPTION = "\u8BF7\u6C42\u66F4\u5FEB\u63A8\u7406\uFF1AOpenAI \u7CFB\u7EA6 2.5 \u500D\u989D\u5EA6\u3001grok 2 \u500D\u4EF7\u683C\uFF1B\u7701\u7565\u65F6 MCP \u8C03\u7528\u4E3A\u5173\uFF0CPi \u4E3B\u4EE3\u7406\u6CBF\u7528\u5176\u4F1A\u8BDD\u5F53\u524D\u5FEB\u901F\u72B6\u6001\u3002";
-var FAST_MODE_MODELS = Object.freeze({ "grok-4.7": "grok-4.7-build-fast" });
 function fastModeSeed(seed, fast) {
   const runtime = { ...seed.runtime_context };
   if (fast === true) runtime.fast = true;
@@ -28598,10 +28596,13 @@ function killProcessTree(pid) {
 
 // ops/tools/fleet-tools-core.mjs
 import { spawn as spawn2 } from "node:child_process";
-import { existsSync as existsSync2, readFileSync as readFileSync3 } from "node:fs";
+import { existsSync as existsSync2, mkdirSync as mkdirSync3, mkdtempSync, readFileSync as readFileSync3, rmSync, writeFileSync as writeFileSync2 } from "node:fs";
 import path3 from "node:path";
 import process3 from "node:process";
 import { fileURLToPath } from "node:url";
+function fastFleetManifest(manifest, fast) {
+  return { ...manifest, nodes: manifest.nodes.map((node) => node.seed ? { ...node, seed: fastModeSeed(node.seed, fast) } : node) };
+}
 var FLEET_TOOL_NAMES = Object.freeze(["fleet_start", "fleet_status", "fleet_wait", "fleet_review", "fleet_cancel"]);
 var FLEET_DECISIONS = Object.freeze(["accept", "block", "requeue"]);
 var FLEET_WAIT_MS_MIN = 1e3;
@@ -28840,23 +28841,37 @@ function createFleetCore({
     });
   };
   const runStatus = (runId) => runTool(scheduler, ["status", "--run-id", runId, "--summary", "--format", "json"]);
-  async function fleet_start({ manifest_path, run_id } = {}) {
+  async function fleet_start({ manifest_path, run_id, fast = false } = {}) {
     const manifestPath = String(manifest_path ?? "").trim();
     if (!manifestPath) return failure("invalid_input", "manifest_path is required");
+    if (typeof fast !== "boolean") return failure("invalid_input", "fast must be a boolean");
     const checked = await runTool(manifestChecker, ["--manifest", manifestPath, "--format", "json"]);
     if (!checked.ok) return checked;
-    const launched = await runTool(scheduler, [
-      "run",
-      "--manifest",
-      manifestPath,
-      ...run_id ? ["--run-id", String(run_id)] : [],
-      "--format",
-      "json"
-    ]);
+    const inputsDir = path3.join(spawnCwd, ".runtime", "cockpit", "fleet-inputs");
+    mkdirSync3(inputsDir, { recursive: true });
+    const inputDir = mkdtempSync(path3.join(inputsDir, "run-"));
+    const projectedPath = path3.join(inputDir, path3.basename(manifestPath));
+    let launched;
+    try {
+      const manifest2 = JSON.parse(readFileSync3(path3.resolve(spawnCwd, manifestPath), "utf8"));
+      writeFileSync2(projectedPath, `${JSON.stringify(fastFleetManifest(manifest2, fast))}
+`, "utf8");
+      launched = await runTool(scheduler, [
+        "run",
+        "--manifest",
+        projectedPath,
+        ...run_id ? ["--run-id", String(run_id)] : [],
+        "--format",
+        "json"
+      ]);
+    } finally {
+      rmSync(inputDir, { recursive: true, force: true });
+    }
     if (!launched.ok) return launched;
     const statePath = String(launched.payload.state_path ?? "");
     return {
       ok: true,
+      fast,
       run_id: String(launched.payload.run_id ?? run_id ?? ""),
       state_root: path3.posix.dirname(path3.posix.dirname(statePath)),
       node_count: Array.isArray(checked.payload.nodes) ? checked.payload.nodes.length : 0,
@@ -29245,7 +29260,7 @@ function resolveSubagentCoreOptions({
       basename: "run-pi-task.mjs",
       aliases: ["run-pi-task.bundle.mjs"],
       path: piSibling,
-      defaultModel: environment.PI_ASYNC_MODEL || "openai-codex/gpt-6-sol",
+      defaultModel: environment.PI_ASYNC_MODEL || "openai-codex/gpt-6.1-sol",
       defaultEffort: environment.PI_ASYNC_EFFORT || "max"
     }
   };
@@ -29258,7 +29273,7 @@ function resolveSubagentCoreOptions({
   const [inferredDefaultKey, defaultEntry] = exactDefault || basenameDefault || piDefault || [];
   if (!defaultEntry) throw new TypeError("async Core resolver requires a non-empty runner catalog");
   const piEntry = catalog.pi || defaultEntry;
-  const resolvedDefaultModel = piEntry.defaultModel || "openai-codex/gpt-6-sol";
+  const resolvedDefaultModel = piEntry.defaultModel || "openai-codex/gpt-6.1-sol";
   const resolvedDefaultEffort = piEntry.defaultEffort || "max";
   const resolvedChildEnv = { ...environment, ...childEnv && typeof childEnv === "object" ? cloneValue2(childEnv) : {} };
   if (!String(resolvedChildEnv.SUBAGENT_PROJECT_ROOT || "").trim()) {
@@ -29348,7 +29363,7 @@ function isTrustedRunnerPath(options, runnerPath) {
 init_runtime();
 var SERVER_NAME = "async-subagent";
 var SERVER_VERSION = "1.0.0";
-var BUILD_ID = true ? "4b56503931d4522a" : "dev";
+var BUILD_ID = true ? "ff504565ca3e8c85" : "dev";
 var PUBLIC_TOOL_NAMES = Object.freeze([
   "subagent_prepare",
   "subagent_dispatch",
@@ -29909,7 +29924,8 @@ function registerFleetTools(server) {
     inputSchema: external_exports.object({
       project_root: projectRootSchema,
       manifest_path: external_exports.string().min(1),
-      run_id: external_exports.string().min(1).optional()
+      run_id: external_exports.string().min(1).optional(),
+      fast: external_exports.boolean().optional().describe(FAST_MODE_DESCRIPTION)
     }).strict(),
     outputSchema: fleetOutputSchema,
     annotations: { ...fleetAnnotations, readOnlyHint: false, idempotentHint: false },
@@ -30205,7 +30221,7 @@ async function selfTest() {
   ].every((schema) => !Object.hasOwn(schema.shape, "origin_thread_id"));
   const fakeExit = path23.join(process5.cwd(), "tmp", `async-stdio-self-test-exit-${Date.now()}-${process5.pid}.mjs`);
   ensureDir(path23.dirname(fakeExit));
-  writeFileSync8(fakeExit, "setTimeout(() => process.exit(23), 20);\n", "utf8");
+  writeFileSync9(fakeExit, "setTimeout(() => process.exit(23), 20);\n", "utf8");
   const client = new LineJsonRpcClient(
     { command: process5.execPath, args: [fakeExit], shell: false },
     { cwd: process5.cwd(), timeoutMs: 500 }
@@ -30217,7 +30233,7 @@ async function selfTest() {
     waiterError = String(error2?.message ?? error2);
   } finally {
     client.stop();
-    rmSync10(fakeExit, { force: true });
+    rmSync11(fakeExit, { force: true });
   }
   checks.no_timeout_waiter_rejects_on_process_exit = waiterError.includes("process exited before response") && waiterError.includes("code=23") && notificationWaitFailureType(waiterError) === "app_server_exit";
   const ok = Object.values(checks).every(Boolean);

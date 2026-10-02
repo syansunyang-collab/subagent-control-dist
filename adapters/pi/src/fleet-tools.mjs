@@ -6,6 +6,7 @@ import {
   FLEET_WAIT_MS_MIN,
 } from "../../../ops/tools/fleet-tools-core.mjs";
 
+import { FAST_MODE_DESCRIPTION } from "../../../ops/tools/pi_fast_mode.mjs";
 import { waitUnlessAborted } from "./abortable-wait.mjs";
 import { observeFleetToolResult } from "./fleet-completion-watcher.mjs";
 
@@ -17,6 +18,7 @@ const startSchema = Object.freeze({
   properties: {
     manifest_path: { type: "string", minLength: 1 },
     run_id: { type: "string", minLength: 1 },
+    fast: { type: "boolean", description: FAST_MODE_DESCRIPTION },
   },
   additionalProperties: false,
 });
@@ -76,7 +78,7 @@ function piToolResult(value) {
   };
 }
 
-export function createFleetTools({ coreOptions = {}, core = null, onRunStarted = null } = {}) {
+export function createFleetTools({ coreOptions = {}, core = null, onRunStarted = null, currentFast = () => false } = {}) {
   const fleet = core ?? createFleetCore(coreOptions);
   async function watchStartedRun(result, ctx) {
     if (!result?.ok || !result.run_id || typeof onRunStarted !== "function") return result;
@@ -95,7 +97,7 @@ export function createFleetTools({ coreOptions = {}, core = null, onRunStarted =
       description: "Validate a fleet manifest and launch its DAG under a detached scheduler driver. Returns run_id, state_root and node_count; the driver keeps dispatching without further parent calls.",
       parameters: startSchema,
       execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
-        const result = await fleet.fleet_start(params ?? {});
+        const result = await fleet.fleet_start({ ...params, fast: params?.fast ?? currentFast() });
         return piToolResult(await watchStartedRun(result, ctx));
       },
     }),

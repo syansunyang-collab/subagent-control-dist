@@ -159,7 +159,7 @@ async function createAsyncTaskService({ paths, asyncCorePath, asyncCoreModule, r
 // src/agent-panel/src/server/projection.mjs
 import {
   existsSync as existsSync2,
-  mkdirSync,
+  mkdirSync as mkdirSync2,
   readdirSync,
   readFileSync as readFileSync3,
   statSync
@@ -168,10 +168,27 @@ import path4 from "node:path";
 
 // ops/tools/fleet-tools-core.mjs
 import { spawn as spawn2 } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path2 from "node:path";
 import process2 from "node:process";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
+
+// ops/tools/pi_fast_mode.mjs
+var FAST_MODE_EXTENSION_NAMES = Object.freeze([
+  "pi_fast_mode.mjs",
+  "pi_fast_mode.bundle.mjs"
+]);
+function fastModeSeed(seed, fast) {
+  const runtime = { ...seed.runtime_context };
+  if (fast === true) runtime.fast = true;
+  else delete runtime.fast;
+  return { ...seed, runtime_context: runtime };
+}
+
+// ops/tools/fleet-tools-core.mjs
+function fastFleetManifest(manifest, fast) {
+  return { ...manifest, nodes: manifest.nodes.map((node) => node.seed ? { ...node, seed: fastModeSeed(node.seed, fast) } : node) };
+}
 var FLEET_TOOL_NAMES = Object.freeze(["fleet_start", "fleet_status", "fleet_wait", "fleet_review", "fleet_cancel"]);
 var FLEET_DECISIONS = Object.freeze(["accept", "block", "requeue"]);
 var FLEET_WAIT_MS_MIN = 1e3;
@@ -414,23 +431,37 @@ function createFleetCore({
     });
   };
   const runStatus = (runId) => runTool(scheduler, ["status", "--run-id", runId, "--summary", "--format", "json"]);
-  async function fleet_start({ manifest_path, run_id } = {}) {
+  async function fleet_start({ manifest_path, run_id, fast = false } = {}) {
     const manifestPath = String(manifest_path ?? "").trim();
     if (!manifestPath) return failure("invalid_input", "manifest_path is required");
+    if (typeof fast !== "boolean") return failure("invalid_input", "fast must be a boolean");
     const checked = await runTool(manifestChecker, ["--manifest", manifestPath, "--format", "json"]);
     if (!checked.ok) return checked;
-    const launched = await runTool(scheduler, [
-      "run",
-      "--manifest",
-      manifestPath,
-      ...run_id ? ["--run-id", String(run_id)] : [],
-      "--format",
-      "json"
-    ]);
+    const inputsDir = path2.join(spawnCwd, ".runtime", "cockpit", "fleet-inputs");
+    mkdirSync(inputsDir, { recursive: true });
+    const inputDir = mkdtempSync(path2.join(inputsDir, "run-"));
+    const projectedPath = path2.join(inputDir, path2.basename(manifestPath));
+    let launched;
+    try {
+      const manifest2 = JSON.parse(readFileSync(path2.resolve(spawnCwd, manifestPath), "utf8"));
+      writeFileSync(projectedPath, `${JSON.stringify(fastFleetManifest(manifest2, fast))}
+`, "utf8");
+      launched = await runTool(scheduler, [
+        "run",
+        "--manifest",
+        projectedPath,
+        ...run_id ? ["--run-id", String(run_id)] : [],
+        "--format",
+        "json"
+      ]);
+    } finally {
+      rmSync(inputDir, { recursive: true, force: true });
+    }
     if (!launched.ok) return launched;
     const statePath = String(launched.payload.state_path ?? "");
     return {
       ok: true,
+      fast,
       run_id: String(launched.payload.run_id ?? run_id ?? ""),
       state_root: path2.posix.dirname(path2.posix.dirname(statePath)),
       node_count: Array.isArray(checked.payload.nodes) ? checked.payload.nodes.length : 0,

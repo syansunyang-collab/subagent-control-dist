@@ -45,7 +45,7 @@ export const PI_STUB_DEFAULT_FINAL_TEXT = [
 //   PI_STUB_SETTINGS_PATH set_auto_compaction / set_auto_retry 的持久化落点,供设置污染断言
 //   PI_STUB_SUBMIT_VERDICT  交卷记录的 verdict,缺省 done
 //   PI_STUB_FAILED_TOOL   为 1 时 submitted_failure_words 追加一次失败的 read 调用
-// 场景:ok / catalog_miss / catalog_miss_mismatch / identity_mismatch / thinking_clamp / bash_error / dirty_ok /
+// 场景:ok / catalog_miss / catalog_miss_mismatch / fast_model_missing / identity_mismatch / thinking_clamp / bash_error / dirty_ok /
 //       dirty_provider_error / turn_timeout(别名 no_settle)/ crash / boot_crash /
 //       compaction_midrun(abort → 压缩 → 插件续跑)/ compaction_no_resume(压完无人续)/
 //       error_then_idle(error 回执后 idle,正文为空只记事实)/ brief_final(正文仅两节)/
@@ -99,7 +99,7 @@ export function renderPiStubSource({ finalText = PI_STUB_DEFAULT_FINAL_TEXT } = 
     "let currentModel = mismatch ? { id: 'other-model', provider: 'other-provider' } : { id: modelId, provider };",
     "let currentThinking = mismatch ? 'off' : thinkingClamp ? 'high' : thinking;",
     "function modelEntry(p, id) { return { id, provider: p, name: id, api: 'stub-api', reasoning: true, contextWindow: 200000, maxTokens: 64000, cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 } }; }",
-    "const catalog = mode.startsWith('catalog_miss') ? [modelEntry('other-provider', 'other-model')] : [modelEntry(provider, modelId), modelEntry('other-provider', 'other-model')];",
+    "const catalog = mode === 'fast_model_missing' ? [modelEntry(provider, 'grok-4.7')] : mode.startsWith('catalog_miss') ? [modelEntry('other-provider', 'other-model')] : [modelEntry(provider, modelId), modelEntry('other-provider', 'other-model')];",
     "const usage = { input: 123, output: 45, cacheRead: 6, cacheWrite: 7, reasoning: 3, totalTokens: 181, cost: { input: 0.1, output: 0.2, cacheRead: 0, cacheWrite: 0, total: 0.3 } };",
     "function out(obj) { process.stdout.write(JSON.stringify(obj) + '\\n'); }",
     "function raw(line) { process.stdout.write(line + '\\n'); }",

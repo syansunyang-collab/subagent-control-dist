@@ -359,7 +359,8 @@ except Exception as exc:
     if set(schema["surface_preview_required_fields"]) != set(rec.SURFACE_PREVIEW_REQUIRED_FIELDS):
         raise ToolError("self-test schema surface_preview_required_fields drifted")
     documented = set(schema["issue_codes"])
-    emitted = set(re.findall(r'issue\("([a-z_]+)"', Path(rec.__file__).read_text(encoding="utf-8")))
+    sources = [Path(rec.__file__), *sorted((Path(rec.__file__).parent / "alignment_recorder_parts").glob("*.py"))]
+    emitted = {code for source in sources for code in re.findall(r'issue\("([a-z_]+)"', source.read_text(encoding="utf-8"))}
     emitted |= {"initial_state_missing", "baseline_alignment_state_missing"}
     if emitted - documented:
         raise ToolError(f"self-test schema issue_codes missing hints for {sorted(emitted - documented)}")

@@ -661,7 +661,7 @@ function renderPiStubSource({ finalText = PI_STUB_DEFAULT_FINAL_TEXT } = {}) {
     "let currentModel = mismatch ? { id: 'other-model', provider: 'other-provider' } : { id: modelId, provider };",
     "let currentThinking = mismatch ? 'off' : thinkingClamp ? 'high' : thinking;",
     "function modelEntry(p, id) { return { id, provider: p, name: id, api: 'stub-api', reasoning: true, contextWindow: 200000, maxTokens: 64000, cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 } }; }",
-    "const catalog = mode.startsWith('catalog_miss') ? [modelEntry('other-provider', 'other-model')] : [modelEntry(provider, modelId), modelEntry('other-provider', 'other-model')];",
+    "const catalog = mode === 'fast_model_missing' ? [modelEntry(provider, 'grok-4.7')] : mode.startsWith('catalog_miss') ? [modelEntry('other-provider', 'other-model')] : [modelEntry(provider, modelId), modelEntry('other-provider', 'other-model')];",
     "const usage = { input: 123, output: 45, cacheRead: 6, cacheWrite: 7, reasoning: 3, totalTokens: 181, cost: { input: 0.1, output: 0.2, cacheRead: 0, cacheWrite: 0, total: 0.3 } };",
     "function out(obj) { process.stdout.write(JSON.stringify(obj) + '\\n'); }",
     "function raw(line) { process.stdout.write(line + '\\n'); }",
@@ -2517,7 +2517,7 @@ function loadPick(item, index, file, role, notes, known, ids) {
   if (item.capability !== void 0 && !text2(item.capability)) bad("value_invalid", "capability", "\u4E0D\u80FD\u4E3A\u7A7A\uFF1B\u9002\u7528\u5168\u90E8\u4EFB\u52A1\u65F6\u5220\u9664\u8BE5\u5B57\u6BB5");
   const capability = item.capability === void 0 ? null : item.capability.trim();
   if (capability && !known.has(capability)) bad("capability_unknown", "capability", `${capability} \u4E0D\u662F\u8BE5\u89D2\u8272\u5DF2\u6709\u4EFB\u52A1\u7C7B\u578B`);
-  if (!text2(item.model) || !item.model.includes("/")) bad("value_invalid", "model", "\u5FC5\u987B\u662F Pi \u6A21\u578B\u5168\u540D\uFF0C\u4F8B\u5982 openai-codex/gpt-6-sol");
+  if (!text2(item.model) || !item.model.includes("/")) bad("value_invalid", "model", "\u5FC5\u987B\u662F Pi \u6A21\u578B\u5168\u540D\uFF0C\u4F8B\u5982 openai-codex/gpt-6.1-sol");
   const model2 = item.model.trim();
   const levels = {};
   for (const key of ["effort", "effort_min", "effort_max"]) {
@@ -4935,7 +4935,8 @@ var FAST_MODE_EXTENSION_NAMES = Object.freeze([
   "pi_fast_mode.mjs",
   "pi_fast_mode.bundle.mjs"
 ]);
-var FAST_MODE_MODELS = Object.freeze({ "grok-4.7": "grok-4.7-build-fast" });
+var GROK_MODEL_ID = "grok-4.7";
+var GROK_FAST_MODEL_ID = "grok-4.7-build-fast";
 function fastModeExtensionPath(dir, exists = existsSync12) {
   for (const name of FAST_MODE_EXTENSION_NAMES) {
     const candidate = path12.join(dir, name);
@@ -5923,6 +5924,10 @@ function readTaskPackageFile(file) {
   }
 }
 var reviewTaskPackage = readTaskPackageFile(taskPackageFile);
+var fastGrok = reviewTaskPackage?.runtime_context?.fast === true && model === `xai/${GROK_MODEL_ID}`;
+var startupModel = fastGrok ? `xai/${GROK_FAST_MODEL_ID}` : model;
+var startupModelRef = parseModelRef(startupModel);
+if (reviewTaskPackage?.runtime_context?.fast === true) result.selection.startupModel = startupModel;
 var evidenceOnlyTask = evidenceOnlyPackage(reviewTaskPackage);
 var structuredReviewTask = structuredReviewPackage(reviewTaskPackage);
 var declaredToolSelection = taskToolSelection(reviewTaskPackage);
@@ -6217,7 +6222,7 @@ var piArgs = [
   ...resumeSession ? ["--session", resumeSession] : []
 ];
 if (modelRef.ok) {
-  piArgs.push("--provider", modelRef.provider, "--model", modelRef.modelId);
+  piArgs.push("--provider", startupModelRef.provider, "--model", startupModelRef.modelId);
 }
 if (effort) {
   piArgs.push("--thinking", effort);
@@ -7045,7 +7050,7 @@ try {
     );
   }
   if (modelRef.ok) {
-    let matched = catalogModels.some((entry) => entry?.provider === modelRef.provider && entry?.id === modelRef.modelId);
+    let matched = catalogModels.some((entry) => entry?.provider === startupModelRef.provider && entry?.id === startupModelRef.modelId);
     if (!matched) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
       const refreshed = await client.call("get_available_models", {}, { timeoutMs: Math.max(1, Math.min(COMMAND_TIMEOUT_MS, remainingGlobalMs())) }).catch(() => null);
@@ -7053,8 +7058,12 @@ try {
       if (refreshedModels.length > 0) {
         result.selection.availableModelCount = refreshedModels.length;
         result.selection.availableModels = refreshedModels.map((entry) => `${entry?.provider ?? "?"}/${entry?.id ?? "?"}`).filter((entry) => entry !== "?/?");
-        matched = refreshedModels.some((entry) => entry?.provider === modelRef.provider && entry?.id === modelRef.modelId);
+        matched = refreshedModels.some((entry) => entry?.provider === startupModelRef.provider && entry?.id === startupModelRef.modelId);
       }
+    }
+    if (!matched && fastGrok) {
+      result.failure_type = "invalid_model";
+      throw new Error("\u5B50 Pi \u7F3A\u5C11 xai/grok-4.7-build-fast\uFF1B\u8FD0\u884C bootstrap \u767B\u8BB0\u6A21\u578B\u540E\u91CD\u542F Pi\uFF0C\u518D\u91CD\u65B0\u6D3E\u53D1\u3002\u672A\u9000\u56DE\u666E\u901A Grok\u3002");
     }
     if (!matched) {
       result.warnings.push(
@@ -7072,11 +7081,11 @@ try {
     thinkingLevel: state?.thinkingLevel ?? null
   });
   let current = stateModel(initialState);
-  const modelMismatch = () => modelRef.ok && (current.provider !== modelRef.provider || current.model !== modelRef.modelId);
+  const modelMismatch = () => startupModelRef.ok && (current.provider !== startupModelRef.provider || current.model !== startupModelRef.modelId);
   const thinkingMismatch = () => Boolean(effort) && current.thinkingLevel !== effort;
   if (modelMismatch()) {
     try {
-      await client.call("set_model", { provider: modelRef.provider, modelId: modelRef.modelId }, {
+      await client.call("set_model", { provider: startupModelRef.provider, modelId: startupModelRef.modelId }, {
         timeoutMs: Math.max(1, Math.min(COMMAND_TIMEOUT_MS, remainingGlobalMs()))
       });
       result.identity.corrections.push({ command: "set_model", ok: true, error: null });

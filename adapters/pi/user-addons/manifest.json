@@ -5,6 +5,27 @@
     "local-packages/pi-compaction-model-recovery",
     "local-packages/pi-context-prune"
   ],
+  "pi_models": {
+    "xai": [
+      {
+        "id": "grok-4.7-build-fast",
+        "name": "Grok 4.7 Fast",
+        "api": "openai-responses",
+        "baseUrl": "https://api.x.ai/v1",
+        "compat": {"supportsLongCacheRetention": false},
+        "reasoning": true,
+        "input": ["text", "image"],
+        "cost": {
+          "input": 4, "output": 12, "cacheRead": 1, "cacheWrite": 0,
+          "tiers": [{"inputTokensAbove": 200000, "input": 8, "output": 24, "cacheRead": 2, "cacheWrite": 0}]
+        },
+        "contextWindow": 500000,
+        "maxTokens": 500000,
+        "thinkingLevelMap": {"off": null, "minimal": null, "low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": null},
+        "inputLimits": {"images": {"resize": {"maxWidth": 2000, "maxHeight": 2000, "maxBytes": 4718592, "jpegQuality": 80}}}
+      }
+    ]
+  },
   "pi_settings": {
     "compaction": {"enabled": false, "reserveTokens": 65536},
     "compactionModel": {

@@ -226,7 +226,7 @@ export function resolveSubagentCoreOptions({
       basename: "run-pi-task.mjs",
       aliases: ["run-pi-task.bundle.mjs"],
       path: piSibling,
-      defaultModel: environment.PI_ASYNC_MODEL || "openai-codex/gpt-6-sol",
+      defaultModel: environment.PI_ASYNC_MODEL || "openai-codex/gpt-6.1-sol",
       defaultEffort: environment.PI_ASYNC_EFFORT || "max",
     },
   };
@@ -245,7 +245,7 @@ export function resolveSubagentCoreOptions({
   const [inferredDefaultKey, defaultEntry] = exactDefault || basenameDefault || piDefault || [];
   if (!defaultEntry) throw new TypeError("async Core resolver requires a non-empty runner catalog");
   const piEntry = catalog.pi || defaultEntry;
-  const resolvedDefaultModel = piEntry.defaultModel || "openai-codex/gpt-6-sol";
+  const resolvedDefaultModel = piEntry.defaultModel || "openai-codex/gpt-6.1-sol";
   const resolvedDefaultEffort = piEntry.defaultEffort || "max";
   const resolvedChildEnv = { ...environment, ...(childEnv && typeof childEnv === "object" ? cloneValue(childEnv) : {}) };
   // 子进程（runner/worker/工具）显式带双根：项目面与服务侧一致，运行面指向发布包自身。

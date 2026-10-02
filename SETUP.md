@@ -1,6 +1,6 @@
 # 本机安装与升级（Claude Code + Pi）
 
-本仓装好后，Claude Code 通过 MCP 工具 `mcp__asyncSubagent__*`、Pi 通过扩展工具 `dispatch_prepare` / `delegate_work` / `subagent_*` / `fleet_*` 把任务派给 Pi 子代理执行；技能、面板和异步监听一并安装。安装与升级共用 `python -B ops/tools/bootstrap.py`：默认只预览，加 `--apply` 执行，本机已满足的步骤自动跳过。安装不包含模型账号凭据与搜索服务密钥；已有配置只追加缺失项，同名插件或已有设置项内容不同时跳过并标为 `conflict`。
+本仓装好后，Claude Code 通过 MCP 工具 `mcp__asyncSubagent__*`、Pi 通过扩展工具 `dispatch_prepare` / `delegate_work` / `subagent_*` / `fleet_*` 把任务派给 Pi 子代理执行；技能、面板和异步监听一并安装。安装与升级共用 `python -B ops/tools/bootstrap.py`：默认只预览，加 `--apply` 执行，本机已满足的步骤自动跳过。安装不包含模型账号凭据与搜索服务密钥；插件以本仓快照为准，本机副本不同时先备份到 `~/.pi/agent/backups/` 再覆盖；其它已有配置只追加缺失项，同 id 模型或已有设置项内容不同时跳过并标为 `conflict`。
 
 ## 前置条件
 
@@ -40,7 +40,7 @@
    依次完成：
    - `npm ci`（`ops`、`adapters/pi`、`src/agent-panel`）
    - 在 `~/.claude.json` 与 `~/.codex/config.toml` 建 `asyncSubagent` 注册；两处都由发布切到发布槽，未装 Codex 也需要后者
-   - 部署 Pi 插件与补丁（见「Pi 插件与配置」），登记到 `~/.pi/agent/settings.json` 的 `packages`，写入压缩设置与联网搜索配置
+   - 部署 Pi 插件与补丁（见「Pi 插件与配置」），登记到 `~/.pi/agent/settings.json` 的 `packages`，合并 `~/.pi/agent/models.json` 的快速模型定义，写入压缩设置与联网搜索配置
    - 把技能目录加入 `~/.pi/agent/settings.json` 的 `skills`
    - 登记本仓为本机发布源（`~/.subagent-control/bridge-producer.json`）
    - 发布：构建后部署 Pi 扩展、MCP 服务、consumer 包，并把技能链接到 `~/.claude/skills/`
@@ -51,10 +51,11 @@
 
 ## Pi 插件与配置
 
-插件快照在 `adapters/pi/user-addons/agent/`，按相对路径部署到 `~/.pi/agent/`；登记项与设置在 `adapters/pi/user-addons/manifest.json`。
+插件快照在 `adapters/pi/user-addons/agent/`，按相对路径部署到 `~/.pi/agent/`，修改插件改本仓快照；登记项与设置在 `adapters/pi/user-addons/manifest.json`。
 
 | 组 | 内容 | 作用 |
 | --- | --- | --- |
+| Grok 快速型号 | `models.json` 的 `xai/grok-4.7-build-fast`（由 manifest 的 `pi_models` 登记） | 控制面 `/fast` 自动切换 Grok 4.7；按快版真实单价记账（普通版两倍）；已有同 id 不同定义保留并报 conflict |
 | 型号别名 | `extensions/openai-codex-sol-context-alias.ts` | `-700k` / `-500k` 型号改写为上游型号与请求档 |
 | 压缩链 | npm `pi-midrun-compact` 与 `extensions/pi-midrun-compact/config.json`（上下文 90% 时中途压缩并自动续跑）；本地包 `pi-compaction-model-recovery`；设置 `compaction.enabled=false`、`compactionModel`（`openai-codex/gpt-6-luna-fast-700k` @xhigh） | 压缩交给指定型号，不占用当前会话型号 |
 | 工具结果裁剪 | 本地包 `pi-context-prune`（1.6.0-local.10）与 `context-prune/policy-lab.json`（摘要型号 luna-fast-700k） | 主会话旧工具结果冷遮蔽与摘要；子代理默认不加载 |
@@ -125,6 +126,6 @@
 | 面板进程启动后窗口不显示或报 WebView2 错误 | 本机缺 WebView2 运行时：安装 Microsoft Edge WebView2 Runtime（Evergreen）后再双击 |
 | 双击 `Agent Panel` 没有新窗口 | 面板已由别的项目打开或旧桌面壳残留（派发会自动拉起面板）：关掉已有面板窗口；无窗口时结束 `AgentPanel.Shell` 进程后再双击 |
 | 首次打开面板「导入范围」页要等十几秒 | 首次探测已装插件的工具表，结果缓存后变快 |
-| bootstrap 某项报 `conflict` | 本机已有同名插件、登记或设置项且内容不同，该项保留本机内容；设置文件按顶层键处理，同一文件中缺失的其它键照常写入，`detail` 分列写入与保留的键。要换成分发版本时删除或改名本机那一项后重跑 |
+| bootstrap 某项报 `conflict` | 本机已有同名登记或设置项且内容不同，该项保留本机内容；设置文件按顶层键处理，同一文件中缺失的其它键照常写入，`detail` 分列写入与保留的键。要换成分发版本时删除或改名本机那一项后重跑 |
 
 发布槽 `~/.subagent-control/releases/` 下的文件由发布生成，改动一律改本仓后重跑 bootstrap。

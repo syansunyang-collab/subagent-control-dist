@@ -51,6 +51,11 @@ RUNTIME_TEMPLATE_NAMES = (
 # 全局默认角色/模型配置：发布槽自带一份，runner 缺它就会退回目标项目内旧 ops 副本。
 RUNTIME_CONFIG_FILES = ("ops/model-notes.toml",)
 RUNTIME_CONFIG_DIRS = ("ops/agents",)
+# 路由 required_files 会点名 ops/skills（verify-agent 的 tool-ui-design）。
+# 发布槽就是派发 lint 的运行根；缺这棵树时样例卡在运行根上直接失败。
+# 消费清单把技能标成 role=skill，compiler_resource_files 不会带上，所以在这里单独铺。
+RUNTIME_SKILL_DIR = "ops/skills"
+RUNTIME_SKILL_REQUIRED = "ops/skills/tool-ui-design/SKILL.md"
 BOOTSTRAP_STEPS = (
     "node ops/tools/build_subagent_bundle.mjs",
     "python -B ops/tools/deploy_subagent_bundle.py --apply",
@@ -319,6 +324,7 @@ def publish_release(manifest: dict[str, Any], artifacts: dict[str, Path]) -> Pat
         release / "ops" / "tools" / "pi_fast_mode.mjs",
         *(release / "ops" / "templates" / name for name in RUNTIME_TEMPLATE_NAMES),
         *(release / name for name in RUNTIME_CONFIG_FILES),
+        release / RUNTIME_SKILL_REQUIRED,
         *(release / name for name in compiler_files(manifest)),
     ]
     if release.exists():
@@ -354,6 +360,7 @@ def publish_release(manifest: dict[str, Any], artifacts: dict[str, Path]) -> Pat
             shutil.copy2(ROOT / name, staging / name)
         for name in RUNTIME_CONFIG_DIRS:
             shutil.copytree(ROOT / name, staging / name, dirs_exist_ok=True)
+        shutil.copytree(ROOT / RUNTIME_SKILL_DIR, staging / RUNTIME_SKILL_DIR, dirs_exist_ok=True)
         for relative in compiler_files(manifest):
             target = staging / relative
             target.parent.mkdir(parents=True, exist_ok=True)

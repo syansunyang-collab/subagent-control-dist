@@ -192,7 +192,7 @@ function loadPick(item, index, file, role, notes, known, ids) {
   if (item.capability !== undefined && !text(item.capability)) bad("value_invalid", "capability", "不能为空；适用全部任务时删除该字段");
   const capability = item.capability === undefined ? null : item.capability.trim();
   if (capability && !known.has(capability)) bad("capability_unknown", "capability", `${capability} 不是该角色已有任务类型`);
-  if (!text(item.model) || !item.model.includes("/")) bad("value_invalid", "model", "必须是 Pi 模型全名，例如 openai-codex/gpt-6-sol");
+  if (!text(item.model) || !item.model.includes("/")) bad("value_invalid", "model", "必须是 Pi 模型全名，例如 openai-codex/gpt-6.1-sol");
   const model = item.model.trim();
   const levels = {};
   for (const key of ["effort", "effort_min", "effort_max"]) {

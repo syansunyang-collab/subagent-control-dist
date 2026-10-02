@@ -158,25 +158,32 @@ def step_codex_registration(apply: bool, node: str) -> dict:
 
 
 def step_addon_units(apply: bool) -> list[dict]:
-    """快照里 extensions/、local-packages/、context-prune/ 下的每一项是一个单元：
-    本机缺失则整份装入；快照文件逐字节相同为 ok（本机多出的文件不管）；其余为冲突，跳过不覆盖。"""
+    """快照里 extensions/、local-packages/、context-prune/ 下的每一项是一个单元，仓库是唯一真源：
+    本机缺失或内容不同的文件整份写入，被换掉的旧文件先备份；本机多出的文件不管。"""
     root = ADDONS / "agent"
+    backup = PI_AGENT / "backups" / f"addons-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     results = []
     for unit in sorted(item for container in root.iterdir() for item in container.iterdir()):
         relative = unit.relative_to(root).as_posix()
         files = [unit] if unit.is_file() else sorted(path for path in unit.rglob("*") if path.is_file())
-        targets = [(path, PI_AGENT / path.relative_to(root)) for path in files]
-        if all(target.is_file() and target.read_bytes() == path.read_bytes() for path, target in targets):
+        stale = [(path, PI_AGENT / path.relative_to(root)) for path in files]
+        stale = [(path, target) for path, target in stale if not (target.is_file() and target.read_bytes() == path.read_bytes())]
+        if not stale:
             results.append({"step": f"pi-addon:{relative}", "status": "ok"})
-        elif (PI_AGENT / relative).exists():
-            results.append({"step": f"pi-addon:{relative}", "status": "conflict",
-                            "detail": f"{PI_AGENT / relative} 已存在且内容不同，未覆盖"})
-        else:
-            if apply:
-                for path, target in targets:
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(path.read_bytes())
-            results.append({"step": f"pi-addon:{relative}", "status": "done" if apply else "todo"})
+            continue
+        replaced = [target for _, target in stale if target.is_file()]
+        if apply:
+            for target in replaced:
+                saved = backup / target.relative_to(PI_AGENT)
+                saved.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(target, saved)
+            for path, target in stale:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(path.read_bytes())
+        result = {"step": f"pi-addon:{relative}", "status": "done" if apply else "todo"}
+        if replaced:
+            result["detail"] = f"覆盖本机 {len(replaced)} 个不同文件，旧文件备份到 {backup}"
+        results.append(result)
     return results
 
 
@@ -236,6 +243,30 @@ def step_json_keys(apply: bool, name: str, path: Path, wanted: dict) -> dict:
     detail = "; ".join(part for part in (f"写入 {', '.join(missing)}" if missing else "",
                                          f"保留本机不同值 {', '.join(differing)}" if differing else "") if part)
     return {"step": name, "status": status, **({"detail": f"{path}：{detail}"} if detail else {})}
+
+
+def step_pi_models(apply: bool, wanted: dict) -> list[dict]:
+    """按 provider/model id 追加；已有相同定义为 ok，不同定义为 conflict，保留本机内容。"""
+    path = PI_AGENT / "models.json"
+    data = read_json(path) if path.exists() else {}
+    providers = data.setdefault("providers", {})
+    results = []
+    changed = False
+    for provider, definitions in wanted.items():
+        models = providers.setdefault(provider, {}).setdefault("models", [])
+        for definition in definitions:
+            existing = next((model for model in models if model.get("id") == definition["id"]), None)
+            step = f"pi-model:{provider}/{definition['id']}"
+            if existing is not None:
+                status = "ok" if existing == definition else "conflict"
+                results.append({"step": step, "status": status})
+            else:
+                models.append(definition)
+                changed = True
+                results.append({"step": step, "status": "done" if apply else "todo"})
+    if apply and changed:
+        write_json(path, data)
+    return results
 
 
 def step_pi_skills(apply: bool) -> dict:
@@ -335,6 +366,7 @@ def main() -> int:
         addons = read_json(ADDONS / "manifest.json")
         steps.extend(step_addon_units(args.apply))
         steps.extend(step_pi_packages(args.apply, addons["packages"]))
+        steps.extend(step_pi_models(args.apply, addons["pi_models"]))
         steps.append(step_json_keys(args.apply, "pi-settings", PI_AGENT / "settings.json", addons["pi_settings"]))
         steps.append(step_json_keys(args.apply, "web-search-config", WEB_SEARCH_CONFIG, addons["web_search"]))
         steps.append(step_pi_skills(args.apply))

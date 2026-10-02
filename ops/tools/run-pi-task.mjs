@@ -99,7 +99,7 @@ import {
   taskResultOutputPaths,
 } from "./task_result_synthesis.mjs";
 import { TRANSIENT_RETRY_EXTENSION_NAMES } from "./pi_transient_retry.mjs";
-import { fastModeExtensionPath } from "./pi_fast_mode.mjs";
+import { GROK_MODEL_ID, GROK_FAST_MODEL_ID, fastModeExtensionPath } from "./pi_fast_mode.mjs";
 import { submitTaskResult } from "./pi_task_result_extension.mjs";
 import {
   analyzeTaskResult,
@@ -1050,6 +1050,10 @@ function readTaskPackageFile(file) {
   }
 }
 const reviewTaskPackage = readTaskPackageFile(taskPackageFile);
+const fastGrok = reviewTaskPackage?.runtime_context?.fast === true && model === `xai/${GROK_MODEL_ID}`;
+const startupModel = fastGrok ? `xai/${GROK_FAST_MODEL_ID}` : model;
+const startupModelRef = parseModelRef(startupModel);
+if (reviewTaskPackage?.runtime_context?.fast === true) result.selection.startupModel = startupModel;
 const evidenceOnlyTask = evidenceOnlyPackage(reviewTaskPackage);
 const structuredReviewTask = structuredReviewPackage(reviewTaskPackage);
 const declaredToolSelection = taskToolSelection(reviewTaskPackage);
@@ -1375,7 +1379,7 @@ const piArgs = [
   ...(resumeSession ? ["--session", resumeSession] : []),
 ];
 if (modelRef.ok) {
-  piArgs.push("--provider", modelRef.provider, "--model", modelRef.modelId);
+  piArgs.push("--provider", startupModelRef.provider, "--model", startupModelRef.modelId);
 }
 if (effort) {
   piArgs.push("--thinking", effort);
@@ -2296,7 +2300,7 @@ try {
     );
   }
   if (modelRef.ok) {
-    let matched = catalogModels.some((entry) => entry?.provider === modelRef.provider && entry?.id === modelRef.modelId);
+    let matched = catalogModels.some((entry) => entry?.provider === startupModelRef.provider && entry?.id === startupModelRef.modelId);
     if (!matched) {
       // pi 启动时异步刷新模型目录且不等其完成；冷缓存 miss 等一拍重查，供目录诊断使用。
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -2309,8 +2313,12 @@ try {
         result.selection.availableModels = refreshedModels
           .map((entry) => `${entry?.provider ?? "?"}/${entry?.id ?? "?"}`)
           .filter((entry) => entry !== "?/?");
-        matched = refreshedModels.some((entry) => entry?.provider === modelRef.provider && entry?.id === modelRef.modelId);
+        matched = refreshedModels.some((entry) => entry?.provider === startupModelRef.provider && entry?.id === startupModelRef.modelId);
       }
+    }
+    if (!matched && fastGrok) {
+      result.failure_type = "invalid_model";
+      throw new Error("子 Pi 缺少 xai/grok-4.7-build-fast；运行 bootstrap 登记模型后重启 Pi，再重新派发。未退回普通 Grok。");
     }
     if (!matched) {
       result.warnings.push(
@@ -2330,11 +2338,11 @@ try {
     thinkingLevel: state?.thinkingLevel ?? null,
   });
   let current = stateModel(initialState);
-  const modelMismatch = () => modelRef.ok && (current.provider !== modelRef.provider || current.model !== modelRef.modelId);
+  const modelMismatch = () => startupModelRef.ok && (current.provider !== startupModelRef.provider || current.model !== startupModelRef.modelId);
   const thinkingMismatch = () => Boolean(effort) && current.thinkingLevel !== effort;
   if (modelMismatch()) {
     try {
-      await client.call("set_model", { provider: modelRef.provider, modelId: modelRef.modelId }, {
+      await client.call("set_model", { provider: startupModelRef.provider, modelId: startupModelRef.modelId }, {
         timeoutMs: Math.max(1, Math.min(COMMAND_TIMEOUT_MS, remainingGlobalMs())),
       });
       result.identity.corrections.push({ command: "set_model", ok: true, error: null });

@@ -1,10 +1,17 @@
 // Fleet scheduler 的工具面共享逻辑：MCP 与 Pi 扩展各自注册工具，调度语义全部留在
 // ops/tools/fleet_scheduler.mjs，本文件只负责进程封装、参数整形与结构化错误。
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+
+import { fastModeSeed } from "./pi_fast_mode.mjs";
+
+export function fastFleetManifest(manifest, fast) {
+  return { ...manifest, nodes: manifest.nodes.map(node => node.seed
+    ? { ...node, seed: fastModeSeed(node.seed, fast) } : node) };
+}
 
 export const FLEET_TOOL_NAMES = Object.freeze(["fleet_start", "fleet_status", "fleet_wait", "fleet_review", "fleet_cancel"]);
 export const FLEET_DECISIONS = Object.freeze(["accept", "block", "requeue"]);
@@ -287,23 +294,32 @@ export function createFleetCore({
   };
   const runStatus = (runId) => runTool(scheduler, ["status", "--run-id", runId, "--summary", "--format", "json"]);
 
-  async function fleet_start({ manifest_path, run_id } = {}) {
+  async function fleet_start({ manifest_path, run_id, fast = false } = {}) {
     const manifestPath = String(manifest_path ?? "").trim();
     if (!manifestPath) return failure("invalid_input", "manifest_path is required");
+    if (typeof fast !== "boolean") return failure("invalid_input", "fast must be a boolean");
     const checked = await runTool(manifestChecker, ["--manifest", manifestPath, "--format", "json"]);
     if (!checked.ok) return checked;
-    const launched = await runTool(scheduler, [
-      "run",
-      "--manifest",
-      manifestPath,
-      ...(run_id ? ["--run-id", String(run_id)] : []),
-      "--format",
-      "json",
-    ]);
+    // Scheduler snapshots this projected manifest before launching its driver. Keep the original read-only.
+    const inputsDir = path.join(spawnCwd, ".runtime", "cockpit", "fleet-inputs");
+    mkdirSync(inputsDir, { recursive: true });
+    const inputDir = mkdtempSync(path.join(inputsDir, "run-"));
+    const projectedPath = path.join(inputDir, path.basename(manifestPath));
+    let launched;
+    try {
+      const manifest = JSON.parse(readFileSync(path.resolve(spawnCwd, manifestPath), "utf8"));
+      writeFileSync(projectedPath, `${JSON.stringify(fastFleetManifest(manifest, fast))}\n`, "utf8");
+      launched = await runTool(scheduler, [
+        "run", "--manifest", projectedPath,
+        ...(run_id ? ["--run-id", String(run_id)] : []),
+        "--format", "json",
+      ]);
+    } finally { rmSync(inputDir, { recursive: true, force: true }); }
     if (!launched.ok) return launched;
     const statePath = String(launched.payload.state_path ?? "");
     return {
       ok: true,
+      fast,
       run_id: String(launched.payload.run_id ?? run_id ?? ""),
       state_root: path.posix.dirname(path.posix.dirname(statePath)),
       node_count: Array.isArray(checked.payload.nodes) ? checked.payload.nodes.length : 0,

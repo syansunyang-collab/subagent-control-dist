@@ -25,6 +25,71 @@
       "role": "consumer-tool"
     },
     {
+      "source": "ops/tools/alignment_recorder_parts/__init__.py",
+      "target": "ops/consumer-tools/alignment_recorder_parts/__init__.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_recorder_parts/constants.py",
+      "target": "ops/consumer-tools/alignment_recorder_parts/constants.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_recorder_parts/schema.py",
+      "target": "ops/consumer-tools/alignment_recorder_parts/schema.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_recorder_parts/io.py",
+      "target": "ops/consumer-tools/alignment_recorder_parts/io.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_recorder_parts/state.py",
+      "target": "ops/consumer-tools/alignment_recorder_parts/state.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_recorder_parts/stage_nav.py",
+      "target": "ops/consumer-tools/alignment_recorder_parts/stage_nav.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_recorder_parts/preflight.py",
+      "target": "ops/consumer-tools/alignment_recorder_parts/preflight.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_recorder_parts/render.py",
+      "target": "ops/consumer-tools/alignment_recorder_parts/render.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_recorder_parts/review.py",
+      "target": "ops/consumer-tools/alignment_recorder_parts/review.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_recorder_parts/delta.py",
+      "target": "ops/consumer-tools/alignment_recorder_parts/delta.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_recorder_parts/g3_draft.py",
+      "target": "ops/consumer-tools/alignment_recorder_parts/g3_draft.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_recorder_parts/g3_present.py",
+      "target": "ops/consumer-tools/alignment_recorder_parts/g3_present.py",
+      "role": "consumer-tool"
+    },
+    {
+      "source": "ops/tools/alignment_recorder_parts/g3_round.py",
+      "target": "ops/consumer-tools/alignment_recorder_parts/g3_round.py",
+      "role": "consumer-tool"
+    },
+    {
       "source": "ops/tools/acceptance_contract_check.py",
       "target": "ops/consumer-tools/acceptance_contract_check.py",
       "role": "consumer-tool"
@@ -435,6 +500,19 @@
       "_tool_common.py",
       "alignment_guard.py",
       "alignment_recorder.py",
+      "alignment_recorder_parts/__init__.py",
+      "alignment_recorder_parts/constants.py",
+      "alignment_recorder_parts/schema.py",
+      "alignment_recorder_parts/io.py",
+      "alignment_recorder_parts/state.py",
+      "alignment_recorder_parts/stage_nav.py",
+      "alignment_recorder_parts/preflight.py",
+      "alignment_recorder_parts/render.py",
+      "alignment_recorder_parts/review.py",
+      "alignment_recorder_parts/delta.py",
+      "alignment_recorder_parts/g3_draft.py",
+      "alignment_recorder_parts/g3_present.py",
+      "alignment_recorder_parts/g3_round.py",
       "acceptance_contract_check.py",
       "planning_manifest_check.py",
       "planning_contract_promote.py",
