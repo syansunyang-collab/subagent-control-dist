@@ -2198,136 +2198,17 @@ var init_py = __esm({
   }
 });
 
-// ops/tools/dispatch-core/model_catalog_cache.mjs
-import { mkdirSync as mkdirSync2, readFileSync as readFileSync5, renameSync as renameSync2, rmSync, statSync as statSync3, writeFileSync } from "node:fs";
-import { createHash as createHash3, randomBytes } from "node:crypto";
-import path5 from "node:path";
-function canonicalJson2(value) {
-  return JSON.stringify(value, (_key, item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return item;
-    return Object.fromEntries(Object.keys(item).sort().map((key) => [key, item[key]]));
-  });
-}
-function catalogCacheKey(identity) {
-  return createHash3("sha256").update(canonicalJson2(identity), "utf8").digest("hex");
-}
-function statOrNull(target) {
-  try {
-    return statSync3(target);
-  } catch {
-    return null;
-  }
-}
-function fingerprintPaths(paths) {
-  const seen = /* @__PURE__ */ new Set();
-  const fingerprints = [];
-  for (const raw of paths) {
-    const target = String(raw ?? "");
-    if (!target || seen.has(target)) continue;
-    seen.add(target);
-    const stat = statOrNull(target);
-    fingerprints.push({
-      path: target,
-      exists: Boolean(stat),
-      size: stat ? stat.size : null,
-      mtime_ms: stat ? Math.trunc(stat.mtimeMs) : null
-    });
-  }
-  return fingerprints;
-}
-function readPayload(cacheFile) {
-  let text3;
-  try {
-    text3 = readFileSync5(cacheFile, "utf8");
-  } catch {
-    return { entries: [] };
-  }
-  let payload;
-  try {
-    payload = JSON.parse(text3);
-  } catch {
-    return { entries: [] };
-  }
-  if (!payload || typeof payload !== "object" || payload.schema !== CATALOG_CACHE_SCHEMA) return { entries: [] };
-  if (!Array.isArray(payload.entries)) return { entries: [] };
-  return {
-    entries: payload.entries.filter((entry) => entry && typeof entry === "object" && typeof entry.key === "string")
-  };
-}
-function readCatalogCacheEntry(cacheFile, key, { now = Date.now() } = {}) {
-  const entry = readPayload(cacheFile).entries.find((item) => item.key === key);
-  if (!entry) return null;
-  if (entry.status !== "ok") return null;
-  const models = Array.isArray(entry.models) ? entry.models.filter((item) => typeof item === "string" && item) : [];
-  if (!models.length) return null;
-  const storedAt = Number(entry.stored_at_ms);
-  if (!Number.isFinite(storedAt)) return null;
-  const age = now - storedAt;
-  if (age < 0 || age > CATALOG_CACHE_TTL_MS) return null;
-  const details = entry.model_details && typeof entry.model_details === "object" && !Array.isArray(entry.model_details) ? entry.model_details : {};
-  return {
-    stored_at_ms: storedAt,
-    identity: entry.identity ?? null,
-    catalog: {
-      status: "ok",
-      models,
-      model_details: details,
-      model_count: models.length,
-      source: typeof entry.source === "string" ? entry.source : "",
-      error: null
-    }
-  };
-}
-function writeCatalogCacheEntry(cacheFile, key, identity, catalog, { now = Date.now() } = {}) {
-  try {
-    if (catalog?.status !== "ok") return false;
-    const models = Array.isArray(catalog.models) ? catalog.models.filter((item) => typeof item === "string" && item) : [];
-    if (!models.length) return false;
-    const entry = {
-      key,
-      status: "ok",
-      stored_at_ms: now,
-      identity,
-      models,
-      model_details: catalog.model_details && typeof catalog.model_details === "object" && !Array.isArray(catalog.model_details) ? catalog.model_details : {},
-      source: typeof catalog.source === "string" ? catalog.source : ""
-    };
-    const entries = [entry, ...readPayload(cacheFile).entries.filter((item) => item.key !== key)].slice(0, CATALOG_CACHE_MAX_ENTRIES);
-    mkdirSync2(path5.dirname(cacheFile), { recursive: true });
-    const tmp = `${cacheFile}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
-    try {
-      writeFileSync(tmp, `${JSON.stringify({ schema: CATALOG_CACHE_SCHEMA, entries }, null, 2)}
-`, "utf8");
-      renameSync2(tmp, cacheFile);
-    } finally {
-      rmSync(tmp, { force: true });
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-var CATALOG_CACHE_SCHEMA, CATALOG_CACHE_TTL_MS, CATALOG_CACHE_FILE_NAME, CATALOG_CACHE_MAX_ENTRIES;
-var init_model_catalog_cache = __esm({
-  "ops/tools/dispatch-core/model_catalog_cache.mjs"() {
-    CATALOG_CACHE_SCHEMA = 1;
-    CATALOG_CACHE_TTL_MS = 60 * 1e3;
-    CATALOG_CACHE_FILE_NAME = "pi-child-model-catalog.json";
-    CATALOG_CACHE_MAX_ENTRIES = 8;
-  }
-});
-
 // ops/tools/dispatch-core/agent_panel_launcher.mjs
-import { createHash as createHash4 } from "node:crypto";
-import { closeSync as closeSync2, mkdirSync as mkdirSync3, openSync as openSync2, readdirSync as readdirSync2, readFileSync as readFileSync6, renameSync as renameSync3, rmSync as rmSync2, statSync as statSync4, writeFileSync as writeFileSync2, writeSync as writeSync2 } from "node:fs";
+import { createHash as createHash3 } from "node:crypto";
+import { closeSync as closeSync2, mkdirSync as mkdirSync2, openSync as openSync2, readdirSync as readdirSync2, readFileSync as readFileSync5, renameSync as renameSync2, rmSync, statSync as statSync3, writeFileSync, writeSync as writeSync2 } from "node:fs";
 import net from "node:net";
-import path6 from "node:path";
+import path5 from "node:path";
 import { homedir } from "node:os";
 import process5 from "node:process";
 import { spawn as spawnChild, spawnSync as spawnSync2 } from "node:child_process";
 function releasedPanelAssetRoot() {
   try {
-    return JSON.parse(readFileSync6(path6.join(PANEL_STATE_ROOT, "runtime-root.json"), "utf8")).root;
+    return JSON.parse(readFileSync5(path5.join(PANEL_STATE_ROOT, "runtime-root.json"), "utf8")).root;
   } catch {
     return void 0;
   }
@@ -2344,7 +2225,7 @@ function filled(value) {
 }
 function isFile2(target) {
   try {
-    return statSync4(target).isFile();
+    return statSync3(target).isFile();
   } catch {
     return false;
   }
@@ -2412,18 +2293,18 @@ function utcNow2() {
 }
 function readJson(file) {
   try {
-    const value = JSON.parse(readFileSync6(file, "utf8"));
+    const value = JSON.parse(readFileSync5(file, "utf8"));
     return isRecord(value) ? value : {};
   } catch {
     return {};
   }
 }
 function writeJson(file, value) {
-  mkdirSync3(path6.dirname(file), { recursive: true });
+  mkdirSync2(path5.dirname(file), { recursive: true });
   const temp = `${file}.tmp`;
-  writeFileSync2(temp, `${JSON.stringify(value, null, 2)}
+  writeFileSync(temp, `${JSON.stringify(value, null, 2)}
 `, "utf8");
-  renameSync3(temp, file);
+  renameSync2(temp, file);
   return null;
 }
 function normalizeIdentityPath(value) {
@@ -2431,7 +2312,7 @@ function normalizeIdentityPath(value) {
   return process5.platform === "win32" ? text3.toLowerCase() : text3;
 }
 function deriveEndpoint(panelRoot = PANEL_ROOT, controlRoot = MONITOR_ROOT) {
-  const panelDigest = createHash4("sha256").update(normalizeIdentityPath(panelRoot), "utf8").digest();
+  const panelDigest = createHash3("sha256").update(normalizeIdentityPath(panelRoot), "utf8").digest();
   const port = PORT_BASE + panelDigest.readUInt16BE(0) % PORT_SPAN;
   return {
     port,
@@ -2443,8 +2324,8 @@ function deriveEndpoint(panelRoot = PANEL_ROOT, controlRoot = MONITOR_ROOT) {
 function rememberProject({ deps: deps3 } = {}) {
   const resolved = resolveDeps(deps3);
   const root = resolveLikePython(resolved.paths.controlRoot);
-  const key = createHash4("sha256").update(normalizeIdentityPath(root)).digest("hex");
-  resolved.writeJson(path6.join(resolved.paths.runtimeRoot, "projects", `${key}.json`), { project_root: root });
+  const key = createHash3("sha256").update(normalizeIdentityPath(root)).digest("hex");
+  resolved.writeJson(path5.join(resolved.paths.runtimeRoot, "projects", `${key}.json`), { project_root: root });
 }
 function portIsFree(port) {
   return new Promise((resolve) => {
@@ -2513,7 +2394,7 @@ function buildRunning({ deps: deps3 } = {}) {
 }
 function runtimeBuildId({ deps: deps3 } = {}) {
   const resolved = resolveDeps(deps3);
-  return resolved.readJson(path6.join(resolved.paths.assetRoot, "ops", "dist", "subagent_service.manifest.json")).build_id ?? null;
+  return resolved.readJson(path5.join(resolved.paths.assetRoot, "ops", "dist", "subagent_service.manifest.json")).build_id ?? null;
 }
 function validManifest({ deps: deps3 } = {}) {
   const resolved = resolveDeps(deps3);
@@ -2579,12 +2460,15 @@ function killProcessTree(pid) {
   if (process5.platform === "win32") spawnSync2("taskkill", ["/F", "/T", "/PID", String(pid)], { windowsHide: true });
   else process5.kill(pid, "SIGTERM");
 }
-async function stopStalePanel(resolved, health, port) {
-  const previous = health.runtime_build_id;
-  const current = runtimeBuildId({ deps: resolved });
-  if (!previous || !current || previous === current) return null;
+async function stopStalePanel(resolved) {
   const shell = resolved.runningShell();
-  if (filled(shell)) resolved.killProcessTree(shell.pid);
+  if (!filled(shell) || !shell.url) return null;
+  const port = Number(new URL(shell.url).port);
+  const health = await resolved.probeHealth(port);
+  const previous = health?.runtime_build_id;
+  const current = runtimeBuildId({ deps: resolved });
+  if (!previous || !current || previous === current || health.shell_pid !== shell.pid) return null;
+  resolved.killProcessTree(shell.pid);
   const deadline = Date.now() + PANEL_STOP_TIMEOUT_MS;
   while (!await resolved.portIsFree(port)) {
     if (Date.now() > deadline) throw pyError("RuntimeError", `\u65E7\u9762\u677F\uFF08\u6784\u5EFA ${previous}\uFF09\u672A\u9000\u51FA\uFF0C\u672A\u542F\u52A8\u5F53\u524D\u6784\u5EFA`);
@@ -2599,13 +2483,12 @@ async function ensureAgentPanel({ deps: deps3, replaceStaleBuild = false } = {})
       throw pyError("RuntimeError", `Agent Panel shell project is missing: ${resolved.paths.projectFile}`);
     }
     resolved.rememberProject();
+    const replaced = replaceStaleBuild ? await stopStalePanel(resolved) : null;
     const endpoint = await resolved.allocateEndpoint();
     const manifest = resolved.validManifest();
     const health = await resolved.probeHealth(Number(pyGetItem(endpoint, "port")));
-    const ours = resolved.isOurPanel(health, endpoint);
-    const replaced = ours && replaceStaleBuild ? await stopStalePanel(resolved, health, Number(pyGetItem(endpoint, "port"))) : null;
-    if (ours && !replaced) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
-    const shell = replaced ? {} : resolved.runningShell();
+    if (resolved.isOurPanel(health, endpoint)) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
+    const shell = resolved.runningShell();
     if (filled(shell)) return { status: "starting", pid: shell.pid, ...endpoint };
     let launched;
     if (filled(manifest)) launched = resolved.startShell(String(pyGetItem(manifest, "executable")), endpoint);
@@ -2618,16 +2501,16 @@ async function ensureAgentPanel({ deps: deps3, replaceStaleBuild = false } = {})
 }
 function acquireBuildLock({ deps: deps3 } = {}) {
   const resolved = resolveDeps(deps3);
-  mkdirSync3(resolved.paths.runtimeRoot, { recursive: true });
+  mkdirSync2(resolved.paths.runtimeRoot, { recursive: true });
   try {
     return openSync2(resolved.paths.buildLockPath, "wx");
   } catch (error) {
     if (error?.code !== "EEXIST") throw error;
   }
   try {
-    const stale = Date.now() / 1e3 - statSync4(resolved.paths.buildLockPath).mtimeMs / 1e3;
+    const stale = Date.now() / 1e3 - statSync3(resolved.paths.buildLockPath).mtimeMs / 1e3;
     if (stale > STILL_ACTIVE_LOCK_STALE_SECONDS && !resolved.buildRunning()) {
-      rmSync2(resolved.paths.buildLockPath, { force: true });
+      rmSync(resolved.paths.buildLockPath, { force: true });
       return openSync2(resolved.paths.buildLockPath, "wx");
     }
   } catch {
@@ -2639,21 +2522,21 @@ var init_agent_panel_launcher = __esm({
   "ops/tools/dispatch-core/agent_panel_launcher.mjs"() {
     init_tool_common();
     init_py();
-    MONITOR_ROOT = path6.resolve(process5.env.SUBAGENT_PROJECT_ROOT || process5.cwd());
-    PANEL_STATE_ROOT = path6.resolve(process5.env.AGENT_PANEL_STATE_ROOT || path6.join(homedir(), ".subagent-control", "agent-panel"));
-    PANEL_ASSET_ROOT = path6.resolve(
-      process5.env.AGENT_PANEL_RUNTIME_ROOT || releasedPanelAssetRoot() || path6.join(homedir(), ".pi", "agent", "extensions", "subagent-control")
+    MONITOR_ROOT = path5.resolve(process5.env.SUBAGENT_PROJECT_ROOT || process5.cwd());
+    PANEL_STATE_ROOT = path5.resolve(process5.env.AGENT_PANEL_STATE_ROOT || path5.join(homedir(), ".subagent-control", "agent-panel"));
+    PANEL_ASSET_ROOT = path5.resolve(
+      process5.env.AGENT_PANEL_RUNTIME_ROOT || releasedPanelAssetRoot() || path5.join(homedir(), ".pi", "agent", "extensions", "subagent-control")
     );
-    PANEL_ROOT = path6.join(PANEL_ASSET_ROOT, "src", "agent-panel");
-    SHELL_ROOT = path6.join(PANEL_ROOT, "shell");
-    PROJECT_FILE = path6.join(SHELL_ROOT, "AgentPanel.Shell.csproj");
+    PANEL_ROOT = path5.join(PANEL_ASSET_ROOT, "src", "agent-panel");
+    SHELL_ROOT = path5.join(PANEL_ROOT, "shell");
+    PROJECT_FILE = path5.join(SHELL_ROOT, "AgentPanel.Shell.csproj");
     RUNTIME_ROOT2 = PANEL_STATE_ROOT;
-    ENDPOINT_PATH = path6.join(RUNTIME_ROOT2, "endpoint.json");
-    MANIFEST_PATH = path6.join(RUNTIME_ROOT2, "build-manifest.json");
-    BUILD_STATE_PATH = path6.join(RUNTIME_ROOT2, "build-state.json");
-    BUILD_LOG_PATH = path6.join(RUNTIME_ROOT2, "last-build.log");
-    BUILD_LOCK_PATH = path6.join(RUNTIME_ROOT2, "build.lock");
-    SHELL_STATE_PATH = path6.join(RUNTIME_ROOT2, "shell-state.json");
+    ENDPOINT_PATH = path5.join(RUNTIME_ROOT2, "endpoint.json");
+    MANIFEST_PATH = path5.join(RUNTIME_ROOT2, "build-manifest.json");
+    BUILD_STATE_PATH = path5.join(RUNTIME_ROOT2, "build-state.json");
+    BUILD_LOG_PATH = path5.join(RUNTIME_ROOT2, "last-build.log");
+    BUILD_LOCK_PATH = path5.join(RUNTIME_ROOT2, "build.lock");
+    SHELL_STATE_PATH = path5.join(RUNTIME_ROOT2, "shell-state.json");
     PORT_BASE = 43e3;
     PORT_SPAN = 1e3;
     DEFAULT_PATHS = Object.freeze({
@@ -2668,7 +2551,7 @@ var init_agent_panel_launcher = __esm({
       buildLogPath: BUILD_LOG_PATH,
       buildLockPath: BUILD_LOCK_PATH,
       shellStatePath: SHELL_STATE_PATH,
-      buildScript: path6.join(PANEL_ASSET_ROOT, "ops", "dist", "agent_panel_launcher.bundle.mjs")
+      buildScript: path5.join(PANEL_ASSET_ROOT, "ops", "dist", "agent_panel_launcher.bundle.mjs")
     });
     STILL_ACTIVE_LOCK_STALE_SECONDS = 600;
     PANEL_STOP_TIMEOUT_MS = 5e3;
@@ -2680,28 +2563,28 @@ import {
   closeSync as closeSync3,
   fstatSync as fstatSync2,
   lstatSync as lstatSync2,
-  mkdirSync as mkdirSync4,
+  mkdirSync as mkdirSync3,
   openSync as openSync3,
-  readFileSync as readFileSync7,
+  readFileSync as readFileSync6,
   readdirSync as readdirSync3,
-  rmSync as rmSync3,
+  rmSync as rmSync2,
   rmdirSync,
-  statSync as statSync5,
+  statSync as statSync4,
   unlinkSync as unlinkSync2
 } from "node:fs";
-import path7 from "node:path";
+import path6 from "node:path";
 function _relativeUnder(root, target) {
-  const relative = path7.relative(root, target);
+  const relative = path6.relative(root, target);
   if (!relative) return [];
-  if (path7.isAbsolute(relative) || relative.split(/[\\/]/)[0] === "..") return null;
+  if (path6.isAbsolute(relative) || relative.split(/[\\/]/)[0] === "..") return null;
   return relative.split(/[\\/]+/).filter(Boolean);
 }
 function _parentsOf(target) {
   const parents = [];
-  let current = path7.dirname(target);
+  let current = path6.dirname(target);
   while (true) {
     parents.push(current);
-    const next = path7.dirname(current);
+    const next = path6.dirname(current);
     if (next === current) break;
     current = next;
   }
@@ -2892,7 +2775,7 @@ function validateAsyncDispatchV2(envelope, { package: pkg = null } = {}) {
   const targetCwd = absolutePath(envelope.target_cwd, "dispatch target_cwd", { error: PreparedDispatchError });
   const taskRoot = absolutePath(envelope.task_root, "dispatch task_root", { error: PreparedDispatchError });
   if (!_isDirectory(targetCwd)) throw new PreparedDispatchError(`dispatch target_cwd does not exist: ${targetCwd}`);
-  const runtimeRoot2 = path7.resolve(path7.join(producerRoot, ".runtime"));
+  const runtimeRoot2 = path6.resolve(path6.join(producerRoot, ".runtime"));
   if (_relativeUnder(runtimeRoot2, taskRoot) === null) {
     throw new PreparedDispatchError("dispatch task_root must stay inside producer_root/.runtime");
   }
@@ -2931,7 +2814,7 @@ function validateAsyncDispatchV2(envelope, { package: pkg = null } = {}) {
 }
 function _isDirectory(target) {
   try {
-    return statSync5(target).isDirectory();
+    return statSync4(target).isDirectory();
   } catch {
     return false;
   }
@@ -2994,7 +2877,7 @@ function _assertNoEscape(target, root, { allowMissingLeaf = false } = {}) {
   if (parts === null) throw new PreparedDispatchError(`path is not under controlled root: ${candidate}`);
   let current = controlledRoot;
   for (const part of parts) {
-    current = path7.join(current, part);
+    current = path6.join(current, part);
     let info;
     try {
       info = lstatSync2(current);
@@ -3015,7 +2898,7 @@ function _controlledParent(producerRoot) {
   const producer = absolutePath(producerRoot, "producer_root", { error: PreparedDispatchError });
   ensureControlledDirectory(producer, { error: PreparedDispatchError });
   _assertNoEscape(producer, producer, { allowMissingLeaf: false });
-  const parent = path7.join(producer, "tmp", "dispatch_prepare", PREPARATION_DIRECTORY_NAME);
+  const parent = path6.join(producer, "tmp", "dispatch_prepare", PREPARATION_DIRECTORY_NAME);
   ensureControlledDirectory(parent, { error: PreparedDispatchError });
   _assertNoEscape(parent, producer, { allowMissingLeaf: false });
   return parent;
@@ -3031,9 +2914,9 @@ function allocatePreparationRoot(producerRoot, { retries = PREPARATION_ALLOCATIO
   const producer = absolutePath(producerRoot, "producer_root", { error: PreparedDispatchError });
   const parent = _controlledParent(producer);
   for (let attempt = 0; attempt < retries; attempt += 1) {
-    const preparation = path7.join(parent, `${PREPARATION_PREFIX}${_preparationHex()}`);
+    const preparation = path6.join(parent, `${PREPARATION_PREFIX}${_preparationHex()}`);
     try {
-      mkdirSync4(preparation, { mode: 448 });
+      mkdirSync3(preparation, { mode: 448 });
     } catch (caught) {
       if (caught?.code === "EEXIST") continue;
       throw caught;
@@ -3106,12 +2989,12 @@ function _pathsWrittenByCallback(materialRoot, callbackResult) {
   const normalized = [];
   for (const value of paths) {
     const candidate = absolutePath(
-      path7.isAbsolute(value) ? value : path7.join(materialRoot, value),
+      path6.isAbsolute(value) ? value : path6.join(materialRoot, value),
       "callback output",
       { error: PreparedDispatchError }
     );
     _assertNoEscape(candidate, materialRoot, { allowMissingLeaf: false });
-    const relative = path7.relative(materialRoot, candidate).replace(/\\/g, "/") || ".";
+    const relative = path6.relative(materialRoot, candidate).replace(/\\/g, "/") || ".";
     if (RESERVED_FILENAMES.includes(relative)) {
       throw new PreparedDispatchError(`callback cannot claim reserved material file: ${relative}`);
     }
@@ -3129,7 +3012,7 @@ function _iterWorkspaceFiles(materialRoot) {
       throw new PreparedDispatchError(`cannot inspect preparation output ${directory}: ${caught.message}`);
     }
     for (const name of entries) {
-      const target = path7.join(directory, name);
+      const target = path6.join(directory, name);
       let info;
       try {
         info = lstatSync2(target);
@@ -3151,7 +3034,7 @@ function _iterWorkspaceFiles(materialRoot) {
 function _assertReservedFilesAbsent(materialRoot, { allowed = [] } = {}) {
   for (const filename of RESERVED_FILENAMES) {
     if (allowed.includes(filename)) continue;
-    const target = path7.join(materialRoot, filename);
+    const target = path6.join(materialRoot, filename);
     try {
       lstatSync2(target);
     } catch (caught) {
@@ -3164,10 +3047,10 @@ function _assertReservedFilesAbsent(materialRoot, { allowed = [] } = {}) {
 function _collectWorkspaceOutputs(materialRoot) {
   const outputs = [];
   for (const target of _iterWorkspaceFiles(materialRoot).sort(_comparePaths)) {
-    if (RESERVED_FILENAMES.includes(path7.basename(target)) && pyNormcase(path7.dirname(target)) === pyNormcase(materialRoot)) {
+    if (RESERVED_FILENAMES.includes(path6.basename(target)) && pyNormcase(path6.dirname(target)) === pyNormcase(materialRoot)) {
       continue;
     }
-    outputs.push(path7.relative(materialRoot, target).replace(/\\/g, "/"));
+    outputs.push(path6.relative(materialRoot, target).replace(/\\/g, "/"));
   }
   return outputs;
 }
@@ -3184,7 +3067,7 @@ function _firstMapping(...candidates) {
 function _pureRelative(root, value) {
   const parts = (text4) => String(text4).replace(/\\/g, "/").split("/").filter((part) => part && part !== ".");
   const text3 = String(value);
-  if (!path7.isAbsolute(text3)) return parts(text3).join("/") || ".";
+  if (!path6.isAbsolute(text3)) return parts(text3).join("/") || ".";
   const target = parts(text3);
   const base = parts(root);
   if (!base.every((part, index) => pyNormcase(part) === pyNormcase(target[index] ?? ""))) return null;
@@ -3285,10 +3168,10 @@ function compilePreparedDispatch(pkg, options = {}) {
     if (finalPackageId !== logicalPackageId) {
       throw new PreparedDispatchError("task_package.package_id changed during preparation");
     }
-    const packageFile = path7.join(materialRoot, PACKAGE_FILENAME);
-    const taskFile = path7.join(materialRoot, TASK_FILENAME);
-    const dispatchFile = path7.join(materialRoot, DISPATCH_FILENAME);
-    const descriptorFile = path7.join(materialRoot, DESCRIPTOR_FILENAME);
+    const packageFile = path6.join(materialRoot, PACKAGE_FILENAME);
+    const taskFile = path6.join(materialRoot, TASK_FILENAME);
+    const dispatchFile = path6.join(materialRoot, DISPATCH_FILENAME);
+    const descriptorFile = path6.join(materialRoot, DESCRIPTOR_FILENAME);
     const packageBytes = canonicalJsonBytes(pkg);
     const frozenPackage = JSON.parse(packageBytes.toString("utf8"));
     _reviewEvidenceContract(frozenPackage);
@@ -3366,7 +3249,7 @@ ${packageText}\`\`\`
     const descriptor = {
       contract_version: DESCRIPTOR_CONTRACT_VERSION,
       state: "prepared",
-      preparation_id: path7.basename(materialRoot),
+      preparation_id: path6.basename(materialRoot),
       dispatch_contract_version: DISPATCH_CONTRACT_VERSION,
       producer_root: String(producer),
       material_root: String(materialRoot),
@@ -3419,7 +3302,7 @@ ${packageText}\`\`\`
   }
 }
 function _assertTaskRootInsideRuntime(taskRoot, producer) {
-  const runtimeRoot2 = path7.join(producer, ".runtime");
+  const runtimeRoot2 = path6.join(producer, ".runtime");
   try {
     if (_relativeUnder(resolveLikePython(runtimeRoot2), taskRoot) === null) {
       throw new PreparedDispatchError("task_root is not relative to producer_root/.runtime");
@@ -3440,7 +3323,7 @@ function _readFile(target, label) {
     fd = openSync3(file, "r");
     const info = fstatSync2(fd);
     if (!info.isFile()) throw new PreparedDispatchError(`${label} is not a regular file: ${file}`);
-    return readFileSync7(fd);
+    return readFileSync6(fd);
   } catch (caught) {
     if (caught instanceof PreparedDispatchError) throw caught;
     throw new PreparedDispatchError(`cannot read ${label}: ${file}`);
@@ -3457,7 +3340,7 @@ function _descriptorPath(value, label) {
   let target;
   if (typeof value === "string" && value.trim()) target = value;
   else throw new PreparedDispatchError(`descriptor.${label} must be a non-empty absolute path`);
-  if (!path7.isAbsolute(target)) {
+  if (!path6.isAbsolute(target)) {
     throw new PreparedDispatchError(`descriptor.${label} must be a non-empty absolute path`);
   }
   return absolutePath(target, `descriptor.${label}`, { error: PreparedDispatchError });
@@ -3469,10 +3352,10 @@ function _validatePackageEvidencePath(pkg, { producerRoot, materialRoot, prepare
   const [, evidenceRef] = _reviewEvidenceContract(pkg);
   if (evidenceRef === null) return;
   let evidencePath = String(evidenceRef.path);
-  if (!path7.isAbsolute(evidencePath)) evidencePath = path7.join(producerRoot, evidencePath);
+  if (!path6.isAbsolute(evidencePath)) evidencePath = path6.join(producerRoot, evidencePath);
   evidencePath = absolutePath(evidencePath, "review evidence", { error: PreparedDispatchError });
   _assertNoEscape(evidencePath, materialRoot, { allowMissingLeaf: false });
-  const evidenceRelative = path7.relative(materialRoot, evidencePath).replace(/\\/g, "/");
+  const evidenceRelative = path6.relative(materialRoot, evidencePath).replace(/\\/g, "/");
   if (!preparedOutputs.includes(evidenceRelative)) {
     throw new PreparedDispatchError("package review_evidence is absent from prepared outputs");
   }
@@ -3584,7 +3467,7 @@ function _verifyPreparedDispatch(descriptorFile) {
   if (descriptor.state !== "prepared") throw new PreparedDispatchError("prepared descriptor state is not prepared");
   const materialRoot = _descriptorPath(descriptor.material_root, "material_root");
   const producerRoot = _descriptorPath(descriptor.producer_root, "producer_root");
-  const expectedRoot = path7.join(
+  const expectedRoot = path6.join(
     producerRoot,
     "tmp",
     "dispatch_prepare",
@@ -3598,7 +3481,7 @@ function _verifyPreparedDispatch(descriptorFile) {
     throw new PreparedDispatchError(`material_root is not a directory: ${materialRoot}`);
   }
   _assertNoEscape(materialRoot, producerRoot, { allowMissingLeaf: false });
-  if (!_pathEqual(descriptorPath, path7.join(materialRoot, DESCRIPTOR_FILENAME))) {
+  if (!_pathEqual(descriptorPath, path6.join(materialRoot, DESCRIPTOR_FILENAME))) {
     throw new PreparedDispatchError("descriptor_file does not match material_root commit marker");
   }
   const paths = {};
@@ -3611,7 +3494,7 @@ function _verifyPreparedDispatch(descriptorFile) {
   for (const [key, filename] of Object.entries(expectedNames)) {
     const target2 = _descriptorPath(descriptor[key], key);
     _assertNoEscape(target2, materialRoot, { allowMissingLeaf: false });
-    if (pyNormcase(path7.dirname(target2)) !== pyNormcase(materialRoot) || path7.basename(target2) !== filename) {
+    if (pyNormcase(path6.dirname(target2)) !== pyNormcase(materialRoot) || path6.basename(target2) !== filename) {
       throw new PreparedDispatchError(`descriptor.${key} must use the exact v1 filename and containment`);
     }
     paths[key] = target2;
@@ -3648,7 +3531,7 @@ function _verifyPreparedDispatch(descriptorFile) {
   }
   try {
     const taskRootPath = absolutePath(envelope.task_root, "dispatch task_root", { error: PreparedDispatchError });
-    const runtimeRoot2 = path7.join(producerRoot, ".runtime");
+    const runtimeRoot2 = path6.join(producerRoot, ".runtime");
     if (_relativeUnder(resolveLikePython(runtimeRoot2), taskRootPath) === null) {
       throw new PreparedDispatchError("dispatch task_root is not relative to producer_root/.runtime");
     }
@@ -3684,7 +3567,7 @@ function _verifyPreparedDispatch(descriptorFile) {
   }
   const normalizedWrites = [];
   for (const value of writes) {
-    const output = path7.isAbsolute(value) ? value : path7.join(materialRoot, value);
+    const output = path6.isAbsolute(value) ? value : path6.join(materialRoot, value);
     _assertNoEscape(output, materialRoot, { allowMissingLeaf: false });
     const relative = _pureRelative(materialRoot, value);
     if (relative === null) throw new Error(`'${value}' is not in the subpath of '${materialRoot}'`);
@@ -3717,7 +3600,7 @@ function verifyPreparedDispatch(descriptorFile) {
 function _discardUntrustedDescriptorMarker(materialRoot) {
   const root = absolutePath(materialRoot, "material_root", { error: PreparedDispatchError });
   if (!OWNED_UNCOMMITTED_ROOTS.has(pyNormcase(root))) return;
-  const marker = path7.join(root, DESCRIPTOR_FILENAME);
+  const marker = path6.join(root, DESCRIPTOR_FILENAME);
   let info;
   try {
     info = lstatSync2(marker);
@@ -3728,7 +3611,7 @@ function _discardUntrustedDescriptorMarker(materialRoot) {
   try {
     if (info.isDirectory() && !info.isSymbolicLink() && !isReparseStat(info)) {
       _iterWorkspaceFiles(marker);
-      rmSync3(marker, { recursive: true });
+      rmSync2(marker, { recursive: true });
     } else {
       unlinkSync2(marker);
     }
@@ -3753,7 +3636,7 @@ function cleanupUncommittedPreparation(materialRoot, { producerRoot = null } = {
   _assertNoEscape(root, producer, { allowMissingLeaf: false });
   const ownedRoot = pyNormcase(root);
   if (!OWNED_UNCOMMITTED_ROOTS.has(ownedRoot)) return false;
-  const descriptor = path7.join(root, DESCRIPTOR_FILENAME);
+  const descriptor = path6.join(root, DESCRIPTOR_FILENAME);
   let descriptorInfo = null;
   try {
     descriptorInfo = lstatSync2(descriptor);
@@ -3777,7 +3660,7 @@ function cleanupUncommittedPreparation(materialRoot, { producerRoot = null } = {
     throw caught;
   }
   try {
-    rmSync3(root, { recursive: true });
+    rmSync2(root, { recursive: true });
   } catch (caught) {
     if (caught?.code === "ENOENT") {
       OWNED_UNCOMMITTED_ROOTS.delete(ownedRoot);
@@ -3891,13 +3774,13 @@ var init_prepared_dispatch = __esm({
 });
 
 // ops/tools/dispatch-core/task_package_profiles.mjs
-import { existsSync as existsSync4, readdirSync as readdirSync4, statSync as statSync6 } from "node:fs";
-import path8 from "node:path";
+import { existsSync as existsSync4, readdirSync as readdirSync4, statSync as statSync5 } from "node:fs";
+import path7 from "node:path";
 function valueError(message) {
   return pyError("ValueError", message);
 }
 function relRoute(routeFile) {
-  return path8.relative(ROOT, routeFile).replace(/\\/g, "/");
+  return path7.relative(ROOT, routeFile).replace(/\\/g, "/");
 }
 function routeIdFromAgent(role, capability) {
   return `${role}__${capability}`;
@@ -3948,8 +3831,8 @@ function parseCard(text3, routeFile) {
       if (!pyStr(value).trim() || typeof promptPath !== "string" || !promptPath.startsWith("ops/agent-prompts/")) {
         throw valueError(`${rel2} required_files_by_contract has an invalid mapping`);
       }
-      const target = path8.join(RUNTIME_ROOT, promptPath);
-      if (!(existsSync4(target) && statSync6(target).isFile())) {
+      const target = path7.join(RUNTIME_ROOT, promptPath);
+      if (!(existsSync4(target) && statSync5(target).isFile())) {
         throw valueError(`${rel2} conditional required file missing: ${promptPath}`);
       }
     }
@@ -4008,7 +3891,7 @@ function parseAgentBlock(block, routeFile) {
   };
 }
 function routeProfile(routeFile) {
-  const routeId2 = path8.basename(routeFile, ".md");
+  const routeId2 = path7.basename(routeFile, ".md");
   const text3 = pyReadText(routeFile);
   const agent = parseAgentBlock(blockScalar(text3, routeFile), routeFile);
   const expectedRoute = routeIdFromAgent(agent.role, agent.capability.name);
@@ -4029,13 +3912,13 @@ function routeProfile(routeFile) {
   };
 }
 function loadRouteProfiles() {
-  if (!(existsSync4(ROUTE_DIR) && statSync6(ROUTE_DIR).isDirectory())) {
-    throw valueError(`route directory not found: ${path8.relative(RUNTIME_ROOT, ROUTE_DIR).replace(/\\/g, "/")}`);
+  if (!(existsSync4(ROUTE_DIR) && statSync5(ROUTE_DIR).isDirectory())) {
+    throw valueError(`route directory not found: ${path7.relative(RUNTIME_ROOT, ROUTE_DIR).replace(/\\/g, "/")}`);
   }
   const profiles = {};
   const names = readdirMd(ROUTE_DIR).sort();
   for (const name of names) {
-    const profile = routeProfile(path8.join(ROUTE_DIR, name));
+    const profile = routeProfile(path7.join(ROUTE_DIR, name));
     profiles[profile.route_id] = profile;
   }
   if (!Object.keys(profiles).length) throw valueError("no task package routes found");
@@ -4065,7 +3948,7 @@ var init_task_package_profiles = __esm({
   "ops/tools/dispatch-core/task_package_profiles.mjs"() {
     init_tool_common();
     init_py();
-    ROUTE_DIR = path8.join(RUNTIME_ROOT, "ops", "protocols", "task-package-routes");
+    ROUTE_DIR = path7.join(RUNTIME_ROOT, "ops", "protocols", "task-package-routes");
     SEED_BODY_REQUIRED = [
       "project_positioning",
       "goal",
@@ -4090,10 +3973,10 @@ var init_task_package_profiles = __esm({
 });
 
 // ops/tools/dispatch-core/task_package_build.mjs
-import { existsSync as existsSync5, mkdirSync as mkdirSync5, writeFileSync as writeFileSync3 } from "node:fs";
-import path9 from "node:path";
+import { existsSync as existsSync5, mkdirSync as mkdirSync4, writeFileSync as writeFileSync2 } from "node:fs";
+import path8 from "node:path";
 function readProjectName() {
-  const projectFile = path9.join(ROOT, "PROJECT.md");
+  const projectFile = path8.join(ROOT, "PROJECT.md");
   if (!existsSync5(projectFile)) return "<\u9879\u76EE\u540D>";
   const lines = pySplitLines(pyReadTextReplace(projectFile));
   for (let idx = 0; idx < lines.length; idx += 1) {
@@ -4138,21 +4021,21 @@ var init_task_package_build = __esm({
 
 // ops/tools/dispatch-core/review_evidence.mjs
 import { spawnSync as spawnSync3 } from "node:child_process";
-import { opendirSync, readdirSync as readdirSync5, statSync as statSync7 } from "node:fs";
-import path10 from "node:path";
+import { opendirSync, readdirSync as readdirSync5, statSync as statSync6 } from "node:fs";
+import path9 from "node:path";
 import process6 from "node:process";
-function statOrNull2(value) {
+function statOrNull(value) {
   try {
-    return statSync7(value);
+    return statSync6(value);
   } catch {
     return null;
   }
 }
 function pathExists(value) {
-  return statOrNull2(value) !== null;
+  return statOrNull(value) !== null;
 }
 function pathIsDir(value) {
-  return Boolean(statOrNull2(value)?.isDirectory());
+  return Boolean(statOrNull(value)?.isDirectory());
 }
 function decodeTruncated(buffer, limit) {
   const cap = Math.max(0, Math.min(limit, buffer.length));
@@ -4467,7 +4350,7 @@ function addSemanticFile(state, abs, role, options = {}) {
     if (!entry && declaredFile) {
       let bytes2 = 0;
       try {
-        bytes2 = statSync7(abs).size;
+        bytes2 = statSync6(abs).size;
       } catch {
         bytes2 = 0;
       }
@@ -4481,7 +4364,7 @@ function addSemanticFile(state, abs, role, options = {}) {
   state.seen.add(seenKey);
   let bytes = 0;
   try {
-    bytes = statSync7(abs).size;
+    bytes = statSync6(abs).size;
   } catch {
     bytes = 0;
   }
@@ -4521,7 +4404,7 @@ function walkSemanticDirectory(state, dir, role) {
     try {
       let entry;
       while ((entry = handle.readSync()) !== null) {
-        const full = path10.join(current, entry.name);
+        const full = path9.join(current, entry.name);
         if (entry.isDirectory()) {
           const reason = REGENERATED_TREE_REASONS.get(entry.name);
           if (reason) {
@@ -4723,7 +4606,7 @@ function executeChecks(root, checks, logRoot) {
     const [checkId, argv, cwd, timeout, expected] = validateCheck(raw, root);
     const result = run(argv, cwd, timeout);
     const safe = checkId.replace(/[^A-Za-z0-9_.-]+/g, "-").slice(0, 80);
-    const logPath = path10.join(String(logRoot), `${safe}.log`);
+    const logPath = path9.join(String(logRoot), `${safe}.log`);
     atomicWriteText(
       logPath,
       `argv=${pyJsonDumps(argv)}
@@ -4936,9 +4819,9 @@ function assertDerivedOutputContained(output, root) {
 }
 function evidenceLogDirectory(output) {
   const target = lexicalAbsolute(output);
-  const parsed = path10.parse(target);
-  const stripped = parsed.ext ? path10.join(parsed.dir, parsed.name) : target;
-  return stripped !== target ? stripped : path10.join(parsed.dir, `${parsed.base}.logs`);
+  const parsed = path9.parse(target);
+  const stripped = parsed.ext ? path9.join(parsed.dir, parsed.name) : target;
+  return stripped !== target ? stripped : path9.join(parsed.dir, `${parsed.base}.logs`);
 }
 function evidenceOutputPath(pkg, options = {}) {
   const { outputRoot = null, outputPath = null } = options;
@@ -4948,11 +4831,11 @@ function evidenceOutputPath(pkg, options = {}) {
   }
   if (outputRoot !== null && outputRoot !== void 0) {
     const root2 = lexicalAbsolute(outputRoot);
-    if (path10.extname(root2).toLowerCase() === ".json" || Boolean(statOrNull2(root2)?.isFile())) return root2;
-    return assertDerivedOutputContained(path10.join(root2, derivedEvidenceFilename(packageId2)), root2);
+    if (path9.extname(root2).toLowerCase() === ".json" || Boolean(statOrNull(root2)?.isFile())) return root2;
+    return assertDerivedOutputContained(path9.join(root2, derivedEvidenceFilename(packageId2)), root2);
   }
-  const root = lexicalAbsolute(path10.join(ROOT, "tmp", "review_evidence"));
-  return assertDerivedOutputContained(path10.join(root, derivedEvidenceFilename(packageId2)), root);
+  const root = lexicalAbsolute(path9.join(ROOT, "tmp", "review_evidence"));
+  return assertDerivedOutputContained(path9.join(root, derivedEvidenceFilename(packageId2)), root);
 }
 function attachReviewEvidence(envelope, options = {}) {
   const { execute, root = null, outputRoot = null, outputPath = null } = options;
@@ -5055,6 +4938,508 @@ var init_review_evidence = __esm({
   }
 });
 
+// ops/tools/dispatch-core/model_catalog_cache.mjs
+import { mkdirSync as mkdirSync5, readFileSync as readFileSync7, renameSync as renameSync3, rmSync as rmSync3, statSync as statSync7, writeFileSync as writeFileSync3 } from "node:fs";
+import { createHash as createHash4, randomBytes } from "node:crypto";
+import path10 from "node:path";
+function canonicalJson2(value) {
+  return JSON.stringify(value, (_key, item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+    return Object.fromEntries(Object.keys(item).sort().map((key) => [key, item[key]]));
+  });
+}
+function catalogCacheKey(identity) {
+  return createHash4("sha256").update(canonicalJson2(identity), "utf8").digest("hex");
+}
+function statOrNull2(target) {
+  try {
+    return statSync7(target);
+  } catch {
+    return null;
+  }
+}
+function fingerprintPaths(paths) {
+  const seen = /* @__PURE__ */ new Set();
+  const fingerprints = [];
+  for (const raw of paths) {
+    const target = String(raw ?? "");
+    if (!target || seen.has(target)) continue;
+    seen.add(target);
+    const stat = statOrNull2(target);
+    fingerprints.push({
+      path: target,
+      exists: Boolean(stat),
+      size: stat ? stat.size : null,
+      mtime_ms: stat ? Math.trunc(stat.mtimeMs) : null
+    });
+  }
+  return fingerprints;
+}
+function readPayload(cacheFile) {
+  let text3;
+  try {
+    text3 = readFileSync7(cacheFile, "utf8");
+  } catch {
+    return { entries: [] };
+  }
+  let payload;
+  try {
+    payload = JSON.parse(text3);
+  } catch {
+    return { entries: [] };
+  }
+  if (!payload || typeof payload !== "object" || payload.schema !== CATALOG_CACHE_SCHEMA) return { entries: [] };
+  if (!Array.isArray(payload.entries)) return { entries: [] };
+  return {
+    entries: payload.entries.filter((entry) => entry && typeof entry === "object" && typeof entry.key === "string")
+  };
+}
+function readCatalogCacheEntry(cacheFile, key, { now = Date.now() } = {}) {
+  const entry = readPayload(cacheFile).entries.find((item) => item.key === key);
+  if (!entry) return null;
+  if (entry.status !== "ok") return null;
+  const models = Array.isArray(entry.models) ? entry.models.filter((item) => typeof item === "string" && item) : [];
+  if (!models.length) return null;
+  const storedAt = Number(entry.stored_at_ms);
+  if (!Number.isFinite(storedAt)) return null;
+  const age = now - storedAt;
+  if (age < 0 || age > CATALOG_CACHE_TTL_MS) return null;
+  const details = entry.model_details && typeof entry.model_details === "object" && !Array.isArray(entry.model_details) ? entry.model_details : {};
+  return {
+    stored_at_ms: storedAt,
+    identity: entry.identity ?? null,
+    catalog: {
+      status: "ok",
+      models,
+      model_details: details,
+      model_count: models.length,
+      source: typeof entry.source === "string" ? entry.source : "",
+      error: null
+    }
+  };
+}
+function writeCatalogCacheEntry(cacheFile, key, identity, catalog, { now = Date.now() } = {}) {
+  try {
+    if (catalog?.status !== "ok") return false;
+    const models = Array.isArray(catalog.models) ? catalog.models.filter((item) => typeof item === "string" && item) : [];
+    if (!models.length) return false;
+    const entry = {
+      key,
+      status: "ok",
+      stored_at_ms: now,
+      identity,
+      models,
+      model_details: catalog.model_details && typeof catalog.model_details === "object" && !Array.isArray(catalog.model_details) ? catalog.model_details : {},
+      source: typeof catalog.source === "string" ? catalog.source : ""
+    };
+    const entries = [entry, ...readPayload(cacheFile).entries.filter((item) => item.key !== key)].slice(0, CATALOG_CACHE_MAX_ENTRIES);
+    mkdirSync5(path10.dirname(cacheFile), { recursive: true });
+    const tmp = `${cacheFile}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+    try {
+      writeFileSync3(tmp, `${JSON.stringify({ schema: CATALOG_CACHE_SCHEMA, entries }, null, 2)}
+`, "utf8");
+      renameSync3(tmp, cacheFile);
+    } finally {
+      rmSync3(tmp, { force: true });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+var CATALOG_CACHE_SCHEMA, CATALOG_CACHE_TTL_MS, CATALOG_CACHE_FILE_NAME, CATALOG_CACHE_MAX_ENTRIES;
+var init_model_catalog_cache = __esm({
+  "ops/tools/dispatch-core/model_catalog_cache.mjs"() {
+    CATALOG_CACHE_SCHEMA = 1;
+    CATALOG_CACHE_TTL_MS = 60 * 1e3;
+    CATALOG_CACHE_FILE_NAME = "pi-child-model-catalog.json";
+    CATALOG_CACHE_MAX_ENTRIES = 8;
+  }
+});
+
+// ops/tools/pi_model_extension_profile.mjs
+import { existsSync as existsSync6 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import path11 from "node:path";
+function resolvePiAgentDir(env = process.env) {
+  const configured = String(env.PI_CODING_AGENT_DIR || "").trim();
+  return path11.resolve(configured || path11.join(homedir2(), ".pi", "agent"));
+}
+function resolvePiChildModelExtensions(options = {}) {
+  const env = options.env || process.env;
+  if (String(env.PI_CONTROL_PI || "").trim()) return [];
+  const exists = options.exists || existsSync6;
+  const agentDir = path11.resolve(options.agentDir || resolvePiAgentDir(env));
+  return RELATIVE_EXTENSION_PATHS.map((relativePath) => path11.join(agentDir, ...relativePath.split("/"))).filter((candidate) => exists(candidate));
+}
+function isPiModelExtensionProfileCli(argv1 = process.argv[1]) {
+  return path11.basename(String(argv1 || "")).toLowerCase() === "pi_model_extension_profile.mjs";
+}
+var PI_CHILD_MODEL_EXTENSION_PROFILE, RELATIVE_EXTENSION_PATHS;
+var init_pi_model_extension_profile = __esm({
+  "ops/tools/pi_model_extension_profile.mjs"() {
+    PI_CHILD_MODEL_EXTENSION_PROFILE = "pi-child-model-extensions/v1";
+    RELATIVE_EXTENSION_PATHS = Object.freeze([
+      "extensions/openai-codex-sol-context-alias.ts",
+      "npm/node_modules/pi-claude-code-provider/extensions/pi-claude-code-provider.ts",
+      "npm/node_modules/@tian.zuo/pi-antigravity/index.ts"
+    ]);
+    if (isPiModelExtensionProfileCli()) {
+      if (process.argv.slice(2).some((arg) => arg !== "--json")) {
+        process.stderr.write("Usage: node ops/tools/pi_model_extension_profile.mjs [--json]\n");
+        process.exit(2);
+      }
+      process.stdout.write(`${JSON.stringify({
+        profile: PI_CHILD_MODEL_EXTENSION_PROFILE,
+        extensions: resolvePiChildModelExtensions()
+      })}
+`);
+    }
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/deps.mjs
+var deps;
+var init_deps = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/deps.mjs"() {
+    deps = {};
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/py-utils.mjs
+import { statSync as statSync8 } from "node:fs";
+import path12 from "node:path";
+import process7 from "node:process";
+function compareCodePoints2(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function sortedStrings(values) {
+  return [...values].sort(compareCodePoints2);
+}
+function pySlice(value, limit) {
+  return Array.from(String(value)).slice(0, limit).join("");
+}
+function statOrNull3(target) {
+  try {
+    return statSync8(target);
+  } catch {
+    return null;
+  }
+}
+function isFile3(target) {
+  return Boolean(statOrNull3(target)?.isFile());
+}
+function isDirectory2(target) {
+  return Boolean(statOrNull3(target)?.isDirectory());
+}
+function pathParts2(value) {
+  return String(value ?? "").split(/[\\/]+/).filter((part) => part && part !== ".");
+}
+function shutilWhich(name) {
+  const candidate = String(name ?? "");
+  if (!candidate) return null;
+  const isWindows = process7.platform === "win32";
+  const exts = isWindows ? String(process7.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean) : [""];
+  const hasExt = isWindows && exts.some((ext) => candidate.toLowerCase().endsWith(ext.toLowerCase()));
+  const names = isWindows && !hasExt ? exts.map((ext) => candidate + ext) : [candidate];
+  if (candidate.includes("/") || candidate.includes("\\")) {
+    for (const item of names) if (isFile3(item)) return item;
+    return null;
+  }
+  const dirs = String(process7.env.PATH || "").split(path12.delimiter).filter(Boolean);
+  if (isWindows) dirs.unshift(process7.cwd());
+  for (const dir of dirs) {
+    for (const item of names) {
+      const full = path12.join(dir, item);
+      if (isFile3(full)) return full;
+    }
+  }
+  return null;
+}
+var PY_SPLIT_RE;
+var init_py_utils = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/py-utils.mjs"() {
+    init_tool_common();
+    init_py();
+    PY_SPLIT_RE = new RegExp(`[${PY_SPACE_CLASS}]+`);
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/state.mjs
+var caches;
+var init_state = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/state.mjs"() {
+    caches = {
+      asyncSubagentServer: /* @__PURE__ */ new Map(),
+      asyncSubagentEndpoint: /* @__PURE__ */ new Map(),
+      asyncSubagentReadiness: /* @__PURE__ */ new Map(),
+      piChildModelExtensionProfile: /* @__PURE__ */ new Map(),
+      childModelCatalog: /* @__PURE__ */ new Map()
+    };
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/catalog.mjs
+import path13 from "node:path";
+import process8 from "node:process";
+function piChildCatalogCommandImpl() {
+  const configured = pyStrip(String(process8.env.PI_CONTROL_PI || ""));
+  if (configured) {
+    const suffix = path13.extname(configured).toLowerCase();
+    if ([".js", ".mjs", ".cjs"].includes(suffix)) {
+      const node = shutilWhich("node");
+      return node ? [node, configured] : [];
+    }
+    return [configured];
+  }
+  let executable = process8.platform === "win32" ? shutilWhich("pi.cmd") : shutilWhich("pi");
+  if (!executable && process8.platform === "win32") executable = shutilWhich("pi");
+  return executable ? [executable] : [];
+}
+function piChildCatalogCommand() {
+  return deps.piChildCatalogCommand();
+}
+function piChildModelExtensionProfileImpl() {
+  if (pyStrip(String(process8.env.PI_CONTROL_PI || ""))) {
+    return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions: [], error: null };
+  }
+  let extensions;
+  try {
+    extensions = resolvePiChildModelExtensions();
+  } catch (error) {
+    return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions: [], error: pySlice(String(error?.message ?? error), 500) };
+  }
+  if (!extensions.every((item) => typeof item === "string" && isAbsoluteLikePython(item) && isFile3(item))) {
+    return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions: [], error: "model extension profile returned invalid paths" };
+  }
+  return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions, error: null };
+}
+function piChildModelExtensionProfile() {
+  if (!caches.piChildModelExtensionProfile.has("value")) {
+    caches.piChildModelExtensionProfile.set("value", deps.piChildModelExtensionProfile());
+  }
+  return caches.piChildModelExtensionProfile.get("value");
+}
+function probePiChildModelCatalogUncachedImpl(targetCwd) {
+  const command = piChildCatalogCommand();
+  const extensionProfile = piChildModelExtensionProfile();
+  if (!command.length || pyTruthy(extensionProfile.error)) {
+    return {
+      status: "unavailable",
+      models: [],
+      model_count: 0,
+      source: "pi --list-models (child model profile)",
+      error: pyTruthy(extensionProfile.error) ? extensionProfile.error : "Pi executable not found"
+    };
+  }
+  const argv = [...command.slice(1), "-ne", "-ns", "-np", "--no-themes", "-nc", "--no-approve"];
+  for (const extensionPath of extensionProfile.extensions) argv.push("-e", extensionPath);
+  argv.push("--list-models");
+  const completed = pySpawnSync(command[0], argv, {
+    cwd: String(targetCwd),
+    encoding: "utf8",
+    timeout: 3e4,
+    windowsHide: true,
+    maxBuffer: 64 * 1024 * 1024
+  });
+  if (completed.error) {
+    return {
+      status: "unavailable",
+      models: [],
+      model_count: 0,
+      source: `pi --list-models (${extensionProfile.profile})`,
+      error: pySlice(String(completed.error.message ?? completed.error), 500)
+    };
+  }
+  const stdout = String(completed.stdout ?? "");
+  const stderr = String(completed.stderr ?? "");
+  if (completed.status !== 0) {
+    return {
+      status: "unavailable",
+      models: [],
+      model_count: 0,
+      source: `pi --list-models (${extensionProfile.profile})`,
+      error: pySlice(pyStrip(stderr || stdout), 500)
+    };
+  }
+  const models = /* @__PURE__ */ new Set();
+  const details = {};
+  for (const line of pySplitLines(stdout)) {
+    const columns = line.split(PY_SPLIT_RE).filter((item) => item !== "");
+    if (columns.length < 2 || columns[0].toLowerCase() === "provider") continue;
+    const provider = pyStrip(columns[0]);
+    const modelId = pyStrip(columns[1]);
+    if (!provider || !modelId) continue;
+    const key = `${provider}/${modelId}`;
+    models.add(key);
+    const images = columns.length >= 6 ? pyStrip(columns[5]).toLowerCase() : "";
+    details[key] = {
+      context_window: columns.length >= 3 ? pyStrip(columns[2]) || null : null,
+      supports_vision: images === "yes" ? true : images === "no" ? false : null
+    };
+  }
+  if (!models.size) {
+    return {
+      status: "unavailable",
+      models: [],
+      model_count: 0,
+      source: `pi --list-models (${extensionProfile.profile})`,
+      error: "Pi returned no parseable child models"
+    };
+  }
+  const ordered = sortedStrings(models);
+  return {
+    status: "ok",
+    models: ordered,
+    model_details: Object.fromEntries(ordered.map((key) => [key, details[key]])),
+    model_count: ordered.length,
+    source: `pi --list-models (${extensionProfile.profile})`,
+    error: null
+  };
+}
+function piChildCatalogCacheIdentity(targetCwd) {
+  const command = piChildCatalogCommand();
+  const extensionProfile = piChildModelExtensionProfile();
+  const extensions = Array.isArray(extensionProfile.extensions) ? extensionProfile.extensions : [];
+  const agentDir = resolvePiAgentDir();
+  const configPaths = [
+    ...extensions,
+    ...CHILD_CATALOG_CONFIG_SURFACE.map((name) => path13.join(agentDir, ...String(name).split("/")))
+  ];
+  return {
+    schema: CATALOG_CACHE_SCHEMA,
+    platform: process8.platform,
+    pi_control_pi: pyStrip(String(process8.env.PI_CONTROL_PI || "")),
+    command,
+    extension_profile: {
+      profile: extensionProfile.profile,
+      extensions,
+      error: extensionProfile.error ?? null
+    },
+    config_fingerprints: fingerprintPaths(configPaths),
+    target_cwd: String(targetCwd)
+  };
+}
+function piChildCatalogCacheFile() {
+  const override = pyStrip(String(process8.env.SUBAGENT_CATALOG_CACHE_DIR || ""));
+  const cacheDir = override ? resolveLikePython(override) : path13.join(ROOT, ".runtime", "cockpit", "cache");
+  return path13.join(cacheDir, CATALOG_CACHE_FILE_NAME);
+}
+function childCatalogFileLayerEnabled() {
+  return deps.probePiChildModelCatalogUncached === probePiChildModelCatalogUncachedImpl;
+}
+function rememberChildCatalog(key, value) {
+  caches.childModelCatalog.set(key, value);
+  while (caches.childModelCatalog.size > 8) {
+    caches.childModelCatalog.delete(caches.childModelCatalog.keys().next().value);
+  }
+  return value;
+}
+function probePiChildModelCatalogFresh(key, { cacheWrite = false } = {}) {
+  let identityBefore = null;
+  if (cacheWrite && childCatalogFileLayerEnabled()) {
+    try {
+      identityBefore = piChildCatalogCacheIdentity(key);
+    } catch {
+    }
+  }
+  const value = deps.probePiChildModelCatalogUncached(key);
+  rememberChildCatalog(key, value);
+  if (identityBefore && value?.status === "ok") {
+    try {
+      const identity = piChildCatalogCacheIdentity(key);
+      if (catalogCacheKey(identityBefore) === catalogCacheKey(identity)) {
+        writeCatalogCacheEntry(piChildCatalogCacheFile(), catalogCacheKey(identity), identity, value);
+      }
+    } catch {
+    }
+  }
+  return value;
+}
+function probePiChildModelCatalogImpl(targetCwd, options = {}) {
+  const key = String(targetCwd);
+  if (caches.childModelCatalog.has(key)) {
+    const value = caches.childModelCatalog.get(key);
+    caches.childModelCatalog.delete(key);
+    caches.childModelCatalog.set(key, value);
+    return value;
+  }
+  if (childCatalogFileLayerEnabled()) {
+    let cached = null;
+    try {
+      const identity = piChildCatalogCacheIdentity(key);
+      cached = readCatalogCacheEntry(piChildCatalogCacheFile(), catalogCacheKey(identity));
+    } catch {
+      cached = null;
+    }
+    if (cached) {
+      cacheServedCatalogs.add(cached.catalog);
+      return rememberChildCatalog(key, cached.catalog);
+    }
+  }
+  return probePiChildModelCatalogFresh(key, options);
+}
+var CHILD_CATALOG_CONFIG_SURFACE, cacheServedCatalogs;
+var init_catalog = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/catalog.mjs"() {
+    init_tool_common();
+    init_py();
+    init_model_catalog_cache();
+    init_pi_model_extension_profile();
+    init_deps();
+    init_py_utils();
+    init_state();
+    CHILD_CATALOG_CONFIG_SURFACE = Object.freeze([
+      "models.json",
+      "models-store.json",
+      "settings.json",
+      "npm/package.json"
+    ]);
+    cacheServedCatalogs = /* @__PURE__ */ new WeakSet();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/constants.mjs
+import path14 from "node:path";
+var PREFLIGHT_FILE_THRESHOLD, PREFLIGHT_BYTES_THRESHOLD, PREFLIGHT_LARGE_FILE_BYTES, PREFLIGHT_WALK_SKIP_DIRS, PREFLIGHT_WALK_SKIP_PATHS, PREFLIGHT_GIT_TIMEOUT_SECONDS, PREFLIGHT_STAT_FILE_CAP, PREFLIGHT_BINARY_LIKE_EXTENSIONS, ASYNC_MCP_SERVER_NAME, ASYNC_DISPATCH_CONTRACT_VERSION, PROJECT_ASYNC_TASK_ROOT;
+var init_constants = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/constants.mjs"() {
+    init_tool_common();
+    init_prepared_dispatch();
+    PREFLIGHT_FILE_THRESHOLD = 400;
+    PREFLIGHT_BYTES_THRESHOLD = 10 * 1024 * 1024;
+    PREFLIGHT_LARGE_FILE_BYTES = 2 * 1024 * 1024;
+    PREFLIGHT_WALK_SKIP_DIRS = /* @__PURE__ */ new Set([".git", ".runtime", "node_modules", "__pycache__", "tmp"]);
+    PREFLIGHT_WALK_SKIP_PATHS = [["ops", "dist"]];
+    PREFLIGHT_GIT_TIMEOUT_SECONDS = 15;
+    PREFLIGHT_STAT_FILE_CAP = 2e4;
+    PREFLIGHT_BINARY_LIKE_EXTENSIONS = /* @__PURE__ */ new Set([
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".pdf",
+      ".zip",
+      ".7z",
+      ".dwg",
+      ".dxf",
+      ".step",
+      ".stp",
+      ".iges",
+      ".igs",
+      ".exe",
+      ".dll",
+      ".bin",
+      ".dat",
+      ".mp4",
+      ".avi"
+    ]);
+    ASYNC_MCP_SERVER_NAME = "asyncSubagent";
+    ASYNC_DISPATCH_CONTRACT_VERSION = DISPATCH_CONTRACT_VERSION;
+    PROJECT_ASYNC_TASK_ROOT = path14.join(ROOT, ".runtime", "cockpit", "async_tasks");
+  }
+});
+
 // ops/tools/dispatch-core/model_selection_guidance.mjs
 var MODEL_SELECTION_GUIDANCE;
 var init_model_selection_guidance = __esm({
@@ -5068,7 +5453,7 @@ var init_model_selection_guidance = __esm({
 });
 
 // ops/tools/dispatch-core/seed_minimal.mjs
-import path11 from "node:path";
+import path15 from "node:path";
 function deepCopy(value) {
   return structuredClone(value);
 }
@@ -5080,7 +5465,7 @@ function isEmptyMapping(value) {
   return isRecord(value) && Object.keys(value).length === 0;
 }
 function templateSchema(name) {
-  const file = path11.join(RUNTIME_ROOT, "ops", "templates", name);
+  const file = path15.join(RUNTIME_ROOT, "ops", "templates", name);
   if (!schemaCache.has(file)) schemaCache.set(file, JSON.parse(pyReadText(file)));
   return schemaCache.get(file);
 }
@@ -5597,16 +5982,6 @@ var init_seed_minimal = __esm({
   }
 });
 
-// ops/tools/dispatch-core/subagent_preload.mjs
-var REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET;
-var init_subagent_preload = __esm({
-  "ops/tools/dispatch-core/subagent_preload.mjs"() {
-    init_tool_common();
-    init_py();
-    REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET = 2e5 * 4;
-  }
-});
-
 // ops/tools/dispatch-core/task_package_lint.mjs
 var init_task_package_lint = __esm({
   "ops/tools/dispatch-core/task_package_lint.mjs"() {
@@ -5617,349 +5992,27 @@ var init_task_package_lint = __esm({
   }
 });
 
-// ops/tools/pi_model_extension_profile.mjs
-import { existsSync as existsSync6 } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import path12 from "node:path";
-function resolvePiAgentDir(env = process.env) {
-  const configured = String(env.PI_CODING_AGENT_DIR || "").trim();
-  return path12.resolve(configured || path12.join(homedir2(), ".pi", "agent"));
-}
-function resolvePiChildModelExtensions(options = {}) {
-  const env = options.env || process.env;
-  if (String(env.PI_CONTROL_PI || "").trim()) return [];
-  const exists = options.exists || existsSync6;
-  const agentDir = path12.resolve(options.agentDir || resolvePiAgentDir(env));
-  return RELATIVE_EXTENSION_PATHS.map((relativePath) => path12.join(agentDir, ...relativePath.split("/"))).filter((candidate) => exists(candidate));
-}
-function isPiModelExtensionProfileCli(argv1 = process.argv[1]) {
-  return path12.basename(String(argv1 || "")).toLowerCase() === "pi_model_extension_profile.mjs";
-}
-var PI_CHILD_MODEL_EXTENSION_PROFILE, RELATIVE_EXTENSION_PATHS;
-var init_pi_model_extension_profile = __esm({
-  "ops/tools/pi_model_extension_profile.mjs"() {
-    PI_CHILD_MODEL_EXTENSION_PROFILE = "pi-child-model-extensions/v1";
-    RELATIVE_EXTENSION_PATHS = Object.freeze([
-      "extensions/openai-codex-sol-context-alias.ts",
-      "npm/node_modules/pi-claude-code-provider/extensions/pi-claude-code-provider.ts",
-      "npm/node_modules/@tian.zuo/pi-antigravity/index.ts"
-    ]);
-    if (isPiModelExtensionProfileCli()) {
-      if (process.argv.slice(2).some((arg) => arg !== "--json")) {
-        process.stderr.write("Usage: node ops/tools/pi_model_extension_profile.mjs [--json]\n");
-        process.exit(2);
-      }
-      process.stdout.write(`${JSON.stringify({
-        profile: PI_CHILD_MODEL_EXTENSION_PROFILE,
-        extensions: resolvePiChildModelExtensions()
-      })}
-`);
-    }
+// ops/tools/dispatch-core/dispatch-prepare/seed.mjs
+var init_seed = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/seed.mjs"() {
+    init_tool_common();
+    init_py();
+    init_seed_minimal();
+    init_task_package_build();
+    init_task_package_lint();
+    init_py_utils();
   }
 });
 
-// ops/tools/pi_worker_resources.mjs
-import { spawn } from "node:child_process";
-import { existsSync as existsSync7, mkdirSync as mkdirSync6, readFileSync as readFileSync8, statSync as statSync8, writeFileSync as writeFileSync4 } from "node:fs";
-import { homedir as homedir3 } from "node:os";
-import path13 from "node:path";
-import { fileURLToPath as fileURLToPath2, pathToFileURL } from "node:url";
-function configError(code, file, field, message) {
-  return Object.assign(new Error(`${file} ${field}\uFF1A${message}`), { code, file, field });
-}
-function literalLength(key) {
-  return key.replaceAll("*", "").length;
-}
-function matches(value, pattern) {
-  const escaped = pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
-  return new RegExp(`^${escaped}$`, "i").test(value);
-}
-function packageJsonName(dir) {
-  const file = path13.join(dir, "package.json");
-  if (!existsSync7(file)) return null;
-  const name = JSON.parse(readFileSync8(file, "utf8")).name;
-  return typeof name === "string" && name.trim() ? name.trim() : null;
-}
-function resourceName(file) {
-  const parts = String(file).replaceAll("\\", "/").split("/").filter(Boolean);
-  const last = parts.length - 1;
-  if (parts[last] === "SKILL.md") return parts[last - 1];
-  const modules = parts.lastIndexOf("node_modules");
-  if (modules >= 0 && modules < last) {
-    return parts[modules + 1].startsWith("@") ? `${parts[modules + 1]}/${parts[modules + 2]}` : parts[modules + 1];
-  }
-  const local = parts.lastIndexOf("local-packages");
-  if (local >= 0 && local < last) {
-    const dir = parts.slice(0, local + 2).join("/");
-    return packageJsonName(/^[A-Za-z]:$/.test(parts[0]) ? dir : `/${dir}`) ?? parts[local + 1];
-  }
-  const extensions = parts.lastIndexOf("extensions");
-  if (extensions >= 0 && extensions === last - 1) return parts[last].replace(/\.[^.]+$/, "");
-  if (extensions >= 0 && extensions < last) return parts[extensions + 1];
-  return parts[last].replace(/\.[^.]+$/, "");
-}
-function loadWorkerResourcesConfig(configPath = WORKER_RESOURCES_CONFIG) {
-  const raw = JSON.parse(readFileSync8(configPath, "utf8"));
-  for (const [key, hint] of Object.entries(REMOVED_KEYS)) {
-    if (raw[key] !== void 0) throw configError("field_removed", configPath, key, `\u5DF2\u5220\u9664\uFF0C${hint}`);
-  }
-  if (raw.version !== 2) throw configError("value_invalid", configPath, "version", "\u5FC5\u987B\u4E3A 2");
-  const config = { configPath };
-  for (const section of SECTIONS) {
-    const entries = raw[section];
-    if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
-      throw configError("value_invalid", configPath, section, "\u5FC5\u987B\u5B58\u5728\u4E14\u662F\u5BF9\u8C61\uFF1B\u6CA1\u6709\u6761\u76EE\u65F6\u5199 {}");
-    }
-    for (const [key, entry] of Object.entries(entries)) {
-      const field = `${section}.${key}`;
-      if (section === "tools" && key.includes("*")) throw configError("value_invalid", configPath, field, "\u5DE5\u5177\u53EA\u5199\u5177\u4F53\u540D\u5B57\uFF0C\u4E0D\u652F\u6301 *");
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw configError("value_invalid", configPath, field, "\u5FC5\u987B\u662F\u5BF9\u8C61");
-      const unknown = Object.keys(entry).find((item) => !ENTRY_KEYS[section].includes(item));
-      if (unknown) throw configError("field_unknown", configPath, `${field}.${unknown}`, `\u672A\u77E5\u5B57\u6BB5\uFF1B\u53EF\u7528\u5B57\u6BB5\uFF1A${ENTRY_KEYS[section].join("\u3001")}`);
-      if (!IMPORT_ACCESS.includes(entry.access)) throw configError("value_invalid", configPath, `${field}.access`, `\u5FC5\u987B\u662F ${IMPORT_ACCESS.join(" / ")} \u4E4B\u4E00`);
-      for (const text3 of ["label", "group"]) {
-        if (entry[text3] !== void 0 && typeof entry[text3] !== "string") throw configError("value_invalid", configPath, `${field}.${text3}`, "\u5FC5\u987B\u662F\u5B57\u7B26\u4E32");
-      }
-    }
-    config[section] = entries;
-  }
-  const required = raw.required_tools;
-  if (!Array.isArray(required) || required.some((name) => typeof name !== "string" || !name.trim())) {
-    throw configError("value_invalid", configPath, "required_tools", "\u5FC5\u987B\u662F\u5DE5\u5177\u540D\u6570\u7EC4");
-  }
-  for (const name of required) {
-    if (config.tools[name]?.access === "off") throw configError("value_invalid", configPath, `tools.${name}.access`, "\u8FD0\u884C\u5FC5\u9700\u5DE5\u5177\u4E0D\u80FD\u8BBE\u4E3A off");
-  }
-  config.required_tools = [...required];
-  return config;
-}
-function importEntry(config, section, name) {
-  const hits = Object.keys(config[section]).filter((key) => matches(name, key));
-  if (!hits.length) return null;
-  const rank2 = (key) => key.includes("*") ? literalLength(key) : Number.POSITIVE_INFINITY;
-  const best = Math.max(...hits.map(rank2));
-  const top = hits.filter((key) => rank2(key) === best);
-  if (top.length > 1) {
-    throw configError("value_invalid", config.configPath, section, `${name} \u540C\u65F6\u5339\u914D ${top.join("\u3001")}\uFF1B\u5220\u53BB\u91CD\u590D\u6216\u5199\u51FA\u66F4\u5177\u4F53\u7684\u952E`);
-  }
-  return { key: top[0], ...config[section][top[0]] };
-}
-function accessOf(config, section, name) {
-  if (section === "tools" && config.required_tools.includes(name)) return "default_on";
-  return importEntry(config, section, name)?.access ?? "off";
-}
-async function discoverWorkerResources({
-  cwd = process.cwd(),
-  agentDir = process.env.PI_CODING_AGENT_DIR || path13.join(homedir3(), ".pi", "agent"),
-  piCli = PI_CLI
-} = {}) {
-  const { DefaultPackageManager, SettingsManager } = await import(pathToFileURL(path13.join(path13.dirname(piCli), "index.js")).href);
-  const settingsPath = path13.join(agentDir, "settings.json");
-  const settings = existsSync7(settingsPath) ? JSON.parse(readFileSync8(settingsPath, "utf8")) : {};
-  const manager = new DefaultPackageManager({ cwd, agentDir, settingsManager: SettingsManager.inMemory(settings) });
-  const missing = [];
-  const resolved = await manager.resolve(async (source) => {
-    missing.push(source);
-    return "skip";
-  });
-  const enabled = (type) => (resolved[type] || []).filter((item) => item.enabled && ["user", "project"].includes(item.metadata?.scope)).map((item) => ({ name: resourceName(item.path), path: item.path, scope: item.metadata.scope }));
-  return { settingsPath, extensions: enabled("extensions"), skills: enabled("skills"), missing };
-}
-function probeRegisteredTools({ extensions, piCli = PI_CLI, cacheFile, cwd = process.cwd() }) {
-  const key = JSON.stringify(["registration-only/v1", path13.resolve(cwd), ...[piCli, ...extensions.map((item) => item.path)].map((file) => [file, existsSync7(file) ? statSync8(file).mtimeMs : 0])]);
-  const cached = existsSync7(cacheFile) ? JSON.parse(readFileSync8(cacheFile, "utf8")) : null;
-  if (cached?.key === key) return Promise.resolve(cached.tools);
-  const id = `${cacheFile}
-${key}`;
-  if (!probes.has(id)) {
-    probes.set(id, runToolProbe(extensions, piCli, cwd).then((tools) => {
-      mkdirSync6(path13.dirname(cacheFile), { recursive: true });
-      writeFileSync4(cacheFile, JSON.stringify({ key, tools }));
-      return tools;
-    }).finally(() => probes.delete(id)));
-  }
-  return probes.get(id);
-}
-function runToolProbe(extensions, piCli, cwd) {
-  const loader = path13.join(path13.dirname(piCli), "core", "extensions", "loader.js");
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["--input-type=module", "-e", PROBE_SCRIPT], {
-      cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-      env: { ...process.env, PI_TOOL_PROBE_LOADER: loader, PI_TOOL_PROBE_EXTENSIONS: JSON.stringify(extensions.map((item) => item.path)) }
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    const timer = setTimeout(() => child.kill(), PROBE_TIMEOUT_MS);
-    child.on("error", reject);
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(`Pi \u6269\u5C55\u6CE8\u518C\u63A2\u6D4B\u5931\u8D25\uFF08exit ${code}\uFF09${stderr.trim() ? `\uFF1A${stderr.trim().slice(-400)}` : ""}`));
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout.trim()));
-      } catch (error) {
-        reject(new Error(`Pi \u5DE5\u5177\u6CE8\u518C\u8868\u65E0\u6CD5\u89E3\u6790\uFF1A${error.message}`));
-      }
-    });
-  });
-}
-function catalogEntries(config, section, installed) {
-  const rows = installed.map(({ name, scope }) => {
-    const entry = importEntry(config, section, name);
-    return { key: entry?.key ?? null, name, access: entry?.access ?? "off", label: entry?.label ?? "", installed: true, scope };
-  });
-  for (const [key, entry] of Object.entries(config[section])) {
-    if (!installed.some(({ name }) => matches(name, key))) {
-      rows.push({ key, name: key, access: entry.access, label: entry.label ?? "", installed: false, scope: null });
-    }
-  }
-  return rows;
-}
-async function resolveWorkerResourceCatalog({
-  cwd = process.cwd(),
-  agentDir,
-  configPath = WORKER_RESOURCES_CONFIG,
-  piCli = PI_CLI,
-  toolCache = path13.join(cwd, ".runtime", "cockpit", "worker-tool-probe.json"),
-  probeTools = probeRegisteredTools
-} = {}) {
-  const config = loadWorkerResourcesConfig(configPath);
-  const found = await discoverWorkerResources({ cwd, agentDir, piCli });
-  const diagnostics = found.missing.map((source) => ({ code: "not_installed", file: found.settingsPath, field: "packages", message: `\u5DF2\u914D\u7F6E\u7684 Pi \u8D44\u6E90\u672A\u5B89\u88C5\uFF1A${source}` }));
-  const known = /* @__PURE__ */ new Set([...BUILTIN_TOOLS, ...RUNNER_TOOLS]);
-  try {
-    for (const name of await probeTools({ extensions: found.extensions, piCli, cacheFile: toolCache, cwd })) known.add(name);
-  } catch (error) {
-    diagnostics.push({ code: "tool_probe_failed", file: found.settingsPath, field: "extensions", message: `\u8BFB\u53D6\u5DF2\u88C5\u63D2\u4EF6\u6CE8\u518C\u7684\u5DE5\u5177\u5931\u8D25\uFF0C\u5DE5\u5177\u8868\u53EA\u542B\u5185\u7F6E\u5DE5\u5177\uFF1A${error.message}` });
-  }
-  const toolNames = [.../* @__PURE__ */ new Set([...known, ...Object.keys(config.tools), ...config.required_tools])].sort();
-  return {
-    configPath,
-    settingsPath: found.settingsPath,
-    tools: toolNames.map((name) => {
-      const entry = config.tools[name];
-      return {
-        key: entry ? name : null,
-        name,
-        access: accessOf(config, "tools", name),
-        label: entry?.label ?? "",
-        group: entry?.group ?? "",
-        installed: known.has(name) || config.required_tools.includes(name)
-      };
-    }),
-    extensions: catalogEntries(config, "extensions", found.extensions),
-    skills: catalogEntries(config, "skills", found.skills.filter((item) => item.scope === "user")),
-    project_skills: found.skills.filter((item) => item.scope === "project").map(({ name, scope }) => ({ name, scope })),
-    required_tools: config.required_tools,
-    diagnostics
-  };
-}
-var WORKER_RESOURCES_CONFIG, IMPORT_ACCESS, BUILTIN_TOOLS, RUNNER_TOOLS, PI_CLI, PROBE_TIMEOUT_MS, PROBE_SCRIPT, probes, SECTIONS, ENTRY_KEYS, REMOVED_KEYS;
-var init_pi_worker_resources = __esm({
-  async "ops/tools/pi_worker_resources.mjs"() {
-    WORKER_RESOURCES_CONFIG = path13.resolve(path13.dirname(fileURLToPath2(import.meta.url)), "../templates/worker-resources.json");
-    IMPORT_ACCESS = Object.freeze(["off", "optional", "default_on"]);
-    BUILTIN_TOOLS = Object.freeze(["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"]);
-    RUNNER_TOOLS = Object.freeze(["research_search", "research_fetch", "command_job"]);
-    PI_CLI = path13.join(process.env.APPDATA || path13.join(homedir3(), "AppData", "Roaming"), "npm/node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
-    PROBE_TIMEOUT_MS = 6e4;
-    PROBE_SCRIPT = `import { pathToFileURL } from "node:url";
-const { loadExtensions } = await import(pathToFileURL(process.env.PI_TOOL_PROBE_LOADER).href);
-const { extensions, errors } = await loadExtensions(JSON.parse(process.env.PI_TOOL_PROBE_EXTENSIONS), process.cwd());
-if (errors.length) throw new Error(errors.map(({ path, error }) => path + ": " + error).join("; "));
-console.log(JSON.stringify([...new Set(extensions.flatMap((extension) => [...extension.tools.keys()]))]));
-`;
-    probes = /* @__PURE__ */ new Map();
-    SECTIONS = Object.freeze(["tools", "extensions", "skills"]);
-    ENTRY_KEYS = Object.freeze({ tools: ["access", "label", "group"], extensions: ["access", "label"], skills: ["access", "label"] });
-    REMOVED_KEYS = Object.freeze({
-      base_extensions: '\u6539\u5199\u4E3A extensions \u4E2D access = "default_on" \u7684\u6761\u76EE',
-      main_only_extensions: '\u6539\u5199\u4E3A extensions \u4E2D access = "off" \u7684\u6761\u76EE',
-      main_only_skills: '\u6539\u5199\u4E3A skills \u4E2D access = "off" \u7684\u6761\u76EE',
-      force_excluded_tools: '\u6539\u5199\u4E3A tools \u4E2D access = "off" \u7684\u6761\u76EE'
-    });
-    if (path13.basename(process.argv[1] || "") === "pi_worker_resources.mjs") {
-      if (process.argv.slice(2).some((arg) => arg !== "--json")) {
-        console.error("Usage: node ops/tools/pi_worker_resources.mjs --json");
-        process.exitCode = 2;
-      } else {
-        try {
-          console.log(JSON.stringify(await resolveWorkerResourceCatalog(), null, 2));
-        } catch (error) {
-          console.error(error.message);
-          process.exitCode = 1;
-        }
-      }
-    }
-  }
-});
-
-// ops/tools/dispatch-core/dispatch_prepare.mjs
-import { spawnSync as spawnSync4 } from "node:child_process";
-import { existsSync as existsSync8, mkdirSync as mkdirSync7, readdirSync as readdirSync6, readFileSync as readFileSync9, statSync as statSync9, writeFileSync as writeFileSync5 } from "node:fs";
-import path14 from "node:path";
-import process7 from "node:process";
-function compareCodePoints2(left, right) {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-function sortedStrings(values) {
-  return [...values].sort(compareCodePoints2);
-}
-function pySlice(value, limit) {
-  return Array.from(String(value)).slice(0, limit).join("");
-}
-function statOrNull3(target) {
-  try {
-    return statSync9(target);
-  } catch {
-    return null;
-  }
-}
-function isFile3(target) {
-  return Boolean(statOrNull3(target)?.isFile());
-}
-function isDirectory2(target) {
-  return Boolean(statOrNull3(target)?.isDirectory());
-}
-function pathParts2(value) {
-  return String(value ?? "").split(/[\\/]+/).filter((part) => part && part !== ".");
-}
-function shutilWhich(name) {
-  const candidate = String(name ?? "");
-  if (!candidate) return null;
-  const isWindows = process7.platform === "win32";
-  const exts = isWindows ? String(process7.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean) : [""];
-  const hasExt = isWindows && exts.some((ext) => candidate.toLowerCase().endsWith(ext.toLowerCase()));
-  const names = isWindows && !hasExt ? exts.map((ext) => candidate + ext) : [candidate];
-  if (candidate.includes("/") || candidate.includes("\\")) {
-    for (const item of names) if (isFile3(item)) return item;
-    return null;
-  }
-  const dirs = String(process7.env.PATH || "").split(path14.delimiter).filter(Boolean);
-  if (isWindows) dirs.unshift(process7.cwd());
-  for (const dir of dirs) {
-    for (const item of names) {
-      const full = path14.join(dir, item);
-      if (isFile3(full)) return full;
-    }
-  }
-  return null;
-}
+// ops/tools/dispatch-core/dispatch-prepare/server.mjs
+import { readFileSync as readFileSync8 } from "node:fs";
+import path16 from "node:path";
+import process9 from "node:process";
 function configSource(_configPath) {
   return "global";
 }
 function configBase(configPath) {
-  return path14.dirname(String(configPath));
+  return path16.dirname(String(configPath));
 }
 function resolveConfigPath(configPath, value) {
   const raw = String(value || ".");
@@ -5986,8 +6039,8 @@ function _serverFromConfig(configPath) {
   };
 }
 function asyncSubagentServerImpl() {
-  const envConfig = pyStrip(String(process7.env.COCKPIT_GLOBAL_CONFIG || ""));
-  const globalConfig = deps.globalConfigPath || (envConfig || path14.join(homeDir(), ".codex", "config.toml"));
+  const envConfig = pyStrip(String(process9.env.COCKPIT_GLOBAL_CONFIG || ""));
+  const globalConfig = deps.globalConfigPath || (envConfig || path16.join(homeDir(), ".codex", "config.toml"));
   return _serverFromConfig(globalConfig);
 }
 function asyncSubagentServer() {
@@ -6017,204 +6070,12 @@ function asyncSubagentEndpoint() {
   return caches.asyncSubagentEndpoint.get("value");
 }
 function asyncServerEnv(server) {
-  return { ...process7.env, ...pyTruthy(server?.env) ? server.env : {} };
-}
-function preflightPathIsSkipped(relative, { directory }) {
-  const all = pathParts2(relative);
-  const parts = directory ? all : all.slice(0, -1);
-  if (parts.some((part) => PREFLIGHT_WALK_SKIP_DIRS.has(part))) return true;
-  return PREFLIGHT_WALK_SKIP_PATHS.some(
-    (prefix) => prefix.length <= all.length && prefix.every((part, index) => all[index] === part)
-  );
-}
-function preflightGitRoot(baseRoot) {
-  let completed;
-  try {
-    completed = spawnSync4("git", ["-C", String(baseRoot), "rev-parse", "--show-toplevel"], {
-      encoding: "utf8",
-      timeout: PREFLIGHT_GIT_TIMEOUT_SECONDS * 1e3,
-      windowsHide: true
-    });
-  } catch {
-    return null;
-  }
-  if (completed.error) return null;
-  const stdout = String(completed.stdout ?? "");
-  if (completed.status !== 0 || !pyStrip(stdout)) return null;
-  const root = resolveLikePython(pyStrip(stdout));
-  return isDirectory2(root) ? root : null;
-}
-function preflightGitFiles(directory, gitRoot) {
-  let relative;
-  try {
-    relative = relativePartsOrThrow(resolveLikePython(directory), resolveLikePython(gitRoot));
-  } catch {
-    return null;
-  }
-  const argv = ["-C", String(gitRoot), "ls-files", "--cached", "--others", "--exclude-standard", "-z"];
-  if (relative.length) argv.push("--", relative.join("/"));
-  let completed;
-  try {
-    completed = spawnSync4("git", argv, {
-      timeout: PREFLIGHT_GIT_TIMEOUT_SECONDS * 1e3,
-      windowsHide: true,
-      maxBuffer: 256 * 1024 * 1024
-    });
-  } catch {
-    return null;
-  }
-  if (completed.error) return null;
-  if (completed.status !== 0) return null;
-  const files = [];
-  const raw = Buffer.isBuffer(completed.stdout) ? completed.stdout : Buffer.from(String(completed.stdout ?? ""));
-  for (const chunk of raw.toString("utf8").split("\0")) {
-    if (!chunk) continue;
-    if (preflightPathIsSkipped(chunk, { directory: false })) continue;
-    const candidate = path14.join(String(gitRoot), chunk);
-    try {
-      relativePartsOrThrow(resolveLikePython(candidate), resolveLikePython(directory));
-    } catch {
-      continue;
-    }
-    if (isFile3(candidate)) files.push(candidate);
-  }
-  return files;
-}
-function relativePartsOrThrow(child, parent) {
-  if (!pyIsRelativeTo(child, parent)) throw new Error("not relative");
-  return pathParts2(child).slice(pathParts2(parent).length);
-}
-function* walkDir(top, onError) {
-  const stack = [String(top)];
-  while (stack.length) {
-    const dirpath = stack.pop();
-    let entries;
-    try {
-      entries = readdirSync6(dirpath, { withFileTypes: true });
-    } catch (error) {
-      if (onError) onError(error, dirpath);
-      continue;
-    }
-    const dirnames = [];
-    const filenames = [];
-    for (const entry of entries) {
-      if (entry.isDirectory()) dirnames.push(entry.name);
-      else filenames.push(entry.name);
-    }
-    const frame = { dirpath, dirnames, filenames };
-    yield frame;
-    for (let index = frame.dirnames.length - 1; index >= 0; index -= 1) {
-      stack.push(path14.join(dirpath, frame.dirnames[index]));
-    }
-  }
-}
-function computeScopePreflight(readPaths, { baseRoot = ROOT } = {}) {
-  let fileCount = 0;
-  let totalBytes = 0;
-  let largeFileCount = 0;
-  let binaryLikeCount = 0;
-  let truncated = false;
-  let urlCount = 0;
-  const missingPaths = [];
-  const unreadablePaths = [];
-  const resolvedBaseRoot = resolveLikePython(baseRoot);
-  const gitRoot = preflightGitRoot(resolvedBaseRoot);
-  const accountFile = (target) => {
-    if (fileCount >= PREFLIGHT_STAT_FILE_CAP) {
-      truncated = true;
-      return false;
-    }
-    let size;
-    try {
-      size = statSync9(target).size;
-    } catch (error) {
-      unreadablePaths.push(`${target}: ${error.message}`);
-      return true;
-    }
-    fileCount += 1;
-    totalBytes += size;
-    if (size > PREFLIGHT_LARGE_FILE_BYTES) largeFileCount += 1;
-    if (PREFLIGHT_BINARY_LIKE_EXTENSIONS.has(path14.extname(String(target)).toLowerCase())) binaryLikeCount += 1;
-    return true;
-  };
-  const recordWalkError = (error, filename) => {
-    unreadablePaths.push(`${filename || baseRoot}: ${error.message}`);
-  };
-  for (const raw of readPaths) {
-    if (truncated) break;
-    const lowered = pyStrip(raw).toLowerCase();
-    if (lowered.startsWith("http://") || lowered.startsWith("https://")) {
-      urlCount += 1;
-      continue;
-    }
-    const candidate = String(raw);
-    const resolved = isAbsoluteLikePython(candidate) ? candidate : pathlibJoin(resolvedBaseRoot, candidate);
-    let info;
-    try {
-      info = existsSync8(resolved) ? statSync9(resolved) : null;
-    } catch (error) {
-      unreadablePaths.push(`${raw}: ${error.message}`);
-      continue;
-    }
-    if (!info) {
-      missingPaths.push(raw);
-      continue;
-    }
-    if (info.isFile()) {
-      if (!accountFile(resolved)) break;
-      continue;
-    }
-    if (!info.isDirectory()) {
-      unreadablePaths.push(`${raw}: path is neither a regular file nor a directory`);
-      continue;
-    }
-    const gitFiles = gitRoot !== null ? preflightGitFiles(resolved, gitRoot) : null;
-    if (gitFiles !== null) {
-      for (const item of gitFiles) {
-        if (!accountFile(item)) break;
-      }
-      continue;
-    }
-    for (const frame of deps.walk(resolved, recordWalkError)) {
-      let currentRelative;
-      try {
-        currentRelative = relativePartsOrThrow(resolveLikePython(frame.dirpath), resolvedBaseRoot).join("/");
-      } catch {
-        currentRelative = "";
-      }
-      frame.dirnames = frame.dirnames.filter(
-        (name) => !preflightPathIsSkipped(currentRelative ? `${currentRelative}/${name}` : name, { directory: true })
-      );
-      let stop = false;
-      for (const name of frame.filenames) {
-        if (!accountFile(path14.join(frame.dirpath, name))) {
-          stop = true;
-          break;
-        }
-      }
-      if (stop) break;
-    }
-  }
-  const result = {
-    scope_file_count: fileCount,
-    scope_total_bytes: totalBytes,
-    scope_large_file_count: largeFileCount,
-    scope_binary_like_count: binaryLikeCount,
-    scope_stat_truncated: truncated,
-    scope_url_count: urlCount,
-    scope_missing_paths: missingPaths,
-    scope_unreadable_paths: unreadablePaths,
-    scope_preflight_warning: null
-  };
-  if (fileCount > PREFLIGHT_FILE_THRESHOLD || totalBytes > PREFLIGHT_BYTES_THRESHOLD) {
-    result.scope_preflight_warning = `scope.read \u9884\u4F30 ${fileCount} \u4E2A\u6587\u4EF6\u3001${totalBytes} \u5B57\u8282\uFF0C\u8D85\u51FA\u9884\u8B66\u9608\u503C\uFF08\u6587\u4EF6 ${PREFLIGHT_FILE_THRESHOLD} / \u5B57\u8282 ${PREFLIGHT_BYTES_THRESHOLD}\uFF09\uFF1B\u5EFA\u8BAE\u6309 ops/skills/subagent-fleet-discipline/references/parallel-slicing.md \u7684\u4EA7\u80FD\u89C4\u683C\u62C6\u5206`;
-  }
-  return result;
+  return { ...process9.env, ...pyTruthy(server?.env) ? server.env : {} };
 }
 function loadToml(target) {
   let text3;
   try {
-    text3 = readFileSync9(String(target), "utf8");
+    text3 = readFileSync8(String(target), "utf8");
   } catch (error) {
     if (error?.code === "ENOENT") return {};
     throw new ToolError(`cannot parse toml: ${rel(target)}: ${error.message}`);
@@ -6227,6 +6088,18 @@ function loadToml(target) {
   }
   return isRecord(data) ? data : {};
 }
+var init_server = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/server.mjs"() {
+    init_dist();
+    init_tool_common();
+    init_py();
+    init_constants();
+    init_deps();
+    init_state();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/delivery.mjs
 function resolveDeliveryWithReadiness(delivery, readiness) {
   if (delivery !== "auto" && delivery !== "async-subagent") return [delivery, { status: "not_checked", issues: [] }];
   if (pyGetItem(readiness, "status") === "available") return ["async-subagent", readiness];
@@ -6357,206 +6230,498 @@ function callAsyncInternalAdapterImpl(operation, args) {
   }
   return response;
 }
+var init_delivery = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/delivery.mjs"() {
+    init_tool_common();
+    init_py();
+    init_constants();
+    init_deps();
+    init_py_utils();
+    init_seed();
+    init_server();
+    init_state();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/scope.mjs
+import { spawnSync as spawnSync4 } from "node:child_process";
+import { existsSync as existsSync7, readdirSync as readdirSync6, statSync as statSync9 } from "node:fs";
+import path17 from "node:path";
+function preflightPathIsSkipped(relative, { directory }) {
+  const all = pathParts2(relative);
+  const parts = directory ? all : all.slice(0, -1);
+  if (parts.some((part) => PREFLIGHT_WALK_SKIP_DIRS.has(part))) return true;
+  return PREFLIGHT_WALK_SKIP_PATHS.some(
+    (prefix) => prefix.length <= all.length && prefix.every((part, index) => all[index] === part)
+  );
+}
+function preflightGitRoot(baseRoot) {
+  let completed;
+  try {
+    completed = spawnSync4("git", ["-C", String(baseRoot), "rev-parse", "--show-toplevel"], {
+      encoding: "utf8",
+      timeout: PREFLIGHT_GIT_TIMEOUT_SECONDS * 1e3,
+      windowsHide: true
+    });
+  } catch {
+    return null;
+  }
+  if (completed.error) return null;
+  const stdout = String(completed.stdout ?? "");
+  if (completed.status !== 0 || !pyStrip(stdout)) return null;
+  const root = resolveLikePython(pyStrip(stdout));
+  return isDirectory2(root) ? root : null;
+}
+function preflightGitFiles(directory, gitRoot) {
+  let relative;
+  try {
+    relative = relativePartsOrThrow(resolveLikePython(directory), resolveLikePython(gitRoot));
+  } catch {
+    return null;
+  }
+  const argv = ["-C", String(gitRoot), "ls-files", "--cached", "--others", "--exclude-standard", "-z"];
+  if (relative.length) argv.push("--", relative.join("/"));
+  let completed;
+  try {
+    completed = spawnSync4("git", argv, {
+      timeout: PREFLIGHT_GIT_TIMEOUT_SECONDS * 1e3,
+      windowsHide: true,
+      maxBuffer: 256 * 1024 * 1024
+    });
+  } catch {
+    return null;
+  }
+  if (completed.error) return null;
+  if (completed.status !== 0) return null;
+  const files = [];
+  const raw = Buffer.isBuffer(completed.stdout) ? completed.stdout : Buffer.from(String(completed.stdout ?? ""));
+  for (const chunk of raw.toString("utf8").split("\0")) {
+    if (!chunk) continue;
+    if (preflightPathIsSkipped(chunk, { directory: false })) continue;
+    const candidate = path17.join(String(gitRoot), chunk);
+    try {
+      relativePartsOrThrow(resolveLikePython(candidate), resolveLikePython(directory));
+    } catch {
+      continue;
+    }
+    if (isFile3(candidate)) files.push(candidate);
+  }
+  return files;
+}
+function relativePartsOrThrow(child, parent) {
+  if (!pyIsRelativeTo(child, parent)) throw new Error("not relative");
+  return pathParts2(child).slice(pathParts2(parent).length);
+}
+function* walkDir(top, onError) {
+  const stack = [String(top)];
+  while (stack.length) {
+    const dirpath = stack.pop();
+    let entries;
+    try {
+      entries = readdirSync6(dirpath, { withFileTypes: true });
+    } catch (error) {
+      if (onError) onError(error, dirpath);
+      continue;
+    }
+    const dirnames = [];
+    const filenames = [];
+    for (const entry of entries) {
+      if (entry.isDirectory()) dirnames.push(entry.name);
+      else filenames.push(entry.name);
+    }
+    const frame = { dirpath, dirnames, filenames };
+    yield frame;
+    for (let index = frame.dirnames.length - 1; index >= 0; index -= 1) {
+      stack.push(path17.join(dirpath, frame.dirnames[index]));
+    }
+  }
+}
+function computeScopePreflight(readPaths, { baseRoot = ROOT } = {}) {
+  let fileCount = 0;
+  let totalBytes = 0;
+  let largeFileCount = 0;
+  let binaryLikeCount = 0;
+  let truncated = false;
+  let urlCount = 0;
+  const missingPaths = [];
+  const unreadablePaths = [];
+  const resolvedBaseRoot = resolveLikePython(baseRoot);
+  const gitRoot = preflightGitRoot(resolvedBaseRoot);
+  const accountFile = (target) => {
+    if (fileCount >= PREFLIGHT_STAT_FILE_CAP) {
+      truncated = true;
+      return false;
+    }
+    let size;
+    try {
+      size = statSync9(target).size;
+    } catch (error) {
+      unreadablePaths.push(`${target}: ${error.message}`);
+      return true;
+    }
+    fileCount += 1;
+    totalBytes += size;
+    if (size > PREFLIGHT_LARGE_FILE_BYTES) largeFileCount += 1;
+    if (PREFLIGHT_BINARY_LIKE_EXTENSIONS.has(path17.extname(String(target)).toLowerCase())) binaryLikeCount += 1;
+    return true;
+  };
+  const recordWalkError = (error, filename) => {
+    unreadablePaths.push(`${filename || baseRoot}: ${error.message}`);
+  };
+  for (const raw of readPaths) {
+    if (truncated) break;
+    const lowered = pyStrip(raw).toLowerCase();
+    if (lowered.startsWith("http://") || lowered.startsWith("https://")) {
+      urlCount += 1;
+      continue;
+    }
+    const candidate = String(raw);
+    const resolved = isAbsoluteLikePython(candidate) ? candidate : pathlibJoin(resolvedBaseRoot, candidate);
+    let info;
+    try {
+      info = existsSync7(resolved) ? statSync9(resolved) : null;
+    } catch (error) {
+      unreadablePaths.push(`${raw}: ${error.message}`);
+      continue;
+    }
+    if (!info) {
+      missingPaths.push(raw);
+      continue;
+    }
+    if (info.isFile()) {
+      if (!accountFile(resolved)) break;
+      continue;
+    }
+    if (!info.isDirectory()) {
+      unreadablePaths.push(`${raw}: path is neither a regular file nor a directory`);
+      continue;
+    }
+    const gitFiles = gitRoot !== null ? preflightGitFiles(resolved, gitRoot) : null;
+    if (gitFiles !== null) {
+      for (const item of gitFiles) {
+        if (!accountFile(item)) break;
+      }
+      continue;
+    }
+    for (const frame of deps.walk(resolved, recordWalkError)) {
+      let currentRelative;
+      try {
+        currentRelative = relativePartsOrThrow(resolveLikePython(frame.dirpath), resolvedBaseRoot).join("/");
+      } catch {
+        currentRelative = "";
+      }
+      frame.dirnames = frame.dirnames.filter(
+        (name) => !preflightPathIsSkipped(currentRelative ? `${currentRelative}/${name}` : name, { directory: true })
+      );
+      let stop = false;
+      for (const name of frame.filenames) {
+        if (!accountFile(path17.join(frame.dirpath, name))) {
+          stop = true;
+          break;
+        }
+      }
+      if (stop) break;
+    }
+  }
+  const result = {
+    scope_file_count: fileCount,
+    scope_total_bytes: totalBytes,
+    scope_large_file_count: largeFileCount,
+    scope_binary_like_count: binaryLikeCount,
+    scope_stat_truncated: truncated,
+    scope_url_count: urlCount,
+    scope_missing_paths: missingPaths,
+    scope_unreadable_paths: unreadablePaths,
+    scope_preflight_warning: null
+  };
+  if (fileCount > PREFLIGHT_FILE_THRESHOLD || totalBytes > PREFLIGHT_BYTES_THRESHOLD) {
+    result.scope_preflight_warning = `scope.read \u9884\u4F30 ${fileCount} \u4E2A\u6587\u4EF6\u3001${totalBytes} \u5B57\u8282\uFF0C\u8D85\u51FA\u9884\u8B66\u9608\u503C\uFF08\u6587\u4EF6 ${PREFLIGHT_FILE_THRESHOLD} / \u5B57\u8282 ${PREFLIGHT_BYTES_THRESHOLD}\uFF09\uFF1B\u5EFA\u8BAE\u6309 ops/skills/subagent-fleet-discipline/references/parallel-slicing.md \u7684\u4EA7\u80FD\u89C4\u683C\u62C6\u5206`;
+  }
+  return result;
+}
+var init_scope = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/scope.mjs"() {
+    init_tool_common();
+    init_py();
+    init_constants();
+    init_deps();
+    init_py_utils();
+  }
+});
+
+// ops/tools/pi_worker_resources.mjs
+import { spawn } from "node:child_process";
+import { existsSync as existsSync8, mkdirSync as mkdirSync6, readFileSync as readFileSync9, statSync as statSync10, writeFileSync as writeFileSync4 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import path18 from "node:path";
+import { fileURLToPath as fileURLToPath2, pathToFileURL } from "node:url";
+function configError(code, file, field, message) {
+  return Object.assign(new Error(`${file} ${field}\uFF1A${message}`), { code, file, field });
+}
+function literalLength(key) {
+  return key.replaceAll("*", "").length;
+}
+function matches(value, pattern) {
+  const escaped = pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+  return new RegExp(`^${escaped}$`, "i").test(value);
+}
+function packageJsonName(dir) {
+  const file = path18.join(dir, "package.json");
+  if (!existsSync8(file)) return null;
+  const name = JSON.parse(readFileSync9(file, "utf8")).name;
+  return typeof name === "string" && name.trim() ? name.trim() : null;
+}
+function resourceName(file) {
+  const parts = String(file).replaceAll("\\", "/").split("/").filter(Boolean);
+  const last = parts.length - 1;
+  if (parts[last] === "SKILL.md") return parts[last - 1];
+  const modules = parts.lastIndexOf("node_modules");
+  if (modules >= 0 && modules < last) {
+    return parts[modules + 1].startsWith("@") ? `${parts[modules + 1]}/${parts[modules + 2]}` : parts[modules + 1];
+  }
+  const local = parts.lastIndexOf("local-packages");
+  if (local >= 0 && local < last) {
+    const dir = parts.slice(0, local + 2).join("/");
+    return packageJsonName(/^[A-Za-z]:$/.test(parts[0]) ? dir : `/${dir}`) ?? parts[local + 1];
+  }
+  const extensions = parts.lastIndexOf("extensions");
+  if (extensions >= 0 && extensions === last - 1) return parts[last].replace(/\.[^.]+$/, "");
+  if (extensions >= 0 && extensions < last) return parts[extensions + 1];
+  return parts[last].replace(/\.[^.]+$/, "");
+}
+function loadWorkerResourcesConfig(configPath = WORKER_RESOURCES_CONFIG) {
+  const raw = JSON.parse(readFileSync9(configPath, "utf8"));
+  for (const [key, hint] of Object.entries(REMOVED_KEYS)) {
+    if (raw[key] !== void 0) throw configError("field_removed", configPath, key, `\u5DF2\u5220\u9664\uFF0C${hint}`);
+  }
+  if (raw.version !== 2) throw configError("value_invalid", configPath, "version", "\u5FC5\u987B\u4E3A 2");
+  const config = { configPath };
+  for (const section of SECTIONS) {
+    const entries = raw[section];
+    if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+      throw configError("value_invalid", configPath, section, "\u5FC5\u987B\u5B58\u5728\u4E14\u662F\u5BF9\u8C61\uFF1B\u6CA1\u6709\u6761\u76EE\u65F6\u5199 {}");
+    }
+    for (const [key, entry] of Object.entries(entries)) {
+      const field = `${section}.${key}`;
+      if (section === "tools" && key.includes("*")) throw configError("value_invalid", configPath, field, "\u5DE5\u5177\u53EA\u5199\u5177\u4F53\u540D\u5B57\uFF0C\u4E0D\u652F\u6301 *");
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw configError("value_invalid", configPath, field, "\u5FC5\u987B\u662F\u5BF9\u8C61");
+      const unknown = Object.keys(entry).find((item) => !ENTRY_KEYS[section].includes(item));
+      if (unknown) throw configError("field_unknown", configPath, `${field}.${unknown}`, `\u672A\u77E5\u5B57\u6BB5\uFF1B\u53EF\u7528\u5B57\u6BB5\uFF1A${ENTRY_KEYS[section].join("\u3001")}`);
+      if (!IMPORT_ACCESS.includes(entry.access)) throw configError("value_invalid", configPath, `${field}.access`, `\u5FC5\u987B\u662F ${IMPORT_ACCESS.join(" / ")} \u4E4B\u4E00`);
+      for (const text3 of ["label", "group"]) {
+        if (entry[text3] !== void 0 && typeof entry[text3] !== "string") throw configError("value_invalid", configPath, `${field}.${text3}`, "\u5FC5\u987B\u662F\u5B57\u7B26\u4E32");
+      }
+    }
+    config[section] = entries;
+  }
+  const required = raw.required_tools;
+  if (!Array.isArray(required) || required.some((name) => typeof name !== "string" || !name.trim())) {
+    throw configError("value_invalid", configPath, "required_tools", "\u5FC5\u987B\u662F\u5DE5\u5177\u540D\u6570\u7EC4");
+  }
+  for (const name of required) {
+    if (config.tools[name]?.access === "off") throw configError("value_invalid", configPath, `tools.${name}.access`, "\u8FD0\u884C\u5FC5\u9700\u5DE5\u5177\u4E0D\u80FD\u8BBE\u4E3A off");
+  }
+  config.required_tools = [...required];
+  return config;
+}
+function importEntry(config, section, name) {
+  const hits = Object.keys(config[section]).filter((key) => matches(name, key));
+  if (!hits.length) return null;
+  const rank2 = (key) => key.includes("*") ? literalLength(key) : Number.POSITIVE_INFINITY;
+  const best = Math.max(...hits.map(rank2));
+  const top = hits.filter((key) => rank2(key) === best);
+  if (top.length > 1) {
+    throw configError("value_invalid", config.configPath, section, `${name} \u540C\u65F6\u5339\u914D ${top.join("\u3001")}\uFF1B\u5220\u53BB\u91CD\u590D\u6216\u5199\u51FA\u66F4\u5177\u4F53\u7684\u952E`);
+  }
+  return { key: top[0], ...config[section][top[0]] };
+}
+function accessOf(config, section, name) {
+  if (section === "tools" && config.required_tools.includes(name)) return "default_on";
+  return importEntry(config, section, name)?.access ?? "off";
+}
+async function discoverWorkerResources({
+  cwd = process.cwd(),
+  agentDir = process.env.PI_CODING_AGENT_DIR || path18.join(homedir3(), ".pi", "agent"),
+  piCli = PI_CLI
+} = {}) {
+  const { DefaultPackageManager, SettingsManager } = await import(pathToFileURL(path18.join(path18.dirname(piCli), "index.js")).href);
+  const settingsPath = path18.join(agentDir, "settings.json");
+  const settings = existsSync8(settingsPath) ? JSON.parse(readFileSync9(settingsPath, "utf8")) : {};
+  const manager = new DefaultPackageManager({ cwd, agentDir, settingsManager: SettingsManager.inMemory(settings) });
+  const missing = [];
+  const resolved = await manager.resolve(async (source) => {
+    missing.push(source);
+    return "skip";
+  });
+  const enabled = (type) => (resolved[type] || []).filter((item) => item.enabled && ["user", "project"].includes(item.metadata?.scope)).map((item) => ({ name: resourceName(item.path), path: item.path, scope: item.metadata.scope }));
+  return { settingsPath, extensions: enabled("extensions"), skills: enabled("skills"), missing };
+}
+function probeRegisteredTools({ extensions, piCli = PI_CLI, cacheFile, cwd = process.cwd() }) {
+  const key = JSON.stringify(["registration-only/v1", path18.resolve(cwd), ...[piCli, ...extensions.map((item) => item.path)].map((file) => [file, existsSync8(file) ? statSync10(file).mtimeMs : 0])]);
+  const cached = existsSync8(cacheFile) ? JSON.parse(readFileSync9(cacheFile, "utf8")) : null;
+  if (cached?.key === key) return Promise.resolve(cached.tools);
+  const id = `${cacheFile}
+${key}`;
+  if (!probes.has(id)) {
+    probes.set(id, runToolProbe(extensions, piCli, cwd).then((tools) => {
+      mkdirSync6(path18.dirname(cacheFile), { recursive: true });
+      writeFileSync4(cacheFile, JSON.stringify({ key, tools }));
+      return tools;
+    }).finally(() => probes.delete(id)));
+  }
+  return probes.get(id);
+}
+function runToolProbe(extensions, piCli, cwd) {
+  const loader = path18.join(path18.dirname(piCli), "core", "extensions", "loader.js");
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["--input-type=module", "-e", PROBE_SCRIPT], {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      env: { ...process.env, PI_TOOL_PROBE_LOADER: loader, PI_TOOL_PROBE_EXTENSIONS: JSON.stringify(extensions.map((item) => item.path)) }
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    const timer = setTimeout(() => child.kill(), PROBE_TIMEOUT_MS);
+    child.on("error", reject);
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        reject(new Error(`Pi \u6269\u5C55\u6CE8\u518C\u63A2\u6D4B\u5931\u8D25\uFF08exit ${code}\uFF09${stderr.trim() ? `\uFF1A${stderr.trim().slice(-400)}` : ""}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout.trim()));
+      } catch (error) {
+        reject(new Error(`Pi \u5DE5\u5177\u6CE8\u518C\u8868\u65E0\u6CD5\u89E3\u6790\uFF1A${error.message}`));
+      }
+    });
+  });
+}
+function catalogEntries(config, section, installed) {
+  const rows = installed.map(({ name, scope }) => {
+    const entry = importEntry(config, section, name);
+    return { key: entry?.key ?? null, name, access: entry?.access ?? "off", label: entry?.label ?? "", installed: true, scope };
+  });
+  for (const [key, entry] of Object.entries(config[section])) {
+    if (!installed.some(({ name }) => matches(name, key))) {
+      rows.push({ key, name: key, access: entry.access, label: entry.label ?? "", installed: false, scope: null });
+    }
+  }
+  return rows;
+}
+async function resolveWorkerResourceCatalog({
+  cwd = process.cwd(),
+  agentDir,
+  configPath = WORKER_RESOURCES_CONFIG,
+  piCli = PI_CLI,
+  toolCache = path18.join(cwd, ".runtime", "cockpit", "worker-tool-probe.json"),
+  probeTools = probeRegisteredTools
+} = {}) {
+  const config = loadWorkerResourcesConfig(configPath);
+  const found = await discoverWorkerResources({ cwd, agentDir, piCli });
+  const diagnostics = found.missing.map((source) => ({ code: "not_installed", file: found.settingsPath, field: "packages", message: `\u5DF2\u914D\u7F6E\u7684 Pi \u8D44\u6E90\u672A\u5B89\u88C5\uFF1A${source}` }));
+  const known = /* @__PURE__ */ new Set([...BUILTIN_TOOLS, ...RUNNER_TOOLS]);
+  try {
+    for (const name of await probeTools({ extensions: found.extensions, piCli, cacheFile: toolCache, cwd })) known.add(name);
+  } catch (error) {
+    diagnostics.push({ code: "tool_probe_failed", file: found.settingsPath, field: "extensions", message: `\u8BFB\u53D6\u5DF2\u88C5\u63D2\u4EF6\u6CE8\u518C\u7684\u5DE5\u5177\u5931\u8D25\uFF0C\u5DE5\u5177\u8868\u53EA\u542B\u5185\u7F6E\u5DE5\u5177\uFF1A${error.message}` });
+  }
+  const toolNames = [.../* @__PURE__ */ new Set([...known, ...Object.keys(config.tools), ...config.required_tools])].sort();
+  return {
+    configPath,
+    settingsPath: found.settingsPath,
+    tools: toolNames.map((name) => {
+      const entry = config.tools[name];
+      return {
+        key: entry ? name : null,
+        name,
+        access: accessOf(config, "tools", name),
+        label: entry?.label ?? "",
+        group: entry?.group ?? "",
+        installed: known.has(name) || config.required_tools.includes(name)
+      };
+    }),
+    extensions: catalogEntries(config, "extensions", found.extensions),
+    skills: catalogEntries(config, "skills", found.skills.filter((item) => item.scope === "user")),
+    project_skills: found.skills.filter((item) => item.scope === "project").map(({ name, scope }) => ({ name, scope })),
+    required_tools: config.required_tools,
+    diagnostics
+  };
+}
+var WORKER_RESOURCES_CONFIG, IMPORT_ACCESS, BUILTIN_TOOLS, RUNNER_TOOLS, PI_CLI, PROBE_TIMEOUT_MS, PROBE_SCRIPT, probes, SECTIONS, ENTRY_KEYS, REMOVED_KEYS;
+var init_pi_worker_resources = __esm({
+  async "ops/tools/pi_worker_resources.mjs"() {
+    WORKER_RESOURCES_CONFIG = path18.resolve(path18.dirname(fileURLToPath2(import.meta.url)), "../templates/worker-resources.json");
+    IMPORT_ACCESS = Object.freeze(["off", "optional", "default_on"]);
+    BUILTIN_TOOLS = Object.freeze(["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"]);
+    RUNNER_TOOLS = Object.freeze(["research_search", "research_fetch", "command_job"]);
+    PI_CLI = path18.join(process.env.APPDATA || path18.join(homedir3(), "AppData", "Roaming"), "npm/node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
+    PROBE_TIMEOUT_MS = 6e4;
+    PROBE_SCRIPT = `import { pathToFileURL } from "node:url";
+const { loadExtensions } = await import(pathToFileURL(process.env.PI_TOOL_PROBE_LOADER).href);
+const { extensions, errors } = await loadExtensions(JSON.parse(process.env.PI_TOOL_PROBE_EXTENSIONS), process.cwd());
+if (errors.length) throw new Error(errors.map(({ path, error }) => path + ": " + error).join("; "));
+console.log(JSON.stringify([...new Set(extensions.flatMap((extension) => [...extension.tools.keys()]))]));
+`;
+    probes = /* @__PURE__ */ new Map();
+    SECTIONS = Object.freeze(["tools", "extensions", "skills"]);
+    ENTRY_KEYS = Object.freeze({ tools: ["access", "label", "group"], extensions: ["access", "label"], skills: ["access", "label"] });
+    REMOVED_KEYS = Object.freeze({
+      base_extensions: '\u6539\u5199\u4E3A extensions \u4E2D access = "default_on" \u7684\u6761\u76EE',
+      main_only_extensions: '\u6539\u5199\u4E3A extensions \u4E2D access = "off" \u7684\u6761\u76EE',
+      main_only_skills: '\u6539\u5199\u4E3A skills \u4E2D access = "off" \u7684\u6761\u76EE',
+      force_excluded_tools: '\u6539\u5199\u4E3A tools \u4E2D access = "off" \u7684\u6761\u76EE'
+    });
+    if (path18.basename(process.argv[1] || "") === "pi_worker_resources.mjs") {
+      if (process.argv.slice(2).some((arg) => arg !== "--json")) {
+        console.error("Usage: node ops/tools/pi_worker_resources.mjs --json");
+        process.exitCode = 2;
+      } else {
+        try {
+          console.log(JSON.stringify(await resolveWorkerResourceCatalog(), null, 2));
+        } catch (error) {
+          console.error(error.message);
+          process.exitCode = 1;
+        }
+      }
+    }
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/worker.mjs
 function agentConfigEntryImpl(agentType) {
   return loadRoleConfig(agentType);
 }
-function piChildCatalogCommandImpl() {
-  const configured = pyStrip(String(process7.env.PI_CONTROL_PI || ""));
-  if (configured) {
-    const suffix = path14.extname(configured).toLowerCase();
-    if ([".js", ".mjs", ".cjs"].includes(suffix)) {
-      const node = shutilWhich("node");
-      return node ? [node, configured] : [];
-    }
-    return [configured];
+var init_worker = __esm({
+  async "ops/tools/dispatch-core/dispatch-prepare/worker.mjs"() {
+    init_tool_common();
+    init_py();
+    init_model_selection();
+    init_seed_minimal();
+    init_task_package_profiles();
+    await init_pi_worker_resources();
+    init_deps();
   }
-  let executable = process7.platform === "win32" ? shutilWhich("pi.cmd") : shutilWhich("pi");
-  if (!executable && process7.platform === "win32") executable = shutilWhich("pi");
-  return executable ? [executable] : [];
-}
-function piChildCatalogCommand() {
-  return deps.piChildCatalogCommand();
-}
-function piChildModelExtensionProfileImpl() {
-  if (pyStrip(String(process7.env.PI_CONTROL_PI || ""))) {
-    return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions: [], error: null };
+});
+
+// ops/tools/dispatch-core/subagent_preload.mjs
+var REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET;
+var init_subagent_preload = __esm({
+  "ops/tools/dispatch-core/subagent_preload.mjs"() {
+    init_tool_common();
+    init_py();
+    REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET = 2e5 * 4;
   }
-  let extensions;
-  try {
-    extensions = resolvePiChildModelExtensions();
-  } catch (error) {
-    return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions: [], error: pySlice(String(error?.message ?? error), 500) };
-  }
-  if (!extensions.every((item) => typeof item === "string" && isAbsoluteLikePython(item) && isFile3(item))) {
-    return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions: [], error: "model extension profile returned invalid paths" };
-  }
-  return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions, error: null };
-}
-function piChildModelExtensionProfile() {
-  if (!caches.piChildModelExtensionProfile.has("value")) {
-    caches.piChildModelExtensionProfile.set("value", deps.piChildModelExtensionProfile());
-  }
-  return caches.piChildModelExtensionProfile.get("value");
-}
-function probePiChildModelCatalogUncachedImpl(targetCwd) {
-  const command = piChildCatalogCommand();
-  const extensionProfile = piChildModelExtensionProfile();
-  if (!command.length || pyTruthy(extensionProfile.error)) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: "pi --list-models (child model profile)",
-      error: pyTruthy(extensionProfile.error) ? extensionProfile.error : "Pi executable not found"
-    };
-  }
-  const argv = [...command.slice(1), "-ne", "-ns", "-np", "--no-themes", "-nc", "--no-approve"];
-  for (const extensionPath of extensionProfile.extensions) argv.push("-e", extensionPath);
-  argv.push("--list-models");
-  const completed = pySpawnSync(command[0], argv, {
-    cwd: String(targetCwd),
-    encoding: "utf8",
-    timeout: 3e4,
-    windowsHide: true,
-    maxBuffer: 64 * 1024 * 1024
-  });
-  if (completed.error) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: pySlice(String(completed.error.message ?? completed.error), 500)
-    };
-  }
-  const stdout = String(completed.stdout ?? "");
-  const stderr = String(completed.stderr ?? "");
-  if (completed.status !== 0) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: pySlice(pyStrip(stderr || stdout), 500)
-    };
-  }
-  const models = /* @__PURE__ */ new Set();
-  const details = {};
-  for (const line of pySplitLines(stdout)) {
-    const columns = line.split(PY_SPLIT_RE).filter((item) => item !== "");
-    if (columns.length < 2 || columns[0].toLowerCase() === "provider") continue;
-    const provider = pyStrip(columns[0]);
-    const modelId = pyStrip(columns[1]);
-    if (!provider || !modelId) continue;
-    const key = `${provider}/${modelId}`;
-    models.add(key);
-    const images = columns.length >= 6 ? pyStrip(columns[5]).toLowerCase() : "";
-    details[key] = {
-      context_window: columns.length >= 3 ? pyStrip(columns[2]) || null : null,
-      supports_vision: images === "yes" ? true : images === "no" ? false : null
-    };
-  }
-  if (!models.size) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: "Pi returned no parseable child models"
-    };
-  }
-  const ordered = sortedStrings(models);
-  return {
-    status: "ok",
-    models: ordered,
-    model_details: Object.fromEntries(ordered.map((key) => [key, details[key]])),
-    model_count: ordered.length,
-    source: `pi --list-models (${extensionProfile.profile})`,
-    error: null
-  };
-}
-function piChildCatalogCacheIdentity(targetCwd) {
-  const command = piChildCatalogCommand();
-  const extensionProfile = piChildModelExtensionProfile();
-  const extensions = Array.isArray(extensionProfile.extensions) ? extensionProfile.extensions : [];
-  const agentDir = resolvePiAgentDir();
-  const configPaths = [
-    ...extensions,
-    ...CHILD_CATALOG_CONFIG_SURFACE.map((name) => path14.join(agentDir, ...String(name).split("/")))
-  ];
-  return {
-    schema: CATALOG_CACHE_SCHEMA,
-    platform: process7.platform,
-    pi_control_pi: pyStrip(String(process7.env.PI_CONTROL_PI || "")),
-    command,
-    extension_profile: {
-      profile: extensionProfile.profile,
-      extensions,
-      error: extensionProfile.error ?? null
-    },
-    config_fingerprints: fingerprintPaths(configPaths),
-    target_cwd: String(targetCwd)
-  };
-}
-function piChildCatalogCacheFile() {
-  const override = pyStrip(String(process7.env.SUBAGENT_CATALOG_CACHE_DIR || ""));
-  const cacheDir = override ? resolveLikePython(override) : path14.join(ROOT, ".runtime", "cockpit", "cache");
-  return path14.join(cacheDir, CATALOG_CACHE_FILE_NAME);
-}
-function childCatalogFileLayerEnabled() {
-  return deps.probePiChildModelCatalogUncached === probePiChildModelCatalogUncachedImpl;
-}
-function rememberChildCatalog(key, value) {
-  caches.childModelCatalog.set(key, value);
-  while (caches.childModelCatalog.size > 8) {
-    caches.childModelCatalog.delete(caches.childModelCatalog.keys().next().value);
-  }
-  return value;
-}
-function probePiChildModelCatalogFresh(key, { cacheWrite = false } = {}) {
-  let identityBefore = null;
-  if (cacheWrite && childCatalogFileLayerEnabled()) {
-    try {
-      identityBefore = piChildCatalogCacheIdentity(key);
-    } catch {
-    }
-  }
-  const value = deps.probePiChildModelCatalogUncached(key);
-  rememberChildCatalog(key, value);
-  if (identityBefore && value?.status === "ok") {
-    try {
-      const identity = piChildCatalogCacheIdentity(key);
-      if (catalogCacheKey(identityBefore) === catalogCacheKey(identity)) {
-        writeCatalogCacheEntry(piChildCatalogCacheFile(), catalogCacheKey(identity), identity, value);
-      }
-    } catch {
-    }
-  }
-  return value;
-}
-function probePiChildModelCatalogImpl(targetCwd, options = {}) {
-  const key = String(targetCwd);
-  if (caches.childModelCatalog.has(key)) {
-    const value = caches.childModelCatalog.get(key);
-    caches.childModelCatalog.delete(key);
-    caches.childModelCatalog.set(key, value);
-    return value;
-  }
-  if (childCatalogFileLayerEnabled()) {
-    let cached = null;
-    try {
-      const identity = piChildCatalogCacheIdentity(key);
-      cached = readCatalogCacheEntry(piChildCatalogCacheFile(), catalogCacheKey(identity));
-    } catch {
-      cached = null;
-    }
-    if (cached) {
-      cacheServedCatalogs.add(cached.catalog);
-      return rememberChildCatalog(key, cached.catalog);
-    }
-  }
-  return probePiChildModelCatalogFresh(key, options);
-}
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/runtime.mjs
 function resolveFromPicks(agentType, capability, options = {}) {
   const selection = resolveSelection(loadSelectionConfig(modelConfigSources()), {
     role: agentType,
@@ -6588,57 +6753,107 @@ function resolveRoleModelSelection(agentTypeRaw, modelOverride, effortOverride, 
     authorization: options.authorization
   });
 }
-var PREFLIGHT_FILE_THRESHOLD, PREFLIGHT_BYTES_THRESHOLD, PREFLIGHT_LARGE_FILE_BYTES, PREFLIGHT_WALK_SKIP_DIRS, PREFLIGHT_WALK_SKIP_PATHS, PREFLIGHT_GIT_TIMEOUT_SECONDS, PREFLIGHT_STAT_FILE_CAP, PREFLIGHT_BINARY_LIKE_EXTENSIONS, ASYNC_MCP_SERVER_NAME, ASYNC_DISPATCH_CONTRACT_VERSION, PROJECT_ASYNC_TASK_ROOT, deps, caches, PY_SPLIT_RE, CHILD_CATALOG_CONFIG_SURFACE, cacheServedCatalogs;
-var init_dispatch_prepare = __esm({
-  async "ops/tools/dispatch-core/dispatch_prepare.mjs"() {
+var init_runtime = __esm({
+  async "ops/tools/dispatch-core/dispatch-prepare/runtime.mjs"() {
     init_tool_common();
     init_py();
-    init_dist();
-    init_model_catalog_cache();
+    init_model_selection();
+    init_review_evidence();
+    init_task_package_build();
+    init_catalog();
+    init_constants();
+    init_py_utils();
+    await init_worker();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/batch-meta.mjs
+var init_batch_meta = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/batch-meta.mjs"() {
+    init_tool_common();
+    init_py();
+    init_py_utils();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/prepare-async.mjs
+var init_prepare_async = __esm({
+  async "ops/tools/dispatch-core/dispatch-prepare/prepare-async.mjs"() {
+    init_tool_common();
+    init_py();
+    init_review_evidence();
+    init_subagent_preload();
+    init_batch_meta();
+    init_constants();
+    init_delivery();
+    init_deps();
+    init_py_utils();
+    init_seed();
+    await init_runtime();
+    init_state();
+    await init_worker();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/dispatch-run.mjs
+var init_dispatch_run = __esm({
+  async "ops/tools/dispatch-core/dispatch-prepare/dispatch-run.mjs"() {
     init_agent_panel_launcher();
-    init_prepared_dispatch();
+    init_model_selection();
+    init_py();
     init_review_evidence();
     init_seed_minimal();
     init_subagent_preload();
     init_task_package_build();
+    init_tool_common();
+    await init_pi_worker_resources();
+    init_batch_meta();
+    init_deps();
+    init_delivery();
+    await init_prepare_async();
+    init_py_utils();
+    await init_runtime();
+    init_seed();
+    init_scope();
+    init_state();
+    await init_worker();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch_prepare.mjs
+var init_dispatch_prepare = __esm({
+  async "ops/tools/dispatch-core/dispatch_prepare.mjs"() {
+    init_agent_panel_launcher();
+    init_prepared_dispatch();
+    init_review_evidence();
+    init_catalog();
+    init_delivery();
+    init_deps();
+    init_server();
+    init_scope();
+    await init_worker();
+    init_task_package_build();
+    init_prepared_dispatch();
+    init_review_evidence();
+    init_tool_common();
+    init_seed_minimal();
+    init_subagent_preload();
     init_task_package_lint();
     init_task_package_profiles();
-    init_pi_model_extension_profile();
-    init_model_selection();
-    await init_pi_worker_resources();
-    PREFLIGHT_FILE_THRESHOLD = 400;
-    PREFLIGHT_BYTES_THRESHOLD = 10 * 1024 * 1024;
-    PREFLIGHT_LARGE_FILE_BYTES = 2 * 1024 * 1024;
-    PREFLIGHT_WALK_SKIP_DIRS = /* @__PURE__ */ new Set([".git", ".runtime", "node_modules", "__pycache__", "tmp"]);
-    PREFLIGHT_WALK_SKIP_PATHS = [["ops", "dist"]];
-    PREFLIGHT_GIT_TIMEOUT_SECONDS = 15;
-    PREFLIGHT_STAT_FILE_CAP = 2e4;
-    PREFLIGHT_BINARY_LIKE_EXTENSIONS = /* @__PURE__ */ new Set([
-      ".png",
-      ".jpg",
-      ".jpeg",
-      ".gif",
-      ".pdf",
-      ".zip",
-      ".7z",
-      ".dwg",
-      ".dxf",
-      ".step",
-      ".stp",
-      ".iges",
-      ".igs",
-      ".exe",
-      ".dll",
-      ".bin",
-      ".dat",
-      ".mp4",
-      ".avi"
-    ]);
-    ASYNC_MCP_SERVER_NAME = "asyncSubagent";
-    ASYNC_DISPATCH_CONTRACT_VERSION = DISPATCH_CONTRACT_VERSION;
-    PROJECT_ASYNC_TASK_ROOT = path14.join(ROOT, ".runtime", "cockpit", "async_tasks");
-    deps = {
-      // Python GLOBAL_CONFIG_PATH（Path | None）
+    init_constants();
+    init_state();
+    init_server();
+    init_scope();
+    init_seed();
+    init_delivery();
+    await init_worker();
+    init_catalog();
+    await init_runtime();
+    await init_prepare_async();
+    init_batch_meta();
+    await init_dispatch_run();
+    init_py_utils();
+    Object.assign(deps, {
       globalConfigPath: null,
       ensureAgentPanel,
       walk: walkDir,
@@ -6655,22 +6870,7 @@ var init_dispatch_prepare = __esm({
       compilePreparedDispatch,
       verifyPreparedDispatch,
       attachReviewEvidence
-    };
-    caches = {
-      asyncSubagentServer: /* @__PURE__ */ new Map(),
-      asyncSubagentEndpoint: /* @__PURE__ */ new Map(),
-      asyncSubagentReadiness: /* @__PURE__ */ new Map(),
-      piChildModelExtensionProfile: /* @__PURE__ */ new Map(),
-      childModelCatalog: /* @__PURE__ */ new Map()
-    };
-    PY_SPLIT_RE = new RegExp(`[${PY_SPACE_CLASS}]+`);
-    CHILD_CATALOG_CONFIG_SURFACE = Object.freeze([
-      "models.json",
-      "models-store.json",
-      "settings.json",
-      "npm/package.json"
-    ]);
-    cacheServedCatalogs = /* @__PURE__ */ new WeakSet();
+    });
   }
 });
 
@@ -7049,7 +7249,7 @@ __export(fleet_manifest_check_exports, {
   validateManifest: () => validateManifest,
   writeScopesConflict: () => writeScopesConflict
 });
-import path15 from "node:path";
+import path19 from "node:path";
 function compareCodePoints3(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
@@ -7068,7 +7268,7 @@ function deepCopy3(value) {
 }
 function purePathParts(value) {
   const raw = String(value);
-  const root = path15.parse(raw).root;
+  const root = path19.parse(raw).root;
   const rest = raw.slice(root.length).split(/[\\/]+/).filter((part) => part && part !== ".");
   return root ? [root, ...rest] : rest;
 }
@@ -8118,15 +8318,15 @@ var init_fleet_manifest_check = __esm({
 init_tool_common();
 await init_fleet_manifest_check();
 await init_fleet_manifest_check_selftest();
-import process8 from "node:process";
+import process10 from "node:process";
 var PROGRAM = "fleet_manifest_check.mjs";
 var USAGE = `usage: ${PROGRAM} [-h] [--manifest MANIFEST | --schema | --example | --self-test]
                                [--format {text,json}]`;
 function argparseError(message) {
-  process8.stderr.write(`${USAGE}
+  process10.stderr.write(`${USAGE}
 ${PROGRAM}: error: ${message}
 `);
-  process8.exit(2);
+  process10.exit(2);
 }
 function parseArgs(argv) {
   const args = { manifest: null, schema: false, example: false, self_test: false, format: "text" };
@@ -8138,11 +8338,11 @@ function parseArgs(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const token = String(argv[index]);
     if (token === "-h" || token === "--help") {
-      process8.stdout.write(`${USAGE}
+      process10.stdout.write(`${USAGE}
 
 Validate a fleet dispatch manifest before any subagent is submitted.
 `);
-      process8.exit(0);
+      process10.exit(0);
     }
     const eq = token.indexOf("=");
     const name = token.startsWith("--") && eq > 0 ? token.slice(0, eq) : token;
@@ -8175,19 +8375,19 @@ Validate a fleet dispatch manifest before any subagent is submitted.
   }
   return args;
 }
-function jsonDumpsIndent2(value) {
+function jsonDumpsIndent22(value) {
   return JSON.stringify(value, null, 2);
 }
 function main() {
-  const args = parseArgs(process8.argv.slice(2));
+  const args = parseArgs(process10.argv.slice(2));
   try {
     if (args.schema) {
       const data2 = manifestSchema();
-      return emit(data2, args.format, jsonDumpsIndent2(data2));
+      return emit(data2, args.format, jsonDumpsIndent22(data2));
     }
     if (args.example) {
       const data2 = exampleManifest();
-      return emit(data2, args.format, jsonDumpsIndent2(data2));
+      return emit(data2, args.format, jsonDumpsIndent22(data2));
     }
     if (args.self_test) {
       const data2 = selfTest();
@@ -8207,4 +8407,4 @@ ${data.errors.map((item) => `- ${item}`).join("\n")}`;
     return emit({ status: "failed", error: String(error.message) }, args.format, `failed: ${error.message}`);
   }
 }
-process8.exitCode = main();
+process10.exitCode = main();

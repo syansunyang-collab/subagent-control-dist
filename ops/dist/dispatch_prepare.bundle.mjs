@@ -1832,136 +1832,17 @@ var init_py = __esm({
   }
 });
 
-// ops/tools/dispatch-core/model_catalog_cache.mjs
-import { mkdirSync as mkdirSync2, readFileSync as readFileSync4, renameSync as renameSync2, rmSync, statSync as statSync3, writeFileSync } from "node:fs";
-import { createHash as createHash2, randomBytes } from "node:crypto";
-import path4 from "node:path";
-function canonicalJson2(value) {
-  return JSON.stringify(value, (_key, item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return item;
-    return Object.fromEntries(Object.keys(item).sort().map((key) => [key, item[key]]));
-  });
-}
-function catalogCacheKey(identity) {
-  return createHash2("sha256").update(canonicalJson2(identity), "utf8").digest("hex");
-}
-function statOrNull(target) {
-  try {
-    return statSync3(target);
-  } catch {
-    return null;
-  }
-}
-function fingerprintPaths(paths) {
-  const seen = /* @__PURE__ */ new Set();
-  const fingerprints = [];
-  for (const raw of paths) {
-    const target = String(raw ?? "");
-    if (!target || seen.has(target)) continue;
-    seen.add(target);
-    const stat = statOrNull(target);
-    fingerprints.push({
-      path: target,
-      exists: Boolean(stat),
-      size: stat ? stat.size : null,
-      mtime_ms: stat ? Math.trunc(stat.mtimeMs) : null
-    });
-  }
-  return fingerprints;
-}
-function readPayload(cacheFile) {
-  let text3;
-  try {
-    text3 = readFileSync4(cacheFile, "utf8");
-  } catch {
-    return { entries: [] };
-  }
-  let payload;
-  try {
-    payload = JSON.parse(text3);
-  } catch {
-    return { entries: [] };
-  }
-  if (!payload || typeof payload !== "object" || payload.schema !== CATALOG_CACHE_SCHEMA) return { entries: [] };
-  if (!Array.isArray(payload.entries)) return { entries: [] };
-  return {
-    entries: payload.entries.filter((entry) => entry && typeof entry === "object" && typeof entry.key === "string")
-  };
-}
-function readCatalogCacheEntry(cacheFile, key, { now = Date.now() } = {}) {
-  const entry = readPayload(cacheFile).entries.find((item) => item.key === key);
-  if (!entry) return null;
-  if (entry.status !== "ok") return null;
-  const models = Array.isArray(entry.models) ? entry.models.filter((item) => typeof item === "string" && item) : [];
-  if (!models.length) return null;
-  const storedAt = Number(entry.stored_at_ms);
-  if (!Number.isFinite(storedAt)) return null;
-  const age = now - storedAt;
-  if (age < 0 || age > CATALOG_CACHE_TTL_MS) return null;
-  const details = entry.model_details && typeof entry.model_details === "object" && !Array.isArray(entry.model_details) ? entry.model_details : {};
-  return {
-    stored_at_ms: storedAt,
-    identity: entry.identity ?? null,
-    catalog: {
-      status: "ok",
-      models,
-      model_details: details,
-      model_count: models.length,
-      source: typeof entry.source === "string" ? entry.source : "",
-      error: null
-    }
-  };
-}
-function writeCatalogCacheEntry(cacheFile, key, identity, catalog, { now = Date.now() } = {}) {
-  try {
-    if (catalog?.status !== "ok") return false;
-    const models = Array.isArray(catalog.models) ? catalog.models.filter((item) => typeof item === "string" && item) : [];
-    if (!models.length) return false;
-    const entry = {
-      key,
-      status: "ok",
-      stored_at_ms: now,
-      identity,
-      models,
-      model_details: catalog.model_details && typeof catalog.model_details === "object" && !Array.isArray(catalog.model_details) ? catalog.model_details : {},
-      source: typeof catalog.source === "string" ? catalog.source : ""
-    };
-    const entries = [entry, ...readPayload(cacheFile).entries.filter((item) => item.key !== key)].slice(0, CATALOG_CACHE_MAX_ENTRIES);
-    mkdirSync2(path4.dirname(cacheFile), { recursive: true });
-    const tmp = `${cacheFile}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
-    try {
-      writeFileSync(tmp, `${JSON.stringify({ schema: CATALOG_CACHE_SCHEMA, entries }, null, 2)}
-`, "utf8");
-      renameSync2(tmp, cacheFile);
-    } finally {
-      rmSync(tmp, { force: true });
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-var CATALOG_CACHE_SCHEMA, CATALOG_CACHE_TTL_MS, CATALOG_CACHE_FILE_NAME, CATALOG_CACHE_MAX_ENTRIES;
-var init_model_catalog_cache = __esm({
-  "ops/tools/dispatch-core/model_catalog_cache.mjs"() {
-    CATALOG_CACHE_SCHEMA = 1;
-    CATALOG_CACHE_TTL_MS = 60 * 1e3;
-    CATALOG_CACHE_FILE_NAME = "pi-child-model-catalog.json";
-    CATALOG_CACHE_MAX_ENTRIES = 8;
-  }
-});
-
 // ops/tools/dispatch-core/agent_panel_launcher.mjs
-import { createHash as createHash3 } from "node:crypto";
-import { closeSync as closeSync2, mkdirSync as mkdirSync3, openSync as openSync2, readdirSync, readFileSync as readFileSync5, renameSync as renameSync3, rmSync as rmSync2, statSync as statSync4, writeFileSync as writeFileSync2, writeSync as writeSync2 } from "node:fs";
+import { createHash as createHash2 } from "node:crypto";
+import { closeSync as closeSync2, mkdirSync as mkdirSync2, openSync as openSync2, readdirSync, readFileSync as readFileSync4, renameSync as renameSync2, rmSync, statSync as statSync3, writeFileSync, writeSync as writeSync2 } from "node:fs";
 import net from "node:net";
-import path5 from "node:path";
+import path4 from "node:path";
 import { homedir } from "node:os";
 import process5 from "node:process";
 import { spawn as spawnChild, spawnSync as spawnSync3 } from "node:child_process";
 function releasedPanelAssetRoot() {
   try {
-    return JSON.parse(readFileSync5(path5.join(PANEL_STATE_ROOT, "runtime-root.json"), "utf8")).root;
+    return JSON.parse(readFileSync4(path4.join(PANEL_STATE_ROOT, "runtime-root.json"), "utf8")).root;
   } catch {
     return void 0;
   }
@@ -1978,7 +1859,7 @@ function filled(value) {
 }
 function isFile2(target) {
   try {
-    return statSync4(target).isFile();
+    return statSync3(target).isFile();
   } catch {
     return false;
   }
@@ -2046,18 +1927,18 @@ function utcNow2() {
 }
 function readJson(file) {
   try {
-    const value = JSON.parse(readFileSync5(file, "utf8"));
+    const value = JSON.parse(readFileSync4(file, "utf8"));
     return isRecord(value) ? value : {};
   } catch {
     return {};
   }
 }
 function writeJson(file, value) {
-  mkdirSync3(path5.dirname(file), { recursive: true });
+  mkdirSync2(path4.dirname(file), { recursive: true });
   const temp = `${file}.tmp`;
-  writeFileSync2(temp, `${JSON.stringify(value, null, 2)}
+  writeFileSync(temp, `${JSON.stringify(value, null, 2)}
 `, "utf8");
-  renameSync3(temp, file);
+  renameSync2(temp, file);
   return null;
 }
 function normalizeIdentityPath(value) {
@@ -2065,7 +1946,7 @@ function normalizeIdentityPath(value) {
   return process5.platform === "win32" ? text3.toLowerCase() : text3;
 }
 function deriveEndpoint(panelRoot = PANEL_ROOT, controlRoot = MONITOR_ROOT) {
-  const panelDigest = createHash3("sha256").update(normalizeIdentityPath(panelRoot), "utf8").digest();
+  const panelDigest = createHash2("sha256").update(normalizeIdentityPath(panelRoot), "utf8").digest();
   const port = PORT_BASE + panelDigest.readUInt16BE(0) % PORT_SPAN;
   return {
     port,
@@ -2077,8 +1958,8 @@ function deriveEndpoint(panelRoot = PANEL_ROOT, controlRoot = MONITOR_ROOT) {
 function rememberProject({ deps: deps3 } = {}) {
   const resolved = resolveDeps(deps3);
   const root = resolveLikePython(resolved.paths.controlRoot);
-  const key = createHash3("sha256").update(normalizeIdentityPath(root)).digest("hex");
-  resolved.writeJson(path5.join(resolved.paths.runtimeRoot, "projects", `${key}.json`), { project_root: root });
+  const key = createHash2("sha256").update(normalizeIdentityPath(root)).digest("hex");
+  resolved.writeJson(path4.join(resolved.paths.runtimeRoot, "projects", `${key}.json`), { project_root: root });
 }
 function portIsFree(port) {
   return new Promise((resolve) => {
@@ -2147,7 +2028,7 @@ function buildRunning({ deps: deps3 } = {}) {
 }
 function runtimeBuildId({ deps: deps3 } = {}) {
   const resolved = resolveDeps(deps3);
-  return resolved.readJson(path5.join(resolved.paths.assetRoot, "ops", "dist", "subagent_service.manifest.json")).build_id ?? null;
+  return resolved.readJson(path4.join(resolved.paths.assetRoot, "ops", "dist", "subagent_service.manifest.json")).build_id ?? null;
 }
 function validManifest({ deps: deps3 } = {}) {
   const resolved = resolveDeps(deps3);
@@ -2213,12 +2094,15 @@ function killProcessTree(pid) {
   if (process5.platform === "win32") spawnSync3("taskkill", ["/F", "/T", "/PID", String(pid)], { windowsHide: true });
   else process5.kill(pid, "SIGTERM");
 }
-async function stopStalePanel(resolved, health, port) {
-  const previous = health.runtime_build_id;
-  const current = runtimeBuildId({ deps: resolved });
-  if (!previous || !current || previous === current) return null;
+async function stopStalePanel(resolved) {
   const shell = resolved.runningShell();
-  if (filled(shell)) resolved.killProcessTree(shell.pid);
+  if (!filled(shell) || !shell.url) return null;
+  const port = Number(new URL(shell.url).port);
+  const health = await resolved.probeHealth(port);
+  const previous = health?.runtime_build_id;
+  const current = runtimeBuildId({ deps: resolved });
+  if (!previous || !current || previous === current || health.shell_pid !== shell.pid) return null;
+  resolved.killProcessTree(shell.pid);
   const deadline = Date.now() + PANEL_STOP_TIMEOUT_MS;
   while (!await resolved.portIsFree(port)) {
     if (Date.now() > deadline) throw pyError("RuntimeError", `\u65E7\u9762\u677F\uFF08\u6784\u5EFA ${previous}\uFF09\u672A\u9000\u51FA\uFF0C\u672A\u542F\u52A8\u5F53\u524D\u6784\u5EFA`);
@@ -2233,13 +2117,12 @@ async function ensureAgentPanel({ deps: deps3, replaceStaleBuild = false } = {})
       throw pyError("RuntimeError", `Agent Panel shell project is missing: ${resolved.paths.projectFile}`);
     }
     resolved.rememberProject();
+    const replaced = replaceStaleBuild ? await stopStalePanel(resolved) : null;
     const endpoint = await resolved.allocateEndpoint();
     const manifest = resolved.validManifest();
     const health = await resolved.probeHealth(Number(pyGetItem(endpoint, "port")));
-    const ours = resolved.isOurPanel(health, endpoint);
-    const replaced = ours && replaceStaleBuild ? await stopStalePanel(resolved, health, Number(pyGetItem(endpoint, "port"))) : null;
-    if (ours && !replaced) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
-    const shell = replaced ? {} : resolved.runningShell();
+    if (resolved.isOurPanel(health, endpoint)) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
+    const shell = resolved.runningShell();
     if (filled(shell)) return { status: "starting", pid: shell.pid, ...endpoint };
     let launched;
     if (filled(manifest)) launched = resolved.startShell(String(pyGetItem(manifest, "executable")), endpoint);
@@ -2252,16 +2135,16 @@ async function ensureAgentPanel({ deps: deps3, replaceStaleBuild = false } = {})
 }
 function acquireBuildLock({ deps: deps3 } = {}) {
   const resolved = resolveDeps(deps3);
-  mkdirSync3(resolved.paths.runtimeRoot, { recursive: true });
+  mkdirSync2(resolved.paths.runtimeRoot, { recursive: true });
   try {
     return openSync2(resolved.paths.buildLockPath, "wx");
   } catch (error) {
     if (error?.code !== "EEXIST") throw error;
   }
   try {
-    const stale = Date.now() / 1e3 - statSync4(resolved.paths.buildLockPath).mtimeMs / 1e3;
+    const stale = Date.now() / 1e3 - statSync3(resolved.paths.buildLockPath).mtimeMs / 1e3;
     if (stale > STILL_ACTIVE_LOCK_STALE_SECONDS && !resolved.buildRunning()) {
-      rmSync2(resolved.paths.buildLockPath, { force: true });
+      rmSync(resolved.paths.buildLockPath, { force: true });
       return openSync2(resolved.paths.buildLockPath, "wx");
     }
   } catch {
@@ -2273,21 +2156,21 @@ var init_agent_panel_launcher = __esm({
   "ops/tools/dispatch-core/agent_panel_launcher.mjs"() {
     init_tool_common();
     init_py();
-    MONITOR_ROOT = path5.resolve(process5.env.SUBAGENT_PROJECT_ROOT || process5.cwd());
-    PANEL_STATE_ROOT = path5.resolve(process5.env.AGENT_PANEL_STATE_ROOT || path5.join(homedir(), ".subagent-control", "agent-panel"));
-    PANEL_ASSET_ROOT = path5.resolve(
-      process5.env.AGENT_PANEL_RUNTIME_ROOT || releasedPanelAssetRoot() || path5.join(homedir(), ".pi", "agent", "extensions", "subagent-control")
+    MONITOR_ROOT = path4.resolve(process5.env.SUBAGENT_PROJECT_ROOT || process5.cwd());
+    PANEL_STATE_ROOT = path4.resolve(process5.env.AGENT_PANEL_STATE_ROOT || path4.join(homedir(), ".subagent-control", "agent-panel"));
+    PANEL_ASSET_ROOT = path4.resolve(
+      process5.env.AGENT_PANEL_RUNTIME_ROOT || releasedPanelAssetRoot() || path4.join(homedir(), ".pi", "agent", "extensions", "subagent-control")
     );
-    PANEL_ROOT = path5.join(PANEL_ASSET_ROOT, "src", "agent-panel");
-    SHELL_ROOT = path5.join(PANEL_ROOT, "shell");
-    PROJECT_FILE = path5.join(SHELL_ROOT, "AgentPanel.Shell.csproj");
+    PANEL_ROOT = path4.join(PANEL_ASSET_ROOT, "src", "agent-panel");
+    SHELL_ROOT = path4.join(PANEL_ROOT, "shell");
+    PROJECT_FILE = path4.join(SHELL_ROOT, "AgentPanel.Shell.csproj");
     RUNTIME_ROOT2 = PANEL_STATE_ROOT;
-    ENDPOINT_PATH = path5.join(RUNTIME_ROOT2, "endpoint.json");
-    MANIFEST_PATH = path5.join(RUNTIME_ROOT2, "build-manifest.json");
-    BUILD_STATE_PATH = path5.join(RUNTIME_ROOT2, "build-state.json");
-    BUILD_LOG_PATH = path5.join(RUNTIME_ROOT2, "last-build.log");
-    BUILD_LOCK_PATH = path5.join(RUNTIME_ROOT2, "build.lock");
-    SHELL_STATE_PATH = path5.join(RUNTIME_ROOT2, "shell-state.json");
+    ENDPOINT_PATH = path4.join(RUNTIME_ROOT2, "endpoint.json");
+    MANIFEST_PATH = path4.join(RUNTIME_ROOT2, "build-manifest.json");
+    BUILD_STATE_PATH = path4.join(RUNTIME_ROOT2, "build-state.json");
+    BUILD_LOG_PATH = path4.join(RUNTIME_ROOT2, "last-build.log");
+    BUILD_LOCK_PATH = path4.join(RUNTIME_ROOT2, "build.lock");
+    SHELL_STATE_PATH = path4.join(RUNTIME_ROOT2, "shell-state.json");
     PORT_BASE = 43e3;
     PORT_SPAN = 1e3;
     DEFAULT_PATHS = Object.freeze({
@@ -2302,7 +2185,7 @@ var init_agent_panel_launcher = __esm({
       buildLogPath: BUILD_LOG_PATH,
       buildLockPath: BUILD_LOCK_PATH,
       shellStatePath: SHELL_STATE_PATH,
-      buildScript: path5.join(PANEL_ASSET_ROOT, "ops", "dist", "agent_panel_launcher.bundle.mjs")
+      buildScript: path4.join(PANEL_ASSET_ROOT, "ops", "dist", "agent_panel_launcher.bundle.mjs")
     });
     STILL_ACTIVE_LOCK_STALE_SECONDS = 600;
     PANEL_STOP_TIMEOUT_MS = 5e3;
@@ -2314,28 +2197,28 @@ import {
   closeSync as closeSync3,
   fstatSync as fstatSync2,
   lstatSync as lstatSync2,
-  mkdirSync as mkdirSync4,
+  mkdirSync as mkdirSync3,
   openSync as openSync3,
-  readFileSync as readFileSync6,
+  readFileSync as readFileSync5,
   readdirSync as readdirSync2,
-  rmSync as rmSync3,
+  rmSync as rmSync2,
   rmdirSync,
-  statSync as statSync5,
+  statSync as statSync4,
   unlinkSync as unlinkSync2
 } from "node:fs";
-import path6 from "node:path";
+import path5 from "node:path";
 function _relativeUnder(root, target) {
-  const relative = path6.relative(root, target);
+  const relative = path5.relative(root, target);
   if (!relative) return [];
-  if (path6.isAbsolute(relative) || relative.split(/[\\/]/)[0] === "..") return null;
+  if (path5.isAbsolute(relative) || relative.split(/[\\/]/)[0] === "..") return null;
   return relative.split(/[\\/]+/).filter(Boolean);
 }
 function _parentsOf(target) {
   const parents = [];
-  let current = path6.dirname(target);
+  let current = path5.dirname(target);
   while (true) {
     parents.push(current);
-    const next = path6.dirname(current);
+    const next = path5.dirname(current);
     if (next === current) break;
     current = next;
   }
@@ -2526,7 +2409,7 @@ function validateAsyncDispatchV2(envelope, { package: pkg = null } = {}) {
   const targetCwd = absolutePath(envelope.target_cwd, "dispatch target_cwd", { error: PreparedDispatchError });
   const taskRoot = absolutePath(envelope.task_root, "dispatch task_root", { error: PreparedDispatchError });
   if (!_isDirectory(targetCwd)) throw new PreparedDispatchError(`dispatch target_cwd does not exist: ${targetCwd}`);
-  const runtimeRoot2 = path6.resolve(path6.join(producerRoot, ".runtime"));
+  const runtimeRoot2 = path5.resolve(path5.join(producerRoot, ".runtime"));
   if (_relativeUnder(runtimeRoot2, taskRoot) === null) {
     throw new PreparedDispatchError("dispatch task_root must stay inside producer_root/.runtime");
   }
@@ -2565,7 +2448,7 @@ function validateAsyncDispatchV2(envelope, { package: pkg = null } = {}) {
 }
 function _isDirectory(target) {
   try {
-    return statSync5(target).isDirectory();
+    return statSync4(target).isDirectory();
   } catch {
     return false;
   }
@@ -2628,7 +2511,7 @@ function _assertNoEscape(target, root, { allowMissingLeaf = false } = {}) {
   if (parts === null) throw new PreparedDispatchError(`path is not under controlled root: ${candidate}`);
   let current = controlledRoot;
   for (const part of parts) {
-    current = path6.join(current, part);
+    current = path5.join(current, part);
     let info;
     try {
       info = lstatSync2(current);
@@ -2649,7 +2532,7 @@ function _controlledParent(producerRoot) {
   const producer = absolutePath(producerRoot, "producer_root", { error: PreparedDispatchError });
   ensureControlledDirectory(producer, { error: PreparedDispatchError });
   _assertNoEscape(producer, producer, { allowMissingLeaf: false });
-  const parent = path6.join(producer, "tmp", "dispatch_prepare", PREPARATION_DIRECTORY_NAME);
+  const parent = path5.join(producer, "tmp", "dispatch_prepare", PREPARATION_DIRECTORY_NAME);
   ensureControlledDirectory(parent, { error: PreparedDispatchError });
   _assertNoEscape(parent, producer, { allowMissingLeaf: false });
   return parent;
@@ -2665,9 +2548,9 @@ function allocatePreparationRoot(producerRoot, { retries = PREPARATION_ALLOCATIO
   const producer = absolutePath(producerRoot, "producer_root", { error: PreparedDispatchError });
   const parent = _controlledParent(producer);
   for (let attempt = 0; attempt < retries; attempt += 1) {
-    const preparation = path6.join(parent, `${PREPARATION_PREFIX}${_preparationHex()}`);
+    const preparation = path5.join(parent, `${PREPARATION_PREFIX}${_preparationHex()}`);
     try {
-      mkdirSync4(preparation, { mode: 448 });
+      mkdirSync3(preparation, { mode: 448 });
     } catch (caught) {
       if (caught?.code === "EEXIST") continue;
       throw caught;
@@ -2740,12 +2623,12 @@ function _pathsWrittenByCallback(materialRoot, callbackResult) {
   const normalized = [];
   for (const value of paths) {
     const candidate = absolutePath(
-      path6.isAbsolute(value) ? value : path6.join(materialRoot, value),
+      path5.isAbsolute(value) ? value : path5.join(materialRoot, value),
       "callback output",
       { error: PreparedDispatchError }
     );
     _assertNoEscape(candidate, materialRoot, { allowMissingLeaf: false });
-    const relative = path6.relative(materialRoot, candidate).replace(/\\/g, "/") || ".";
+    const relative = path5.relative(materialRoot, candidate).replace(/\\/g, "/") || ".";
     if (RESERVED_FILENAMES.includes(relative)) {
       throw new PreparedDispatchError(`callback cannot claim reserved material file: ${relative}`);
     }
@@ -2763,7 +2646,7 @@ function _iterWorkspaceFiles(materialRoot) {
       throw new PreparedDispatchError(`cannot inspect preparation output ${directory}: ${caught.message}`);
     }
     for (const name of entries) {
-      const target = path6.join(directory, name);
+      const target = path5.join(directory, name);
       let info;
       try {
         info = lstatSync2(target);
@@ -2785,7 +2668,7 @@ function _iterWorkspaceFiles(materialRoot) {
 function _assertReservedFilesAbsent(materialRoot, { allowed = [] } = {}) {
   for (const filename of RESERVED_FILENAMES) {
     if (allowed.includes(filename)) continue;
-    const target = path6.join(materialRoot, filename);
+    const target = path5.join(materialRoot, filename);
     try {
       lstatSync2(target);
     } catch (caught) {
@@ -2798,10 +2681,10 @@ function _assertReservedFilesAbsent(materialRoot, { allowed = [] } = {}) {
 function _collectWorkspaceOutputs(materialRoot) {
   const outputs = [];
   for (const target of _iterWorkspaceFiles(materialRoot).sort(_comparePaths)) {
-    if (RESERVED_FILENAMES.includes(path6.basename(target)) && pyNormcase(path6.dirname(target)) === pyNormcase(materialRoot)) {
+    if (RESERVED_FILENAMES.includes(path5.basename(target)) && pyNormcase(path5.dirname(target)) === pyNormcase(materialRoot)) {
       continue;
     }
-    outputs.push(path6.relative(materialRoot, target).replace(/\\/g, "/"));
+    outputs.push(path5.relative(materialRoot, target).replace(/\\/g, "/"));
   }
   return outputs;
 }
@@ -2818,7 +2701,7 @@ function _firstMapping(...candidates) {
 function _pureRelative(root, value) {
   const parts = (text4) => String(text4).replace(/\\/g, "/").split("/").filter((part) => part && part !== ".");
   const text3 = String(value);
-  if (!path6.isAbsolute(text3)) return parts(text3).join("/") || ".";
+  if (!path5.isAbsolute(text3)) return parts(text3).join("/") || ".";
   const target = parts(text3);
   const base = parts(root);
   if (!base.every((part, index) => pyNormcase(part) === pyNormcase(target[index] ?? ""))) return null;
@@ -2919,10 +2802,10 @@ function compilePreparedDispatch(pkg, options = {}) {
     if (finalPackageId !== logicalPackageId) {
       throw new PreparedDispatchError("task_package.package_id changed during preparation");
     }
-    const packageFile = path6.join(materialRoot, PACKAGE_FILENAME);
-    const taskFile = path6.join(materialRoot, TASK_FILENAME);
-    const dispatchFile = path6.join(materialRoot, DISPATCH_FILENAME);
-    const descriptorFile = path6.join(materialRoot, DESCRIPTOR_FILENAME);
+    const packageFile = path5.join(materialRoot, PACKAGE_FILENAME);
+    const taskFile = path5.join(materialRoot, TASK_FILENAME);
+    const dispatchFile = path5.join(materialRoot, DISPATCH_FILENAME);
+    const descriptorFile = path5.join(materialRoot, DESCRIPTOR_FILENAME);
     const packageBytes = canonicalJsonBytes(pkg);
     const frozenPackage = JSON.parse(packageBytes.toString("utf8"));
     _reviewEvidenceContract(frozenPackage);
@@ -3000,7 +2883,7 @@ ${packageText}\`\`\`
     const descriptor = {
       contract_version: DESCRIPTOR_CONTRACT_VERSION,
       state: "prepared",
-      preparation_id: path6.basename(materialRoot),
+      preparation_id: path5.basename(materialRoot),
       dispatch_contract_version: DISPATCH_CONTRACT_VERSION,
       producer_root: String(producer),
       material_root: String(materialRoot),
@@ -3053,7 +2936,7 @@ ${packageText}\`\`\`
   }
 }
 function _assertTaskRootInsideRuntime(taskRoot, producer) {
-  const runtimeRoot2 = path6.join(producer, ".runtime");
+  const runtimeRoot2 = path5.join(producer, ".runtime");
   try {
     if (_relativeUnder(resolveLikePython(runtimeRoot2), taskRoot) === null) {
       throw new PreparedDispatchError("task_root is not relative to producer_root/.runtime");
@@ -3074,7 +2957,7 @@ function _readFile(target, label) {
     fd = openSync3(file, "r");
     const info = fstatSync2(fd);
     if (!info.isFile()) throw new PreparedDispatchError(`${label} is not a regular file: ${file}`);
-    return readFileSync6(fd);
+    return readFileSync5(fd);
   } catch (caught) {
     if (caught instanceof PreparedDispatchError) throw caught;
     throw new PreparedDispatchError(`cannot read ${label}: ${file}`);
@@ -3091,7 +2974,7 @@ function _descriptorPath(value, label) {
   let target;
   if (typeof value === "string" && value.trim()) target = value;
   else throw new PreparedDispatchError(`descriptor.${label} must be a non-empty absolute path`);
-  if (!path6.isAbsolute(target)) {
+  if (!path5.isAbsolute(target)) {
     throw new PreparedDispatchError(`descriptor.${label} must be a non-empty absolute path`);
   }
   return absolutePath(target, `descriptor.${label}`, { error: PreparedDispatchError });
@@ -3103,10 +2986,10 @@ function _validatePackageEvidencePath(pkg, { producerRoot, materialRoot, prepare
   const [, evidenceRef] = _reviewEvidenceContract(pkg);
   if (evidenceRef === null) return;
   let evidencePath = String(evidenceRef.path);
-  if (!path6.isAbsolute(evidencePath)) evidencePath = path6.join(producerRoot, evidencePath);
+  if (!path5.isAbsolute(evidencePath)) evidencePath = path5.join(producerRoot, evidencePath);
   evidencePath = absolutePath(evidencePath, "review evidence", { error: PreparedDispatchError });
   _assertNoEscape(evidencePath, materialRoot, { allowMissingLeaf: false });
-  const evidenceRelative = path6.relative(materialRoot, evidencePath).replace(/\\/g, "/");
+  const evidenceRelative = path5.relative(materialRoot, evidencePath).replace(/\\/g, "/");
   if (!preparedOutputs.includes(evidenceRelative)) {
     throw new PreparedDispatchError("package review_evidence is absent from prepared outputs");
   }
@@ -3218,7 +3101,7 @@ function _verifyPreparedDispatch(descriptorFile) {
   if (descriptor.state !== "prepared") throw new PreparedDispatchError("prepared descriptor state is not prepared");
   const materialRoot = _descriptorPath(descriptor.material_root, "material_root");
   const producerRoot = _descriptorPath(descriptor.producer_root, "producer_root");
-  const expectedRoot = path6.join(
+  const expectedRoot = path5.join(
     producerRoot,
     "tmp",
     "dispatch_prepare",
@@ -3232,7 +3115,7 @@ function _verifyPreparedDispatch(descriptorFile) {
     throw new PreparedDispatchError(`material_root is not a directory: ${materialRoot}`);
   }
   _assertNoEscape(materialRoot, producerRoot, { allowMissingLeaf: false });
-  if (!_pathEqual(descriptorPath, path6.join(materialRoot, DESCRIPTOR_FILENAME))) {
+  if (!_pathEqual(descriptorPath, path5.join(materialRoot, DESCRIPTOR_FILENAME))) {
     throw new PreparedDispatchError("descriptor_file does not match material_root commit marker");
   }
   const paths = {};
@@ -3245,7 +3128,7 @@ function _verifyPreparedDispatch(descriptorFile) {
   for (const [key, filename] of Object.entries(expectedNames)) {
     const target2 = _descriptorPath(descriptor[key], key);
     _assertNoEscape(target2, materialRoot, { allowMissingLeaf: false });
-    if (pyNormcase(path6.dirname(target2)) !== pyNormcase(materialRoot) || path6.basename(target2) !== filename) {
+    if (pyNormcase(path5.dirname(target2)) !== pyNormcase(materialRoot) || path5.basename(target2) !== filename) {
       throw new PreparedDispatchError(`descriptor.${key} must use the exact v1 filename and containment`);
     }
     paths[key] = target2;
@@ -3282,7 +3165,7 @@ function _verifyPreparedDispatch(descriptorFile) {
   }
   try {
     const taskRootPath = absolutePath(envelope.task_root, "dispatch task_root", { error: PreparedDispatchError });
-    const runtimeRoot2 = path6.join(producerRoot, ".runtime");
+    const runtimeRoot2 = path5.join(producerRoot, ".runtime");
     if (_relativeUnder(resolveLikePython(runtimeRoot2), taskRootPath) === null) {
       throw new PreparedDispatchError("dispatch task_root is not relative to producer_root/.runtime");
     }
@@ -3318,7 +3201,7 @@ function _verifyPreparedDispatch(descriptorFile) {
   }
   const normalizedWrites = [];
   for (const value of writes) {
-    const output = path6.isAbsolute(value) ? value : path6.join(materialRoot, value);
+    const output = path5.isAbsolute(value) ? value : path5.join(materialRoot, value);
     _assertNoEscape(output, materialRoot, { allowMissingLeaf: false });
     const relative = _pureRelative(materialRoot, value);
     if (relative === null) throw new Error(`'${value}' is not in the subpath of '${materialRoot}'`);
@@ -3351,7 +3234,7 @@ function verifyPreparedDispatch(descriptorFile) {
 function _discardUntrustedDescriptorMarker(materialRoot) {
   const root = absolutePath(materialRoot, "material_root", { error: PreparedDispatchError });
   if (!OWNED_UNCOMMITTED_ROOTS.has(pyNormcase(root))) return;
-  const marker = path6.join(root, DESCRIPTOR_FILENAME);
+  const marker = path5.join(root, DESCRIPTOR_FILENAME);
   let info;
   try {
     info = lstatSync2(marker);
@@ -3362,7 +3245,7 @@ function _discardUntrustedDescriptorMarker(materialRoot) {
   try {
     if (info.isDirectory() && !info.isSymbolicLink() && !isReparseStat(info)) {
       _iterWorkspaceFiles(marker);
-      rmSync3(marker, { recursive: true });
+      rmSync2(marker, { recursive: true });
     } else {
       unlinkSync2(marker);
     }
@@ -3387,7 +3270,7 @@ function cleanupUncommittedPreparation(materialRoot, { producerRoot = null } = {
   _assertNoEscape(root, producer, { allowMissingLeaf: false });
   const ownedRoot = pyNormcase(root);
   if (!OWNED_UNCOMMITTED_ROOTS.has(ownedRoot)) return false;
-  const descriptor = path6.join(root, DESCRIPTOR_FILENAME);
+  const descriptor = path5.join(root, DESCRIPTOR_FILENAME);
   let descriptorInfo = null;
   try {
     descriptorInfo = lstatSync2(descriptor);
@@ -3411,7 +3294,7 @@ function cleanupUncommittedPreparation(materialRoot, { producerRoot = null } = {
     throw caught;
   }
   try {
-    rmSync3(root, { recursive: true });
+    rmSync2(root, { recursive: true });
   } catch (caught) {
     if (caught?.code === "ENOENT") {
       OWNED_UNCOMMITTED_ROOTS.delete(ownedRoot);
@@ -3525,13 +3408,13 @@ var init_prepared_dispatch = __esm({
 });
 
 // ops/tools/dispatch-core/task_package_profiles.mjs
-import { existsSync as existsSync3, readdirSync as readdirSync3, statSync as statSync6 } from "node:fs";
-import path7 from "node:path";
+import { existsSync as existsSync3, readdirSync as readdirSync3, statSync as statSync5 } from "node:fs";
+import path6 from "node:path";
 function valueError(message) {
   return pyError("ValueError", message);
 }
 function relRoute(routeFile) {
-  return path7.relative(ROOT, routeFile).replace(/\\/g, "/");
+  return path6.relative(ROOT, routeFile).replace(/\\/g, "/");
 }
 function routeIdFromAgent(role, capability) {
   return `${role}__${capability}`;
@@ -3582,8 +3465,8 @@ function parseCard(text3, routeFile) {
       if (!pyStr(value).trim() || typeof promptPath !== "string" || !promptPath.startsWith("ops/agent-prompts/")) {
         throw valueError(`${rel2} required_files_by_contract has an invalid mapping`);
       }
-      const target = path7.join(RUNTIME_ROOT, promptPath);
-      if (!(existsSync3(target) && statSync6(target).isFile())) {
+      const target = path6.join(RUNTIME_ROOT, promptPath);
+      if (!(existsSync3(target) && statSync5(target).isFile())) {
         throw valueError(`${rel2} conditional required file missing: ${promptPath}`);
       }
     }
@@ -3642,7 +3525,7 @@ function parseAgentBlock(block, routeFile) {
   };
 }
 function routeProfile(routeFile) {
-  const routeId2 = path7.basename(routeFile, ".md");
+  const routeId2 = path6.basename(routeFile, ".md");
   const text3 = pyReadText(routeFile);
   const agent = parseAgentBlock(blockScalar(text3, routeFile), routeFile);
   const expectedRoute = routeIdFromAgent(agent.role, agent.capability.name);
@@ -3663,13 +3546,13 @@ function routeProfile(routeFile) {
   };
 }
 function loadRouteProfiles() {
-  if (!(existsSync3(ROUTE_DIR) && statSync6(ROUTE_DIR).isDirectory())) {
-    throw valueError(`route directory not found: ${path7.relative(RUNTIME_ROOT, ROUTE_DIR).replace(/\\/g, "/")}`);
+  if (!(existsSync3(ROUTE_DIR) && statSync5(ROUTE_DIR).isDirectory())) {
+    throw valueError(`route directory not found: ${path6.relative(RUNTIME_ROOT, ROUTE_DIR).replace(/\\/g, "/")}`);
   }
   const profiles = {};
   const names = readdirMd(ROUTE_DIR).sort();
   for (const name of names) {
-    const profile = routeProfile(path7.join(ROUTE_DIR, name));
+    const profile = routeProfile(path6.join(ROUTE_DIR, name));
     profiles[profile.route_id] = profile;
   }
   if (!Object.keys(profiles).length) throw valueError("no task package routes found");
@@ -3719,7 +3602,7 @@ var init_task_package_profiles = __esm({
   "ops/tools/dispatch-core/task_package_profiles.mjs"() {
     init_tool_common();
     init_py();
-    ROUTE_DIR = path7.join(RUNTIME_ROOT, "ops", "protocols", "task-package-routes");
+    ROUTE_DIR = path6.join(RUNTIME_ROOT, "ops", "protocols", "task-package-routes");
     ACCEPTANCE_LEAF_COMMON_FILE = "ops/agent-prompts/_acceptance-leaf-common.md";
     REQUIRED_TOP_LEVEL = [
       "version",
@@ -3765,13 +3648,13 @@ var init_task_package_profiles = __esm({
 });
 
 // ops/tools/dispatch-core/task_package_build.mjs
-import { existsSync as existsSync4, mkdirSync as mkdirSync5, writeFileSync as writeFileSync3 } from "node:fs";
-import path8 from "node:path";
+import { existsSync as existsSync4, mkdirSync as mkdirSync4, writeFileSync as writeFileSync2 } from "node:fs";
+import path7 from "node:path";
 function deepCopy(value) {
   return structuredClone(value);
 }
 function readProjectName() {
-  const projectFile = path8.join(ROOT, "PROJECT.md");
+  const projectFile = path7.join(ROOT, "PROJECT.md");
   if (!existsSync4(projectFile)) return "<\u9879\u76EE\u540D>";
   const lines = pySplitLines(pyReadTextReplace(projectFile));
   for (let idx = 0; idx < lines.length; idx += 1) {
@@ -4186,21 +4069,21 @@ var init_task_package_build = __esm({
 
 // ops/tools/dispatch-core/review_evidence.mjs
 import { spawnSync as spawnSync4 } from "node:child_process";
-import { opendirSync, readdirSync as readdirSync4, statSync as statSync7 } from "node:fs";
-import path9 from "node:path";
+import { opendirSync, readdirSync as readdirSync4, statSync as statSync6 } from "node:fs";
+import path8 from "node:path";
 import process6 from "node:process";
-function statOrNull2(value) {
+function statOrNull(value) {
   try {
-    return statSync7(value);
+    return statSync6(value);
   } catch {
     return null;
   }
 }
 function pathExists(value) {
-  return statOrNull2(value) !== null;
+  return statOrNull(value) !== null;
 }
 function pathIsDir(value) {
-  return Boolean(statOrNull2(value)?.isDirectory());
+  return Boolean(statOrNull(value)?.isDirectory());
 }
 function decodeTruncated(buffer, limit) {
   const cap = Math.max(0, Math.min(limit, buffer.length));
@@ -4515,7 +4398,7 @@ function addSemanticFile(state, abs, role, options = {}) {
     if (!entry && declaredFile) {
       let bytes2 = 0;
       try {
-        bytes2 = statSync7(abs).size;
+        bytes2 = statSync6(abs).size;
       } catch {
         bytes2 = 0;
       }
@@ -4529,7 +4412,7 @@ function addSemanticFile(state, abs, role, options = {}) {
   state.seen.add(seenKey);
   let bytes = 0;
   try {
-    bytes = statSync7(abs).size;
+    bytes = statSync6(abs).size;
   } catch {
     bytes = 0;
   }
@@ -4569,7 +4452,7 @@ function walkSemanticDirectory(state, dir, role) {
     try {
       let entry;
       while ((entry = handle.readSync()) !== null) {
-        const full = path9.join(current, entry.name);
+        const full = path8.join(current, entry.name);
         if (entry.isDirectory()) {
           const reason = REGENERATED_TREE_REASONS.get(entry.name);
           if (reason) {
@@ -4771,7 +4654,7 @@ function executeChecks(root, checks, logRoot) {
     const [checkId, argv, cwd, timeout, expected] = validateCheck(raw, root);
     const result = run(argv, cwd, timeout);
     const safe = checkId.replace(/[^A-Za-z0-9_.-]+/g, "-").slice(0, 80);
-    const logPath = path9.join(String(logRoot), `${safe}.log`);
+    const logPath = path8.join(String(logRoot), `${safe}.log`);
     atomicWriteText(
       logPath,
       `argv=${pyJsonDumps(argv)}
@@ -4984,9 +4867,9 @@ function assertDerivedOutputContained(output, root) {
 }
 function evidenceLogDirectory(output) {
   const target = lexicalAbsolute(output);
-  const parsed = path9.parse(target);
-  const stripped = parsed.ext ? path9.join(parsed.dir, parsed.name) : target;
-  return stripped !== target ? stripped : path9.join(parsed.dir, `${parsed.base}.logs`);
+  const parsed = path8.parse(target);
+  const stripped = parsed.ext ? path8.join(parsed.dir, parsed.name) : target;
+  return stripped !== target ? stripped : path8.join(parsed.dir, `${parsed.base}.logs`);
 }
 function evidenceOutputPath(pkg, options = {}) {
   const { outputRoot = null, outputPath = null } = options;
@@ -4996,11 +4879,11 @@ function evidenceOutputPath(pkg, options = {}) {
   }
   if (outputRoot !== null && outputRoot !== void 0) {
     const root2 = lexicalAbsolute(outputRoot);
-    if (path9.extname(root2).toLowerCase() === ".json" || Boolean(statOrNull2(root2)?.isFile())) return root2;
-    return assertDerivedOutputContained(path9.join(root2, derivedEvidenceFilename(packageId2)), root2);
+    if (path8.extname(root2).toLowerCase() === ".json" || Boolean(statOrNull(root2)?.isFile())) return root2;
+    return assertDerivedOutputContained(path8.join(root2, derivedEvidenceFilename(packageId2)), root2);
   }
-  const root = lexicalAbsolute(path9.join(ROOT, "tmp", "review_evidence"));
-  return assertDerivedOutputContained(path9.join(root, derivedEvidenceFilename(packageId2)), root);
+  const root = lexicalAbsolute(path8.join(ROOT, "tmp", "review_evidence"));
+  return assertDerivedOutputContained(path8.join(root, derivedEvidenceFilename(packageId2)), root);
 }
 function attachReviewEvidence(envelope, options = {}) {
   const { execute, root = null, outputRoot = null, outputPath = null } = options;
@@ -5103,6 +4986,576 @@ var init_review_evidence = __esm({
   }
 });
 
+// ops/tools/dispatch-core/model_catalog_cache.mjs
+import { mkdirSync as mkdirSync5, readFileSync as readFileSync6, renameSync as renameSync3, rmSync as rmSync3, statSync as statSync7, writeFileSync as writeFileSync3 } from "node:fs";
+import { createHash as createHash3, randomBytes } from "node:crypto";
+import path9 from "node:path";
+function canonicalJson2(value) {
+  return JSON.stringify(value, (_key, item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+    return Object.fromEntries(Object.keys(item).sort().map((key) => [key, item[key]]));
+  });
+}
+function catalogCacheKey(identity) {
+  return createHash3("sha256").update(canonicalJson2(identity), "utf8").digest("hex");
+}
+function statOrNull2(target) {
+  try {
+    return statSync7(target);
+  } catch {
+    return null;
+  }
+}
+function fingerprintPaths(paths) {
+  const seen = /* @__PURE__ */ new Set();
+  const fingerprints = [];
+  for (const raw of paths) {
+    const target = String(raw ?? "");
+    if (!target || seen.has(target)) continue;
+    seen.add(target);
+    const stat = statOrNull2(target);
+    fingerprints.push({
+      path: target,
+      exists: Boolean(stat),
+      size: stat ? stat.size : null,
+      mtime_ms: stat ? Math.trunc(stat.mtimeMs) : null
+    });
+  }
+  return fingerprints;
+}
+function readPayload(cacheFile) {
+  let text3;
+  try {
+    text3 = readFileSync6(cacheFile, "utf8");
+  } catch {
+    return { entries: [] };
+  }
+  let payload;
+  try {
+    payload = JSON.parse(text3);
+  } catch {
+    return { entries: [] };
+  }
+  if (!payload || typeof payload !== "object" || payload.schema !== CATALOG_CACHE_SCHEMA) return { entries: [] };
+  if (!Array.isArray(payload.entries)) return { entries: [] };
+  return {
+    entries: payload.entries.filter((entry) => entry && typeof entry === "object" && typeof entry.key === "string")
+  };
+}
+function readCatalogCacheEntry(cacheFile, key, { now = Date.now() } = {}) {
+  const entry = readPayload(cacheFile).entries.find((item) => item.key === key);
+  if (!entry) return null;
+  if (entry.status !== "ok") return null;
+  const models = Array.isArray(entry.models) ? entry.models.filter((item) => typeof item === "string" && item) : [];
+  if (!models.length) return null;
+  const storedAt = Number(entry.stored_at_ms);
+  if (!Number.isFinite(storedAt)) return null;
+  const age = now - storedAt;
+  if (age < 0 || age > CATALOG_CACHE_TTL_MS) return null;
+  const details = entry.model_details && typeof entry.model_details === "object" && !Array.isArray(entry.model_details) ? entry.model_details : {};
+  return {
+    stored_at_ms: storedAt,
+    identity: entry.identity ?? null,
+    catalog: {
+      status: "ok",
+      models,
+      model_details: details,
+      model_count: models.length,
+      source: typeof entry.source === "string" ? entry.source : "",
+      error: null
+    }
+  };
+}
+function writeCatalogCacheEntry(cacheFile, key, identity, catalog, { now = Date.now() } = {}) {
+  try {
+    if (catalog?.status !== "ok") return false;
+    const models = Array.isArray(catalog.models) ? catalog.models.filter((item) => typeof item === "string" && item) : [];
+    if (!models.length) return false;
+    const entry = {
+      key,
+      status: "ok",
+      stored_at_ms: now,
+      identity,
+      models,
+      model_details: catalog.model_details && typeof catalog.model_details === "object" && !Array.isArray(catalog.model_details) ? catalog.model_details : {},
+      source: typeof catalog.source === "string" ? catalog.source : ""
+    };
+    const entries = [entry, ...readPayload(cacheFile).entries.filter((item) => item.key !== key)].slice(0, CATALOG_CACHE_MAX_ENTRIES);
+    mkdirSync5(path9.dirname(cacheFile), { recursive: true });
+    const tmp = `${cacheFile}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+    try {
+      writeFileSync3(tmp, `${JSON.stringify({ schema: CATALOG_CACHE_SCHEMA, entries }, null, 2)}
+`, "utf8");
+      renameSync3(tmp, cacheFile);
+    } finally {
+      rmSync3(tmp, { force: true });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+var CATALOG_CACHE_SCHEMA, CATALOG_CACHE_TTL_MS, CATALOG_CACHE_FILE_NAME, CATALOG_CACHE_MAX_ENTRIES;
+var init_model_catalog_cache = __esm({
+  "ops/tools/dispatch-core/model_catalog_cache.mjs"() {
+    CATALOG_CACHE_SCHEMA = 1;
+    CATALOG_CACHE_TTL_MS = 60 * 1e3;
+    CATALOG_CACHE_FILE_NAME = "pi-child-model-catalog.json";
+    CATALOG_CACHE_MAX_ENTRIES = 8;
+  }
+});
+
+// ops/tools/pi_model_extension_profile.mjs
+import { existsSync as existsSync5 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import path10 from "node:path";
+function resolvePiAgentDir(env = process.env) {
+  const configured = String(env.PI_CODING_AGENT_DIR || "").trim();
+  return path10.resolve(configured || path10.join(homedir2(), ".pi", "agent"));
+}
+function resolvePiChildModelExtensions(options = {}) {
+  const env = options.env || process.env;
+  if (String(env.PI_CONTROL_PI || "").trim()) return [];
+  const exists = options.exists || existsSync5;
+  const agentDir = path10.resolve(options.agentDir || resolvePiAgentDir(env));
+  return RELATIVE_EXTENSION_PATHS.map((relativePath) => path10.join(agentDir, ...relativePath.split("/"))).filter((candidate) => exists(candidate));
+}
+function isPiModelExtensionProfileCli(argv1 = process.argv[1]) {
+  return path10.basename(String(argv1 || "")).toLowerCase() === "pi_model_extension_profile.mjs";
+}
+var PI_CHILD_MODEL_EXTENSION_PROFILE, RELATIVE_EXTENSION_PATHS;
+var init_pi_model_extension_profile = __esm({
+  "ops/tools/pi_model_extension_profile.mjs"() {
+    PI_CHILD_MODEL_EXTENSION_PROFILE = "pi-child-model-extensions/v1";
+    RELATIVE_EXTENSION_PATHS = Object.freeze([
+      "extensions/openai-codex-sol-context-alias.ts",
+      "npm/node_modules/pi-claude-code-provider/extensions/pi-claude-code-provider.ts",
+      "npm/node_modules/@tian.zuo/pi-antigravity/index.ts"
+    ]);
+    if (isPiModelExtensionProfileCli()) {
+      if (process.argv.slice(2).some((arg) => arg !== "--json")) {
+        process.stderr.write("Usage: node ops/tools/pi_model_extension_profile.mjs [--json]\n");
+        process.exit(2);
+      }
+      process.stdout.write(`${JSON.stringify({
+        profile: PI_CHILD_MODEL_EXTENSION_PROFILE,
+        extensions: resolvePiChildModelExtensions()
+      })}
+`);
+    }
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/deps.mjs
+var deps;
+var init_deps = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/deps.mjs"() {
+    deps = {};
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/py-utils.mjs
+import { statSync as statSync8 } from "node:fs";
+import path11 from "node:path";
+import process7 from "node:process";
+function compareCodePoints2(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function sortedStrings(values) {
+  return [...values].sort(compareCodePoints2);
+}
+function pySlice(value, limit) {
+  return Array.from(String(value)).slice(0, limit).join("");
+}
+function pyList(value) {
+  if (Array.isArray(value)) return [...value];
+  if (typeof value === "string") return Array.from(value);
+  if (isRecord(value)) return Object.keys(value);
+  return [];
+}
+function isSystemError(error) {
+  return Boolean(error) && typeof error.code === "string" && (error.errno !== void 0 || error.syscall !== void 0);
+}
+function isPyCaughtError(error, names) {
+  if (!error) return false;
+  if (names.has(String(error.name))) return true;
+  return names.has("OSError") && isSystemError(error);
+}
+function statOrNull3(target) {
+  try {
+    return statSync8(target);
+  } catch {
+    return null;
+  }
+}
+function isFile3(target) {
+  return Boolean(statOrNull3(target)?.isFile());
+}
+function isDirectory2(target) {
+  return Boolean(statOrNull3(target)?.isDirectory());
+}
+function pathParts2(value) {
+  return String(value ?? "").split(/[\\/]+/).filter((part) => part && part !== ".");
+}
+function jsonDumpsIndent2(value) {
+  return JSON.stringify(value, null, 2);
+}
+function jsonDumpsCompact(value) {
+  return JSON.stringify(value);
+}
+function shutilWhich(name) {
+  const candidate = String(name ?? "");
+  if (!candidate) return null;
+  const isWindows = process7.platform === "win32";
+  const exts = isWindows ? String(process7.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean) : [""];
+  const hasExt = isWindows && exts.some((ext) => candidate.toLowerCase().endsWith(ext.toLowerCase()));
+  const names = isWindows && !hasExt ? exts.map((ext) => candidate + ext) : [candidate];
+  if (candidate.includes("/") || candidate.includes("\\")) {
+    for (const item of names) if (isFile3(item)) return item;
+    return null;
+  }
+  const dirs = String(process7.env.PATH || "").split(path11.delimiter).filter(Boolean);
+  if (isWindows) dirs.unshift(process7.cwd());
+  for (const dir of dirs) {
+    for (const item of names) {
+      const full = path11.join(dir, item);
+      if (isFile3(full)) return full;
+    }
+  }
+  return null;
+}
+var PY_SPLIT_RE;
+var init_py_utils = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/py-utils.mjs"() {
+    init_tool_common();
+    init_py();
+    PY_SPLIT_RE = new RegExp(`[${PY_SPACE_CLASS}]+`);
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/state.mjs
+import process8 from "node:process";
+function clearCaches() {
+  for (const cache of Object.values(caches)) cache.clear();
+}
+function clearModelCatalogCache() {
+  caches.childModelCatalog.clear();
+}
+function currentDispatchPhase() {
+  return dispatchPhaseState.phase;
+}
+function markDispatchPhase(phase) {
+  dispatchPhaseState.phase = phase;
+  process8.stderr.write(`[dispatch-phase] seed=${dispatchPhaseState.seedIndex} phase=${phase}
+`);
+  return null;
+}
+var caches, dispatchPhaseState;
+var init_state = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/state.mjs"() {
+    caches = {
+      asyncSubagentServer: /* @__PURE__ */ new Map(),
+      asyncSubagentEndpoint: /* @__PURE__ */ new Map(),
+      asyncSubagentReadiness: /* @__PURE__ */ new Map(),
+      piChildModelExtensionProfile: /* @__PURE__ */ new Map(),
+      childModelCatalog: /* @__PURE__ */ new Map()
+    };
+    dispatchPhaseState = { phase: "seed", seedIndex: 0 };
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/catalog.mjs
+import path12 from "node:path";
+import process9 from "node:process";
+function piChildCatalogCommandImpl() {
+  const configured = pyStrip(String(process9.env.PI_CONTROL_PI || ""));
+  if (configured) {
+    const suffix = path12.extname(configured).toLowerCase();
+    if ([".js", ".mjs", ".cjs"].includes(suffix)) {
+      const node = shutilWhich("node");
+      return node ? [node, configured] : [];
+    }
+    return [configured];
+  }
+  let executable = process9.platform === "win32" ? shutilWhich("pi.cmd") : shutilWhich("pi");
+  if (!executable && process9.platform === "win32") executable = shutilWhich("pi");
+  return executable ? [executable] : [];
+}
+function piChildCatalogCommand() {
+  return deps.piChildCatalogCommand();
+}
+function piChildModelExtensionProfileImpl() {
+  if (pyStrip(String(process9.env.PI_CONTROL_PI || ""))) {
+    return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions: [], error: null };
+  }
+  let extensions;
+  try {
+    extensions = resolvePiChildModelExtensions();
+  } catch (error) {
+    return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions: [], error: pySlice(String(error?.message ?? error), 500) };
+  }
+  if (!extensions.every((item) => typeof item === "string" && isAbsoluteLikePython(item) && isFile3(item))) {
+    return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions: [], error: "model extension profile returned invalid paths" };
+  }
+  return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions, error: null };
+}
+function piChildModelExtensionProfile() {
+  if (!caches.piChildModelExtensionProfile.has("value")) {
+    caches.piChildModelExtensionProfile.set("value", deps.piChildModelExtensionProfile());
+  }
+  return caches.piChildModelExtensionProfile.get("value");
+}
+function probePiChildModelCatalogUncachedImpl(targetCwd) {
+  const command = piChildCatalogCommand();
+  const extensionProfile = piChildModelExtensionProfile();
+  if (!command.length || pyTruthy(extensionProfile.error)) {
+    return {
+      status: "unavailable",
+      models: [],
+      model_count: 0,
+      source: "pi --list-models (child model profile)",
+      error: pyTruthy(extensionProfile.error) ? extensionProfile.error : "Pi executable not found"
+    };
+  }
+  const argv = [...command.slice(1), "-ne", "-ns", "-np", "--no-themes", "-nc", "--no-approve"];
+  for (const extensionPath of extensionProfile.extensions) argv.push("-e", extensionPath);
+  argv.push("--list-models");
+  const completed = pySpawnSync(command[0], argv, {
+    cwd: String(targetCwd),
+    encoding: "utf8",
+    timeout: 3e4,
+    windowsHide: true,
+    maxBuffer: 64 * 1024 * 1024
+  });
+  if (completed.error) {
+    return {
+      status: "unavailable",
+      models: [],
+      model_count: 0,
+      source: `pi --list-models (${extensionProfile.profile})`,
+      error: pySlice(String(completed.error.message ?? completed.error), 500)
+    };
+  }
+  const stdout = String(completed.stdout ?? "");
+  const stderr = String(completed.stderr ?? "");
+  if (completed.status !== 0) {
+    return {
+      status: "unavailable",
+      models: [],
+      model_count: 0,
+      source: `pi --list-models (${extensionProfile.profile})`,
+      error: pySlice(pyStrip(stderr || stdout), 500)
+    };
+  }
+  const models = /* @__PURE__ */ new Set();
+  const details = {};
+  for (const line of pySplitLines(stdout)) {
+    const columns = line.split(PY_SPLIT_RE).filter((item) => item !== "");
+    if (columns.length < 2 || columns[0].toLowerCase() === "provider") continue;
+    const provider = pyStrip(columns[0]);
+    const modelId = pyStrip(columns[1]);
+    if (!provider || !modelId) continue;
+    const key = `${provider}/${modelId}`;
+    models.add(key);
+    const images = columns.length >= 6 ? pyStrip(columns[5]).toLowerCase() : "";
+    details[key] = {
+      context_window: columns.length >= 3 ? pyStrip(columns[2]) || null : null,
+      supports_vision: images === "yes" ? true : images === "no" ? false : null
+    };
+  }
+  if (!models.size) {
+    return {
+      status: "unavailable",
+      models: [],
+      model_count: 0,
+      source: `pi --list-models (${extensionProfile.profile})`,
+      error: "Pi returned no parseable child models"
+    };
+  }
+  const ordered = sortedStrings(models);
+  return {
+    status: "ok",
+    models: ordered,
+    model_details: Object.fromEntries(ordered.map((key) => [key, details[key]])),
+    model_count: ordered.length,
+    source: `pi --list-models (${extensionProfile.profile})`,
+    error: null
+  };
+}
+function _probePiChildModelCatalogUncached(targetCwd) {
+  return deps.probePiChildModelCatalogUncached(targetCwd);
+}
+function piChildCatalogCacheIdentity(targetCwd) {
+  const command = piChildCatalogCommand();
+  const extensionProfile = piChildModelExtensionProfile();
+  const extensions = Array.isArray(extensionProfile.extensions) ? extensionProfile.extensions : [];
+  const agentDir = resolvePiAgentDir();
+  const configPaths = [
+    ...extensions,
+    ...CHILD_CATALOG_CONFIG_SURFACE.map((name) => path12.join(agentDir, ...String(name).split("/")))
+  ];
+  return {
+    schema: CATALOG_CACHE_SCHEMA,
+    platform: process9.platform,
+    pi_control_pi: pyStrip(String(process9.env.PI_CONTROL_PI || "")),
+    command,
+    extension_profile: {
+      profile: extensionProfile.profile,
+      extensions,
+      error: extensionProfile.error ?? null
+    },
+    config_fingerprints: fingerprintPaths(configPaths),
+    target_cwd: String(targetCwd)
+  };
+}
+function piChildCatalogCacheFile() {
+  const override = pyStrip(String(process9.env.SUBAGENT_CATALOG_CACHE_DIR || ""));
+  const cacheDir = override ? resolveLikePython(override) : path12.join(ROOT, ".runtime", "cockpit", "cache");
+  return path12.join(cacheDir, CATALOG_CACHE_FILE_NAME);
+}
+function childCatalogFileLayerEnabled() {
+  return deps.probePiChildModelCatalogUncached === probePiChildModelCatalogUncachedImpl;
+}
+function rememberChildCatalog(key, value) {
+  caches.childModelCatalog.set(key, value);
+  while (caches.childModelCatalog.size > 8) {
+    caches.childModelCatalog.delete(caches.childModelCatalog.keys().next().value);
+  }
+  return value;
+}
+function probePiChildModelCatalogFresh(key, { cacheWrite = false } = {}) {
+  let identityBefore = null;
+  if (cacheWrite && childCatalogFileLayerEnabled()) {
+    try {
+      identityBefore = piChildCatalogCacheIdentity(key);
+    } catch {
+    }
+  }
+  const value = deps.probePiChildModelCatalogUncached(key);
+  rememberChildCatalog(key, value);
+  if (identityBefore && value?.status === "ok") {
+    try {
+      const identity = piChildCatalogCacheIdentity(key);
+      if (catalogCacheKey(identityBefore) === catalogCacheKey(identity)) {
+        writeCatalogCacheEntry(piChildCatalogCacheFile(), catalogCacheKey(identity), identity, value);
+      }
+    } catch {
+    }
+  }
+  return value;
+}
+function probePiChildModelCatalogImpl(targetCwd, options = {}) {
+  const key = String(targetCwd);
+  if (caches.childModelCatalog.has(key)) {
+    const value = caches.childModelCatalog.get(key);
+    caches.childModelCatalog.delete(key);
+    caches.childModelCatalog.set(key, value);
+    return value;
+  }
+  if (childCatalogFileLayerEnabled()) {
+    let cached = null;
+    try {
+      const identity = piChildCatalogCacheIdentity(key);
+      cached = readCatalogCacheEntry(piChildCatalogCacheFile(), catalogCacheKey(identity));
+    } catch {
+      cached = null;
+    }
+    if (cached) {
+      cacheServedCatalogs.add(cached.catalog);
+      return rememberChildCatalog(key, cached.catalog);
+    }
+  }
+  return probePiChildModelCatalogFresh(key, options);
+}
+function probePiChildModelCatalog(targetCwd, options = {}) {
+  return deps.probePiChildModelCatalog(targetCwd, options);
+}
+function requirePiChildModel(model, targetCwd, options = {}) {
+  const resolvedCwd = String(resolveLikePython(targetCwd));
+  let catalog = probePiChildModelCatalog(resolvedCwd, options);
+  if (catalog?.status === "ok" && cacheServedCatalogs.has(catalog) && !new Set(pyTruthy(catalog.models) ? catalog.models : []).has(model)) {
+    catalog = probePiChildModelCatalogFresh(resolvedCwd, options);
+  }
+  if (catalog?.status !== "ok") {
+    return {
+      status: "unknown",
+      source: catalog?.source ?? "Pi child catalog probe",
+      warning: `Pi child model catalog probe failed: ${pyStr(catalog?.error || "unknown error")}; continuing to runner model validation`
+    };
+  }
+  const available = new Set(pyTruthy(catalog.models) ? catalog.models : []);
+  if (!available.has(model)) {
+    throw new ToolError(
+      `resolved model ${model} is not available in the Pi child model profile (${pyStr(catalog.source)}); available models: ${[...available].sort().join(", ") || "(none)"}; nothing was dispatched and no other model was substituted; choose a model from this list and retry`
+    );
+  }
+  return { status: "available", source: pyStr(pyTruthy(catalog.source) ? catalog.source : "") };
+}
+var CHILD_CATALOG_CONFIG_SURFACE, cacheServedCatalogs;
+var init_catalog = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/catalog.mjs"() {
+    init_tool_common();
+    init_py();
+    init_model_catalog_cache();
+    init_pi_model_extension_profile();
+    init_deps();
+    init_py_utils();
+    init_state();
+    CHILD_CATALOG_CONFIG_SURFACE = Object.freeze([
+      "models.json",
+      "models-store.json",
+      "settings.json",
+      "npm/package.json"
+    ]);
+    cacheServedCatalogs = /* @__PURE__ */ new WeakSet();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/constants.mjs
+import path13 from "node:path";
+var PREFLIGHT_FILE_THRESHOLD, PREFLIGHT_BYTES_THRESHOLD, PREFLIGHT_LARGE_FILE_BYTES, PREFLIGHT_WALK_SKIP_DIRS, PREFLIGHT_WALK_SKIP_PATHS, PREFLIGHT_GIT_TIMEOUT_SECONDS, PREFLIGHT_STAT_FILE_CAP, PREFLIGHT_BINARY_LIKE_EXTENSIONS, ASYNC_MCP_SERVER_NAME, ASYNC_DISPATCH_CONTRACT_VERSION, CROSS_REPO_RESULT_MODES, ACCEPTANCE_SYNTHESIS_PROFILE, PI_ASYNC_RUNNER_SENTINEL, GLOBAL_CONFIG_PATH, PROJECT_ASYNC_TASK_ROOT;
+var init_constants = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/constants.mjs"() {
+    init_tool_common();
+    init_prepared_dispatch();
+    PREFLIGHT_FILE_THRESHOLD = 400;
+    PREFLIGHT_BYTES_THRESHOLD = 10 * 1024 * 1024;
+    PREFLIGHT_LARGE_FILE_BYTES = 2 * 1024 * 1024;
+    PREFLIGHT_WALK_SKIP_DIRS = /* @__PURE__ */ new Set([".git", ".runtime", "node_modules", "__pycache__", "tmp"]);
+    PREFLIGHT_WALK_SKIP_PATHS = [["ops", "dist"]];
+    PREFLIGHT_GIT_TIMEOUT_SECONDS = 15;
+    PREFLIGHT_STAT_FILE_CAP = 2e4;
+    PREFLIGHT_BINARY_LIKE_EXTENSIONS = /* @__PURE__ */ new Set([
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".pdf",
+      ".zip",
+      ".7z",
+      ".dwg",
+      ".dxf",
+      ".step",
+      ".stp",
+      ".iges",
+      ".igs",
+      ".exe",
+      ".dll",
+      ".bin",
+      ".dat",
+      ".mp4",
+      ".avi"
+    ]);
+    ASYNC_MCP_SERVER_NAME = "asyncSubagent";
+    ASYNC_DISPATCH_CONTRACT_VERSION = DISPATCH_CONTRACT_VERSION;
+    CROSS_REPO_RESULT_MODES = /* @__PURE__ */ new Set(["read_only_audit", "simulated_planning", "real_rerun"]);
+    ACCEPTANCE_SYNTHESIS_PROFILE = "acceptance_synthesis_v1";
+    PI_ASYNC_RUNNER_SENTINEL = "run-pi-task.mjs";
+    GLOBAL_CONFIG_PATH = null;
+    PROJECT_ASYNC_TASK_ROOT = path13.join(ROOT, ".runtime", "cockpit", "async_tasks");
+  }
+});
+
 // ops/tools/dispatch-core/model_selection_guidance.mjs
 function selectionSummary(selection) {
   if (!selection) return "\u672A\u89E3\u6790";
@@ -5170,8 +5623,8 @@ var init_dispatch_prepare_argv = __esm({
 
 // ops/tools/dispatch-core/model_selection.mjs
 import { createHash as createHash4 } from "node:crypto";
-import { existsSync as existsSync5, readdirSync as readdirSync5, readFileSync as readFileSync7 } from "node:fs";
-import path10 from "node:path";
+import { existsSync as existsSync6, readdirSync as readdirSync5, readFileSync as readFileSync7 } from "node:fs";
+import path14 from "node:path";
 function fail(code, file, field, message, where = {}) {
   const error = new ToolError(`${field ? `${file} ${field}` : file}\uFF1A${message}`);
   Object.assign(error, { code, file: String(file), field: field || null, ...where });
@@ -5187,7 +5640,7 @@ function record(value) {
   return value && typeof value === "object" && !Array.isArray(value);
 }
 function readToml(file) {
-  if (!text2(file) || !existsSync5(file)) fail("file_invalid", file || "(missing)", "", "\u6587\u4EF6\u4E0D\u5B58\u5728");
+  if (!text2(file) || !existsSync6(file)) fail("file_invalid", file || "(missing)", "", "\u6587\u4EF6\u4E0D\u5B58\u5728");
   try {
     return parse(readFileSync7(file, "utf8").replace(/^﻿/, ""));
   } catch (error) {
@@ -5227,11 +5680,11 @@ function loadNotes(file) {
   return notes;
 }
 function loadRoutes(root) {
-  const dir = root ? path10.join(root, "ops", "protocols", "task-package-routes") : "";
-  if (!dir || !existsSync5(dir)) return [];
+  const dir = root ? path14.join(root, "ops", "protocols", "task-package-routes") : "";
+  if (!dir || !existsSync6(dir)) return [];
   const routes = [];
   for (const name of readdirSync5(dir).filter((item) => item.endsWith(".md")).sort()) {
-    const file = path10.join(dir, name);
+    const file = path14.join(dir, name);
     const body = readFileSync7(file, "utf8");
     const agent = AGENT_BLOCK_RE2.exec(body);
     if (!agent) continue;
@@ -5354,7 +5807,7 @@ function loadRoleFile(file, routes, notes) {
   const data = readToml(file);
   const role = asText(data.name);
   if (!role) fail("value_invalid", file, "name", "\u89D2\u8272\u540D\u4E0D\u80FD\u4E3A\u7A7A");
-  if (`${role}.toml` !== path10.basename(file)) fail("value_invalid", file, "name", `\u4E0E\u6587\u4EF6\u540D\u4E0D\u4E00\u81F4\uFF1A${role}`);
+  if (`${role}.toml` !== path14.basename(file)) fail("value_invalid", file, "name", `\u4E0E\u6587\u4EF6\u540D\u4E0D\u4E00\u81F4\uFF1A${role}`);
   for (const [key, hint] of Object.entries(REMOVED_ROLE_KEYS)) {
     if (data[key] !== void 0) fail("field_removed", file, key, `\u5DF2\u5220\u9664\uFF0C${hint}`, { role });
   }
@@ -5398,8 +5851,8 @@ function loadRoleFile(file, routes, notes) {
 }
 function roleNames(sources) {
   const names = /* @__PURE__ */ new Set();
-  for (const dir of [sources.agents_dir, text2(sources.global_root) ? path10.join(sources.global_root, "ops", "agents") : ""]) {
-    if (!text2(dir) || !existsSync5(dir)) continue;
+  for (const dir of [sources.agents_dir, text2(sources.global_root) ? path14.join(sources.global_root, "ops", "agents") : ""]) {
+    if (!text2(dir) || !existsSync6(dir)) continue;
     for (const name of readdirSync5(dir)) if (ROLE_FILE_RE.test(name)) names.add(name.slice(0, -".toml".length));
   }
   return [...names].sort();
@@ -5413,7 +5866,7 @@ function loadSelectionConfig(sources) {
   const roles = /* @__PURE__ */ new Map();
   for (const name of roleNames(sources)) {
     const file = sources.roleConfigPath(name);
-    if (existsSync5(file)) roles.set(name, loadRoleFile(file, routes, notes));
+    if (existsSync6(file)) roles.set(name, loadRoleFile(file, routes, notes));
   }
   return {
     sources,
@@ -5637,7 +6090,7 @@ var init_model_selection = __esm({
 });
 
 // ops/tools/dispatch-core/seed_minimal.mjs
-import path11 from "node:path";
+import path15 from "node:path";
 function deepCopy2(value) {
   return structuredClone(value);
 }
@@ -5649,7 +6102,7 @@ function isEmptyMapping(value) {
   return isRecord(value) && Object.keys(value).length === 0;
 }
 function templateSchema(name) {
-  const file = path11.join(RUNTIME_ROOT, "ops", "templates", name);
+  const file = path15.join(RUNTIME_ROOT, "ops", "templates", name);
   if (!schemaCache.has(file)) schemaCache.set(file, JSON.parse(pyReadText(file)));
   return schemaCache.get(file);
 }
@@ -6273,401 +6726,8 @@ var init_seed_minimal = __esm({
   }
 });
 
-// ops/tools/dispatch-core/subagent_preload.mjs
-import { opendirSync as opendirSync2, statSync as statSync8 } from "node:fs";
-import path12 from "node:path";
-function jsonErrorLine2(text3, error) {
-  const message = String(error?.message ?? "");
-  const line = /\(line (\d+) column \d+\)/.exec(message);
-  if (line) return Number(line[1]);
-  const position = /position (\d+)/.exec(message);
-  if (position) return text3.slice(0, Number(position[1])).split("\n").length;
-  return 1;
-}
-function orNull(value) {
-  return value === void 0 ? null : value;
-}
-function isFile3(target) {
-  try {
-    return statSync8(target).isFile();
-  } catch {
-    return false;
-  }
-}
-function repoPath(value) {
-  const raw = pyStrip(pyStr(pyOr(value, "")));
-  if (!raw) throw new ToolError("empty required_files path");
-  const projectReal = resolveLikePython(ROOT);
-  const lexical = path12.resolve(ROOT, raw);
-  const lexicalRelative = path12.relative(projectReal, lexical);
-  if (lexicalRelative.startsWith("..") || path12.isAbsolute(lexicalRelative)) {
-    throw new ToolError(`required file escapes repository: ${raw}`);
-  }
-  const resolved = resolveLikePython(lexical);
-  const relative = path12.relative(projectReal, resolved);
-  if (relative.startsWith("..") || path12.isAbsolute(relative)) {
-    if (!isSameOrInside(resolved, RUNTIME_ROOT)) {
-      throw new ToolError(`required file escapes repository: ${raw}`);
-    }
-  }
-  if (!isFile3(resolved)) throw new ToolError(`required file not found: ${raw}`);
-  return resolved;
-}
-function packageFromData(data) {
-  if (!isRecord(data)) throw pyError("AttributeError", `'${pyTypeName(data)}' object has no attribute 'get'`);
-  const pkg = Object.hasOwn(data, "task_package") ? data.task_package : data;
-  if (!isRecord(pkg)) throw new ToolError("task_package root is not an object");
-  const agent = pkg.agent;
-  if (!isRecord(agent)) throw new ToolError("task_package.agent is missing or not an object");
-  const requiredFiles = agent.required_files;
-  if (!Array.isArray(requiredFiles) || !requiredFiles.every((item) => typeof item === "string")) {
-    throw new ToolError("task_package.agent.required_files must be a string list");
-  }
-  const role = pyStrip(pyStr(pyOr(agent.role, agent.runtime_role, "")));
-  if (!role) throw new ToolError("task_package.agent.role is missing");
-  return pkg;
-}
-function loadPackage(file) {
-  return packageFromData(loadJson(file));
-}
-function readRequiredFiles(pkg) {
-  const files = [];
-  for (const item of pyGetItem(pyGetItem(pkg, "agent"), "required_files")) {
-    const target = resolveLikePython(path12.resolve(RUNTIME_ROOT, item));
-    if (!isSameOrInside(target, RUNTIME_ROOT)) throw new ToolError(`required prompt escapes runtime: ${item}`);
-    files.push({ path: item, content: pyReadText(target) });
-  }
-  return files;
-}
-function roleDeveloperInstructions(pkg) {
-  const agent = isRecord(pkg?.agent) ? pkg.agent : {};
-  const role = pyStrip(pyStr(pyOr(agent.runtime_role, agent.role, "")));
-  const roleConfig = loadRoleConfig(role, { globalDefault: true });
-  const rolePath = path12.join(RUNTIME_ROOT, "ops", "agents", `${role}.toml`);
-  const instructions = pyStrip(pyStr(pyOr(roleConfig.developer_instructions, "")));
-  if (!instructions) throw new ToolError(`runtime role has no developer_instructions: ${role}`);
-  return { path: rel(rolePath), content: instructions };
-}
-function reviewEvidenceSupport(pkg) {
-  const extensions = isRecord(pkg?.extensions) ? pkg.extensions : {};
-  const reference = isRecord(extensions.review_evidence) ? extensions.review_evidence : {};
-  const rawPath = reference.path;
-  if (typeof rawPath !== "string" || !pyStrip(rawPath)) return null;
-  const target = repoPath(rawPath);
-  try {
-    const info = statSync8(target);
-    if (info.isFile() && info.size > REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET) {
-      return {
-        path: rawPath,
-        heading: "\u673A\u68B0\u8BC1\u636E\u5305",
-        content: `${JSON.stringify({
-          schema_version: 1,
-          injection_bounded: true,
-          omitted: true,
-          complete: false,
-          path: rawPath,
-          bytes: info.size,
-          byte_budget: REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET,
-          reason: "review evidence exceeds injection byte budget and was not preloaded",
-          read_authorization: "unchanged"
-        })}
-`
-      };
-    }
-  } catch {
-  }
-  let content;
-  try {
-    content = pyReadText(target);
-  } catch (error) {
-    if (error?.name === "UnicodeDecodeError") throw new ToolError(`review evidence is not valid UTF-8: ${rawPath}`);
-    throw error;
-  }
-  let evidence;
-  try {
-    evidence = JSON.parse(content);
-  } catch (error) {
-    throw new ToolError(`review evidence is not valid JSON: ${rawPath}:${jsonErrorLine2(content, error)}`);
-  }
-  if (!isRecord(evidence)) throw new ToolError(`review evidence JSON root must be an object: ${rawPath}`);
-  return { path: rawPath, content, heading: "\u673A\u68B0\u8BC1\u636E\u5305" };
-}
-function reviewCoverageFiles(pkg) {
-  const agent = isRecord(pkg?.agent) ? pkg.agent : {};
-  const capability = isRecord(agent.capability) ? agent.capability : {};
-  const capabilityName = pyStr(pyOr(capability.name, "")).replaceAll("-", "_");
-  const extensions = isRecord(pkg?.extensions) ? pkg.extensions : {};
-  const contracts = isRecord(extensions.capability_contract) ? extensions.capability_contract : {};
-  const review = isRecord(extensions.review_execution) ? extensions.review_execution : {};
-  const contractSlot = pyStrip(pyStr(pyOr(review.contract_slot, "")));
-  const direct = contractSlot ? contracts[contractSlot] : contracts[capabilityName];
-  const candidates = Object.values(contracts).filter((value) => isRecord(value));
-  const contract = isRecord(direct) ? direct : !contractSlot && candidates.length === 1 ? candidates[0] : {};
-  const rawFiles = Array.isArray(contract.target_files) ? contract.target_files : contract.affected_files;
-  const coverageFiles = Array.isArray(rawFiles) ? rawFiles : [];
-  return coverageFiles.filter((item) => pyStrip(pyStr(item))).map((item) => pyStr(item));
-}
-function outputTemplateFor(pkg) {
-  const extensions = isRecord(pkg) && isRecord(pkg.extensions) ? pkg.extensions : {};
-  const review = isRecord(extensions.review_execution) ? extensions.review_execution : {};
-  const hasCoverageFiles = reviewCoverageFiles(pkg).length > 0;
-  const reviewedExample = hasCoverageFiles ? '["$target_files"]' : '["<exact path from task_package.scope.read>"]';
-  const coverageHint = hasCoverageFiles ? "\u5B8C\u6574\u8986\u76D6\u80FD\u529B\u5408\u540C\u6295\u5F71\u7684\u6587\u4EF6\u96C6\u5408\u65F6\u4F7F\u7528 `$target_files`\uFF1B\u90E8\u5206\u8986\u76D6\u4F7F\u7528\u7CBE\u786E\u8DEF\u5F84\u5E76\u8FD4\u56DE needs_owner\u3002" : "\u4ECE task_package.scope.read \u7CBE\u786E\u5217\u51FA\u5B9E\u9645\u6D88\u8D39\u8DEF\u5F84\uFF1B\u672A\u6D88\u8D39\u8DEF\u5F84\u8FDB\u5165 not_reviewed \u5E76\u8FD4\u56DE needs_owner\u3002";
-  const semanticReview = review.profile === "semantic_review_v2";
-  const actualReadsField = semanticReview ? ',"actual_reads":["<\u5B9E\u9645\u6D88\u8D39\u7684\u6388\u6743\u8DEF\u5F84>"]' : "";
-  const actualReadsHint = semanticReview ? "`scope.read` \u662F\u8BFB\u53D6\u6388\u6743\uFF0C\u4E0D\u662F\u5168\u6587\u6D88\u8D39\u4E49\u52A1\u3002\u6309\u672C\u6B21\u76EE\u6807\u6838\u5BF9 target_files \u4E2D\u7684\u5BA1\u67E5\u5BF9\u8C61\u4E0E\u5FC5\u8981\u4E0A\u4E0B\u6E38\uFF1B`actual_reads` \u5217\u5B9E\u9645\u6D88\u8D39\u7684\u7CBE\u786E\u8DEF\u5F84\uFF0C\u786E\u5DF2\u5168\u90E8\u6D88\u8D39\u65F6\u53EF\u7B80\u5199 `$scope_read`\u3002\u672A\u8BFB\u7684\u975E\u76EE\u6807\u6388\u6743\u6750\u6599\u4E0D\u6784\u6210\u7F3A\u53E3\uFF1B\u7F3A\u5C11\u5B8C\u6210\u76EE\u6807\u6240\u9700\u8BC1\u636E\u65F6\u624D\u8BB0\u5F55 evidence_gaps \u5E76\u8FD4\u56DE needs_owner\u3002" : "";
-  return `\u7ED3\u6784\u5316\u7ED3\u679C\u7528 \`submit_review_result\` \u5DE5\u5177\u63D0\u4EA4\uFF08\u5DE5\u5177\u5F53\u573A\u6821\u9A8C\uFF0C\u8FD4\u56DE\u9519\u8BEF\u65F6\u4FEE\u6B63\u540E\u518D\u63D0\u4EA4\uFF09\uFF1B\u8FD4\u56DE ok:true \u5373\u4EA4\u4ED8\u5B8C\u6210\uFF0C\u6700\u7EC8\u56DE\u590D\u4E00\u53E5\u8BDD\u5199\u660E gate \u4E0E\u7ED3\u8BBA\u3002
-\u5DE5\u5177\u4E0D\u53EF\u7528\u65F6\uFF0C\u6700\u7EC8\u56DE\u590D\u6309\u516D\u8282\u5199\uFF0C\u5E76\u5728 \`## \u4E8B\u5B9E\u4E0E\u8BC1\u636E\` \u653E\u4E00\u4E2A \`json review_result_v1\` \u4EE3\u7801\u5757\uFF1A
-{"schema_version":1,"gate":"pass | fail | needs_owner","summary":"\u4E00\u53E5\u7ED3\u8BBA","findings":[],"evidence_gaps":[],"scope":{"reviewed":${reviewedExample},"not_reviewed":[]${actualReadsField}},"output":{}}
-${coverageHint}${actualReadsHint}\u6700\u7EC8\u53EA\u8FD4\u56DE\u7ED3\u6784\u5316\u7ED3\u679C\uFF1B\u62A5\u544A\u6B63\u6587\u548C FINAL_HANDOFF \u7531 runner \u673A\u68B0\u751F\u6210\u3002
-`;
-}
-function structuredReview(pkg) {
-  const extensions = isRecord(pkg?.extensions) ? pkg.extensions : {};
-  const review = isRecord(extensions.review_execution) ? extensions.review_execution : {};
-  return STRUCTURED_PROFILES.has(review.profile);
-}
-function reviewPackageProjection(pkg) {
-  if (!structuredReview(pkg)) return pkg;
-  const runtime = isRecord(pkg?.runtime_context) ? pkg.runtime_context : {};
-  const agent = isRecord(pkg?.agent) ? pkg.agent : {};
-  const extensions = isRecord(pkg?.extensions) ? pkg.extensions : {};
-  return {
-    version: orNull(pkg.version),
-    package_id: orNull(pkg.package_id),
-    agent: {
-      role: orNull(agent.role),
-      runtime_role: orNull(agent.runtime_role),
-      capability: orNull(agent.capability),
-      required_files: orNull(agent.required_files)
-    },
-    goal: orNull(pkg.goal),
-    scope: orNull(pkg.scope),
-    tool_contract: orNull(pkg.tool_contract),
-    expected_output: orNull(pkg.expected_output),
-    runtime_context: {
-      cwd: orNull(runtime.cwd),
-      output_root: orNull(runtime.output_root),
-      target_repo: orNull(runtime.target_repo)
-    },
-    extensions: {
-      ...isRecord(extensions.model_config) ? { model_config: extensions.model_config } : {},
-      capability_contract: orNull(extensions.capability_contract),
-      review_execution: orNull(extensions.review_execution),
-      review_evidence: orNull(extensions.review_evidence)
-    },
-    handoff_contract: orNull(pkg.handoff_contract)
-  };
-}
-function* scopeFiles(target, missingPaths) {
-  if (isFile3(target)) {
-    yield target;
-    return;
-  }
-  let directory;
-  try {
-    directory = opendirSync2(target);
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-    missingPaths.push(target);
-    return;
-  }
-  try {
-    let entry;
-    while ((entry = directory.readSync()) !== null) {
-      const child = path12.join(target, entry.name);
-      if (entry.isDirectory()) yield* scopeFiles(child, missingPaths);
-      else if (isFile3(child)) yield child;
-    }
-  } finally {
-    directory.closeSync();
-  }
-}
-function runtimeMaterial(pkg, requiredFiles) {
-  const agent = isRecord(pkg) ? pkg.agent : {};
-  const capability = isRecord(agent) ? agent.capability : {};
-  const commonPath = "ops/agent-prompts/_common.md";
-  const capabilityPath = isRecord(capability) ? pyStr(pyOr(capability.file, "")) : "";
-  const byPath = new Map(requiredFiles.map((item) => [item.path, item.content]));
-  const compactReview = structuredReview(pkg);
-  const supportFiles = requiredFiles.filter((item) => item.path !== commonPath && item.path !== capabilityPath);
-  const evidence = reviewEvidenceSupport(pkg);
-  if (evidence !== null) supportFiles.push(evidence);
-  const omittedScopeFiles = [];
-  if (inlinesScopeRead(pkg)) {
-    let remaining = REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET;
-    const base = pyStr(pyOr(pkg.runtime_context?.target_repo, ROOT));
-    for (const item of filledList(pkg.scope?.read)) {
-      const target = path12.resolve(base, pyStr(item));
-      const missingPaths = [];
-      for (const file of scopeFiles(target, missingPaths)) {
-        const shown = path12.relative(base, file).replaceAll("\\", "/");
-        const bytes = statSync8(file).size;
-        if (bytes > remaining) {
-          omittedScopeFiles.push({ path: shown, bytes });
-          continue;
-        }
-        remaining -= bytes;
-        supportFiles.push({ path: shown, heading: `\u5377\u5B97\uFF1A${shown}`, content: pyReadText(file) });
-      }
-      for (const missing of missingPaths) {
-        omittedScopeFiles.push({ path: path12.relative(base, missing).replaceAll("\\", "/"), missing: true });
-      }
-    }
-  }
-  return {
-    schema_version: 3,
-    task_package: reviewPackageProjection(pkg),
-    common_prompt: {
-      path: commonPath,
-      content: byPath.has(commonPath) ? byPath.get(commonPath) : ""
-    },
-    capability_prompt: {
-      path: capabilityPath,
-      content: byPath.has(capabilityPath) ? byPath.get(capabilityPath) : ""
-    },
-    support_files: supportFiles,
-    omitted_scope_files: omittedScopeFiles,
-    output_template: compactReview ? { format: "review_result_v1", content: outputTemplateFor(pkg) } : null
-  };
-}
-function contains(collection, value) {
-  if (collection instanceof Set) return collection.has(value);
-  if (Array.isArray(collection)) return collection.includes(value);
-  return false;
-}
-function renderedMaterialBody(item, requiredPaths) {
-  const content = pyStr(pyOr(item?.content, ""));
-  const itemPath = pyStr(pyOr(item?.path, ""));
-  if (!contains(requiredPaths, itemPath)) return [content];
-  const marker = JSON.stringify({ path: itemPath });
-  return [
-    `<!-- subagent-required-material:start ${marker} -->`,
-    content,
-    "<!-- subagent-required-material:end -->"
-  ];
-}
-function jsonBlock(value) {
-  return `\`\`\`json
-${JSON.stringify(value, null, 2)}
-\`\`\``;
-}
-function inlinesScopeRead(pkg) {
-  const allowed = isRecord(pkg?.tool_contract) ? pkg.tool_contract.allowed : null;
-  return Array.isArray(allowed) && !allowed.some((name) => pyStrip(pyStr(name)) === "read") && !structuredReview(pkg);
-}
-function filledList(value) {
-  return Array.isArray(value) ? value.filter((item) => item !== null && item !== void 0 && pyStrip(pyStr(item)) !== "") : [];
-}
-function renderTaskCard(pkg, packagePath = "", omittedScopeFiles = []) {
-  const scope = isRecord(pkg?.scope) ? pkg.scope : {};
-  const extensions = isRecord(pkg?.extensions) ? pkg.extensions : {};
-  const expected = isRecord(pkg?.expected_output) ? pkg.expected_output : {};
-  const tools = isRecord(pkg?.tool_contract) ? pkg.tool_contract : {};
-  const alignment = isRecord(pkg?.alignment) ? pkg.alignment : {};
-  const goal = pyStrip(pyStr(pyOr(pkg?.goal, "")));
-  const lines = ["## \u4EFB\u52A1\u5361", ""];
-  lines.push(packagePath ? `\u4EFB\u52A1\u5305 \`${pyStr(pkg?.package_id)}\`\uFF1B\u5B8C\u6574 JSON \u5728 \`${packagePath}\`\uFF0C\u80FD\u529B\u89C4\u5219\u91CC\u7684 \`task_package.*\` \u5B57\u6BB5\u90FD\u5728\u5176\u4E2D\u3002` : `\u4EFB\u52A1\u5305 \`${pyStr(pkg?.package_id)}\`\u3002`);
-  lines.push("", "### \u76EE\u6807", goal);
-  const inputs = isRecord(pkg?.inputs) ? Object.fromEntries(Object.entries(pkg.inputs).filter(([key, value]) => !(key === "question" && pyStrip(pyStr(value)) === goal))) : {};
-  if (Object.keys(inputs).length) lines.push("", "### \u8F93\u5165", jsonBlock(inputs));
-  const readLabel = inlinesScopeRead(pkg) ? omittedScopeFiles.length ? "\u5FC5\u8BFB\uFF08\u90E8\u5206\u5168\u6587\u5DF2\u5728\u4E0A\u6587\u300C\u5377\u5B97\u300D\u5404\u8282\uFF0C\u672A\u5185\u8054\u9879\u89C1\u4E0B\uFF09" : "\u5FC5\u8BFB\uFF08\u5168\u6587\u5DF2\u5728\u4E0A\u6587\u300C\u5377\u5B97\u300D\u5404\u8282\uFF09" : "\u5FC5\u8BFB";
-  const scopeRows = [[readLabel, scope.read], ["\u53EF\u5199", scope.write], ["\u53EF\u5220", scope.delete], ["\u4E0D\u505A", scope.out_of_scope]].map(([label, value]) => [label, filledList(value)]).filter(([, items]) => items.length);
-  lines.push("", "### \u8303\u56F4", ...scopeRows.length ? scopeRows.map(([label, items]) => `- ${label}\uFF1A${items.map((item) => `\`${pyStr(item)}\``).join("\u3001")}`) : ["- \u672A\u58F0\u660E"]);
-  const budgetOmissions = omittedScopeFiles.filter((item) => !item.missing);
-  const missingOmissions = omittedScopeFiles.filter((item) => item.missing);
-  if (budgetOmissions.length) {
-    lines.push(
-      `- \u672A\u5185\u8054\uFF08\u5377\u5B97\u5168\u6587\u9884\u7B97 ${REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET} \u5B57\u8282\uFF09\uFF1A`,
-      ...budgetOmissions.map((item) => `  - \`${item.path}\`\uFF1A${item.bytes} \u5B57\u8282`)
-    );
-  }
-  if (missingOmissions.length) {
-    lines.push(
-      "- \u7F3A\u5931\u7684\u5FC5\u8BFB\u8DEF\u5F84\uFF08\u672A\u5185\u8054\uFF09\uFF1A",
-      ...missingOmissions.map((item) => `  - \`${item.path}\``)
-    );
-  }
-  const facts = filledList(pkg?.known_facts);
-  if (facts.length) lines.push("", "### \u5DF2\u77E5\u4E8B\u5B9E", ...facts.map((item) => `- ${pyStr(item)}`));
-  if (isRecord(extensions.capability_contract) && Object.keys(extensions.capability_contract).length) {
-    lines.push("", "### \u80FD\u529B\u5408\u540C", jsonBlock(extensions.capability_contract));
-  }
-  for (const [key, label] of [["review_execution", "\u5BA1\u67E5\u6267\u884C"], ["review_evidence", "\u5BA1\u67E5\u8BC1\u636E"]]) {
-    if (isRecord(extensions[key]) && Object.keys(extensions[key]).length) lines.push("", `### ${label}`, jsonBlock(extensions[key]));
-  }
-  const outputRows = [];
-  const reportPath = pyStr(pyOr(expected.resolved_file_path, expected.file_path, ""));
-  if (reportPath) outputRows.push(`- \u62A5\u544A\uFF1A\`${reportPath}\``);
-  const sections = filledList(expected.required_sections);
-  if (sections.length) outputRows.push(`- \u62A5\u544A\u7AE0\u8282\uFF1A${sections.map((item) => pyStr(item)).join("\u3001")}`);
-  const gate = pyStrip(pyStr(pyOr(expected.business_gate, "")));
-  if (gate) outputRows.push(`- \u4E1A\u52A1\u95E8\uFF1A\`${gate}\``);
-  if (outputRows.length) lines.push("", "### \u4EA7\u7269", ...outputRows);
-  const toolRows = [];
-  const declaredOnly = !isRecord(pkg?.worker_resources) || Array.isArray(pkg.worker_resources.declared_tools);
-  if (Array.isArray(tools.allowed) && declaredOnly) toolRows.push(`- \u53EA\u7528\uFF1A${tools.allowed.length ? tools.allowed.join("\u3001") : "\u65E0"}`);
-  const forbidden = filledList(tools.forbidden);
-  if (forbidden.length) toolRows.push(`- \u7981\u7528\uFF1A${forbidden.map((item) => pyStr(item)).join("\u3001")}`);
-  toolRows.push(`- \u8054\u7F51\uFF1A${tools.network_allowed === true ? "\u5141\u8BB8" : "\u4E0D\u5141\u8BB8"}\uFF1B\u5B89\u88C5\u4F9D\u8D56\uFF1A${tools.install_allowed === true ? "\u5141\u8BB8" : "\u4E0D\u5141\u8BB8"}`);
-  lines.push("", "### \u5DE5\u5177", ...toolRows);
-  if (isRecord(alignment.guard) && alignment.guard.required === true) lines.push("", "### \u5BF9\u9F50\u5B88\u536B", jsonBlock(alignment));
-  const stops = filledList(pkg?.stop_conditions);
-  if (stops.length) lines.push("", "### \u505C\u6B62\u6761\u4EF6", ...stops.map((item) => `- ${pyStr(item)}`));
-  return lines.join("\n");
-}
-function renderFullTaskMaterial(material, packagePath = "") {
-  const pkg = material?.task_package;
-  const common = isRecord(material?.common_prompt) ? material.common_prompt : {};
-  const capability = isRecord(material?.capability_prompt) ? material.capability_prompt : {};
-  const output = isRecord(material?.output_template) ? material.output_template : {};
-  const supportFiles = Array.isArray(material?.support_files) ? material.support_files : [];
-  const agent = isRecord(pkg) && isRecord(pkg.agent) ? pkg.agent : {};
-  const required = Array.isArray(agent.required_files) ? agent.required_files : [];
-  const requiredPaths = new Set(required.map((item) => pyStr(item)));
-  const goal = pyStrip(pyStr(pyOr(pkg?.goal, "")));
-  const headline = goal.split("\n")[0];
-  const parts = [
-    `\u672C\u6B21\u4EFB\u52A1\uFF1A${headline}`,
-    "\u5B8C\u6574\u4EFB\u52A1\u5361\u5728\u672C\u6587\u672B\u5C3E\u7684\u300C\u4EFB\u52A1\u5361\u300D\u4E00\u8282\u3002\u5148\u8BFB\u4E0B\u9762\u7684\u89C4\u5219\uFF0C\u518D\u6309\u4EFB\u52A1\u5361\u6267\u884C\u3002",
-    "",
-    "## \u516C\u5171\u89C4\u5219",
-    ...renderedMaterialBody(common, requiredPaths),
-    "",
-    "## \u80FD\u529B\u89C4\u5219",
-    ...renderedMaterialBody(capability, requiredPaths)
-  ];
-  for (const item of supportFiles) {
-    if (!isRecord(item)) continue;
-    const content = item.content;
-    if (typeof content === "string" && content) {
-      parts.push("", `## ${pyStr(pyOr(item.heading, "\u8865\u5145\u6750\u6599"))}`, ...renderedMaterialBody(item, requiredPaths));
-    }
-  }
-  parts.push("", renderTaskCard(pkg, packagePath, material.omitted_scope_files ?? []));
-  if (output.content) parts.push("", "## \u7ED3\u6784\u5316\u7ED3\u679C", pyStr(output.content));
-  return pyStrip(parts.join("\n"));
-}
-function renderDirectTaskMaterial(pkg, packagePath = "") {
-  const requiredFiles = readRequiredFiles(pkg);
-  const material = runtimeMaterial(pkg, requiredFiles);
-  return renderFullTaskMaterial(material, packagePath);
-}
-function renderTaskMaterialFile(packagePath) {
-  return renderDirectTaskMaterial(loadPackage(packagePath), path12.resolve(packagePath));
-}
-var REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET, STRUCTURED_PROFILES;
-var init_subagent_preload = __esm({
-  "ops/tools/dispatch-core/subagent_preload.mjs"() {
-    init_tool_common();
-    init_py();
-    REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET = 2e5 * 4;
-    STRUCTURED_PROFILES = /* @__PURE__ */ new Set(["evidence_only_v1", "semantic_review_v2", "acceptance_synthesis_v1"]);
-  }
-});
-
 // ops/tools/dispatch-core/task_package_lint.mjs
-import { existsSync as existsSync6, statSync as statSync9 } from "node:fs";
+import { existsSync as existsSync7, statSync as statSync9 } from "node:fs";
 function dictGet(container, key, fallback = void 0) {
   if (!isRecord(container)) throw pyError("AttributeError", `'${pyTypeName(container)}' object has no attribute 'get'`);
   return Object.hasOwn(container, key) ? container[key] : fallback;
@@ -6677,7 +6737,7 @@ function sameStringList(left, right) {
   return left.every((item, index) => item === right[index]);
 }
 function existsUnderRoot(value, root) {
-  return existsSync6(pathlibJoin(root, value));
+  return existsSync7(pathlibJoin(root, value));
 }
 function isExternalRef(value) {
   return EXTERNAL_REF_RE.test(value) || value.startsWith("http://") || value.startsWith("https://");
@@ -6693,9 +6753,9 @@ function targetRoot(pkg) {
   }
   if (!isAbsoluteLikePython(target)) issues.push("runtime_context.target_repo must be an absolute path");
   const resolved = pyResolveUnder(target, ROOT);
-  if (!existsSync6(resolved) && !createAllowed) {
+  if (!existsSync7(resolved) && !createAllowed) {
     issues.push(`runtime_context.target_repo not found: ${target}`);
-  } else if (existsSync6(resolved) && !statSync9(resolved).isDirectory()) {
+  } else if (existsSync7(resolved) && !statSync9(resolved).isDirectory()) {
     issues.push(`runtime_context.target_repo is not a directory: ${target}`);
   }
   return [resolved, issues];
@@ -6708,7 +6768,7 @@ function pathScopeIssue(value, { base, rootLabel, allowAbsoluteOutside = false, 
   if (pyRelativeTo(resolved, resolveLikePython(base)) === null) {
     const issue = `path is outside ${rootLabel} scope: ${value}`;
     if (allowAbsoluteOutside) {
-      const retry = existsSync6(resolved) ? `replace this scope.read entry with ${JSON.stringify(resolved)} and retry preview` : "set scope.read to an existing real absolute path for external read and retry preview";
+      const retry = existsSync7(resolved) ? `replace this scope.read entry with ${JSON.stringify(resolved)} and retry preview` : "set scope.read to an existing real absolute path for external read and retry preview";
       return `${issue}; resolved path: ${resolved}; ${retry} (read only; write/delete boundaries unchanged)`;
     }
     return issue;
@@ -6955,1530 +7015,9 @@ var init_task_package_lint = __esm({
   }
 });
 
-// ops/tools/pi_model_extension_profile.mjs
-import { existsSync as existsSync7 } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import path13 from "node:path";
-function resolvePiAgentDir(env = process.env) {
-  const configured = String(env.PI_CODING_AGENT_DIR || "").trim();
-  return path13.resolve(configured || path13.join(homedir2(), ".pi", "agent"));
-}
-function resolvePiChildModelExtensions(options = {}) {
-  const env = options.env || process.env;
-  if (String(env.PI_CONTROL_PI || "").trim()) return [];
-  const exists = options.exists || existsSync7;
-  const agentDir = path13.resolve(options.agentDir || resolvePiAgentDir(env));
-  return RELATIVE_EXTENSION_PATHS.map((relativePath) => path13.join(agentDir, ...relativePath.split("/"))).filter((candidate) => exists(candidate));
-}
-function isPiModelExtensionProfileCli(argv1 = process.argv[1]) {
-  return path13.basename(String(argv1 || "")).toLowerCase() === "pi_model_extension_profile.mjs";
-}
-var PI_CHILD_MODEL_EXTENSION_PROFILE, RELATIVE_EXTENSION_PATHS;
-var init_pi_model_extension_profile = __esm({
-  "ops/tools/pi_model_extension_profile.mjs"() {
-    PI_CHILD_MODEL_EXTENSION_PROFILE = "pi-child-model-extensions/v1";
-    RELATIVE_EXTENSION_PATHS = Object.freeze([
-      "extensions/openai-codex-sol-context-alias.ts",
-      "npm/node_modules/pi-claude-code-provider/extensions/pi-claude-code-provider.ts",
-      "npm/node_modules/@tian.zuo/pi-antigravity/index.ts"
-    ]);
-    if (isPiModelExtensionProfileCli()) {
-      if (process.argv.slice(2).some((arg) => arg !== "--json")) {
-        process.stderr.write("Usage: node ops/tools/pi_model_extension_profile.mjs [--json]\n");
-        process.exit(2);
-      }
-      process.stdout.write(`${JSON.stringify({
-        profile: PI_CHILD_MODEL_EXTENSION_PROFILE,
-        extensions: resolvePiChildModelExtensions()
-      })}
-`);
-    }
-  }
-});
-
-// ops/tools/pi_worker_resources.mjs
-import { spawn } from "node:child_process";
-import { existsSync as existsSync8, mkdirSync as mkdirSync6, readFileSync as readFileSync8, statSync as statSync10, writeFileSync as writeFileSync4 } from "node:fs";
-import { homedir as homedir3 } from "node:os";
-import path14 from "node:path";
-import { fileURLToPath as fileURLToPath2, pathToFileURL } from "node:url";
-function configError(code, file, field, message) {
-  return Object.assign(new Error(`${file} ${field}\uFF1A${message}`), { code, file, field });
-}
-function literalLength(key) {
-  return key.replaceAll("*", "").length;
-}
-function matches(value, pattern) {
-  const escaped = pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
-  return new RegExp(`^${escaped}$`, "i").test(value);
-}
-function packageJsonName(dir) {
-  const file = path14.join(dir, "package.json");
-  if (!existsSync8(file)) return null;
-  const name = JSON.parse(readFileSync8(file, "utf8")).name;
-  return typeof name === "string" && name.trim() ? name.trim() : null;
-}
-function resourceName(file) {
-  const parts = String(file).replaceAll("\\", "/").split("/").filter(Boolean);
-  const last = parts.length - 1;
-  if (parts[last] === "SKILL.md") return parts[last - 1];
-  const modules = parts.lastIndexOf("node_modules");
-  if (modules >= 0 && modules < last) {
-    return parts[modules + 1].startsWith("@") ? `${parts[modules + 1]}/${parts[modules + 2]}` : parts[modules + 1];
-  }
-  const local = parts.lastIndexOf("local-packages");
-  if (local >= 0 && local < last) {
-    const dir = parts.slice(0, local + 2).join("/");
-    return packageJsonName(/^[A-Za-z]:$/.test(parts[0]) ? dir : `/${dir}`) ?? parts[local + 1];
-  }
-  const extensions = parts.lastIndexOf("extensions");
-  if (extensions >= 0 && extensions === last - 1) return parts[last].replace(/\.[^.]+$/, "");
-  if (extensions >= 0 && extensions < last) return parts[extensions + 1];
-  return parts[last].replace(/\.[^.]+$/, "");
-}
-function loadWorkerResourcesConfig(configPath = WORKER_RESOURCES_CONFIG) {
-  const raw = JSON.parse(readFileSync8(configPath, "utf8"));
-  for (const [key, hint] of Object.entries(REMOVED_KEYS)) {
-    if (raw[key] !== void 0) throw configError("field_removed", configPath, key, `\u5DF2\u5220\u9664\uFF0C${hint}`);
-  }
-  if (raw.version !== 2) throw configError("value_invalid", configPath, "version", "\u5FC5\u987B\u4E3A 2");
-  const config = { configPath };
-  for (const section of SECTIONS) {
-    const entries = raw[section];
-    if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
-      throw configError("value_invalid", configPath, section, "\u5FC5\u987B\u5B58\u5728\u4E14\u662F\u5BF9\u8C61\uFF1B\u6CA1\u6709\u6761\u76EE\u65F6\u5199 {}");
-    }
-    for (const [key, entry] of Object.entries(entries)) {
-      const field = `${section}.${key}`;
-      if (section === "tools" && key.includes("*")) throw configError("value_invalid", configPath, field, "\u5DE5\u5177\u53EA\u5199\u5177\u4F53\u540D\u5B57\uFF0C\u4E0D\u652F\u6301 *");
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw configError("value_invalid", configPath, field, "\u5FC5\u987B\u662F\u5BF9\u8C61");
-      const unknown = Object.keys(entry).find((item) => !ENTRY_KEYS[section].includes(item));
-      if (unknown) throw configError("field_unknown", configPath, `${field}.${unknown}`, `\u672A\u77E5\u5B57\u6BB5\uFF1B\u53EF\u7528\u5B57\u6BB5\uFF1A${ENTRY_KEYS[section].join("\u3001")}`);
-      if (!IMPORT_ACCESS.includes(entry.access)) throw configError("value_invalid", configPath, `${field}.access`, `\u5FC5\u987B\u662F ${IMPORT_ACCESS.join(" / ")} \u4E4B\u4E00`);
-      for (const text3 of ["label", "group"]) {
-        if (entry[text3] !== void 0 && typeof entry[text3] !== "string") throw configError("value_invalid", configPath, `${field}.${text3}`, "\u5FC5\u987B\u662F\u5B57\u7B26\u4E32");
-      }
-    }
-    config[section] = entries;
-  }
-  const required = raw.required_tools;
-  if (!Array.isArray(required) || required.some((name) => typeof name !== "string" || !name.trim())) {
-    throw configError("value_invalid", configPath, "required_tools", "\u5FC5\u987B\u662F\u5DE5\u5177\u540D\u6570\u7EC4");
-  }
-  for (const name of required) {
-    if (config.tools[name]?.access === "off") throw configError("value_invalid", configPath, `tools.${name}.access`, "\u8FD0\u884C\u5FC5\u9700\u5DE5\u5177\u4E0D\u80FD\u8BBE\u4E3A off");
-  }
-  config.required_tools = [...required];
-  return config;
-}
-function importEntry(config, section, name) {
-  const hits = Object.keys(config[section]).filter((key) => matches(name, key));
-  if (!hits.length) return null;
-  const rank2 = (key) => key.includes("*") ? literalLength(key) : Number.POSITIVE_INFINITY;
-  const best = Math.max(...hits.map(rank2));
-  const top = hits.filter((key) => rank2(key) === best);
-  if (top.length > 1) {
-    throw configError("value_invalid", config.configPath, section, `${name} \u540C\u65F6\u5339\u914D ${top.join("\u3001")}\uFF1B\u5220\u53BB\u91CD\u590D\u6216\u5199\u51FA\u66F4\u5177\u4F53\u7684\u952E`);
-  }
-  return { key: top[0], ...config[section][top[0]] };
-}
-function accessOf(config, section, name) {
-  if (section === "tools" && config.required_tools.includes(name)) return "default_on";
-  return importEntry(config, section, name)?.access ?? "off";
-}
-async function discoverWorkerResources({
-  cwd = process.cwd(),
-  agentDir = process.env.PI_CODING_AGENT_DIR || path14.join(homedir3(), ".pi", "agent"),
-  piCli = PI_CLI
-} = {}) {
-  const { DefaultPackageManager, SettingsManager } = await import(pathToFileURL(path14.join(path14.dirname(piCli), "index.js")).href);
-  const settingsPath = path14.join(agentDir, "settings.json");
-  const settings = existsSync8(settingsPath) ? JSON.parse(readFileSync8(settingsPath, "utf8")) : {};
-  const manager = new DefaultPackageManager({ cwd, agentDir, settingsManager: SettingsManager.inMemory(settings) });
-  const missing = [];
-  const resolved = await manager.resolve(async (source) => {
-    missing.push(source);
-    return "skip";
-  });
-  const enabled = (type) => (resolved[type] || []).filter((item) => item.enabled && ["user", "project"].includes(item.metadata?.scope)).map((item) => ({ name: resourceName(item.path), path: item.path, scope: item.metadata.scope }));
-  return { settingsPath, extensions: enabled("extensions"), skills: enabled("skills"), missing };
-}
-function probeRegisteredTools({ extensions, piCli = PI_CLI, cacheFile, cwd = process.cwd() }) {
-  const key = JSON.stringify(["registration-only/v1", path14.resolve(cwd), ...[piCli, ...extensions.map((item) => item.path)].map((file) => [file, existsSync8(file) ? statSync10(file).mtimeMs : 0])]);
-  const cached = existsSync8(cacheFile) ? JSON.parse(readFileSync8(cacheFile, "utf8")) : null;
-  if (cached?.key === key) return Promise.resolve(cached.tools);
-  const id = `${cacheFile}
-${key}`;
-  if (!probes.has(id)) {
-    probes.set(id, runToolProbe(extensions, piCli, cwd).then((tools) => {
-      mkdirSync6(path14.dirname(cacheFile), { recursive: true });
-      writeFileSync4(cacheFile, JSON.stringify({ key, tools }));
-      return tools;
-    }).finally(() => probes.delete(id)));
-  }
-  return probes.get(id);
-}
-function runToolProbe(extensions, piCli, cwd) {
-  const loader = path14.join(path14.dirname(piCli), "core", "extensions", "loader.js");
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["--input-type=module", "-e", PROBE_SCRIPT], {
-      cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-      env: { ...process.env, PI_TOOL_PROBE_LOADER: loader, PI_TOOL_PROBE_EXTENSIONS: JSON.stringify(extensions.map((item) => item.path)) }
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    const timer = setTimeout(() => child.kill(), PROBE_TIMEOUT_MS);
-    child.on("error", reject);
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(`Pi \u6269\u5C55\u6CE8\u518C\u63A2\u6D4B\u5931\u8D25\uFF08exit ${code}\uFF09${stderr.trim() ? `\uFF1A${stderr.trim().slice(-400)}` : ""}`));
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout.trim()));
-      } catch (error) {
-        reject(new Error(`Pi \u5DE5\u5177\u6CE8\u518C\u8868\u65E0\u6CD5\u89E3\u6790\uFF1A${error.message}`));
-      }
-    });
-  });
-}
-function catalogEntries(config, section, installed) {
-  const rows = installed.map(({ name, scope }) => {
-    const entry = importEntry(config, section, name);
-    return { key: entry?.key ?? null, name, access: entry?.access ?? "off", label: entry?.label ?? "", installed: true, scope };
-  });
-  for (const [key, entry] of Object.entries(config[section])) {
-    if (!installed.some(({ name }) => matches(name, key))) {
-      rows.push({ key, name: key, access: entry.access, label: entry.label ?? "", installed: false, scope: null });
-    }
-  }
-  return rows;
-}
-async function resolveWorkerResourceCatalog({
-  cwd = process.cwd(),
-  agentDir,
-  configPath = WORKER_RESOURCES_CONFIG,
-  piCli = PI_CLI,
-  toolCache = path14.join(cwd, ".runtime", "cockpit", "worker-tool-probe.json"),
-  probeTools = probeRegisteredTools
-} = {}) {
-  const config = loadWorkerResourcesConfig(configPath);
-  const found = await discoverWorkerResources({ cwd, agentDir, piCli });
-  const diagnostics = found.missing.map((source) => ({ code: "not_installed", file: found.settingsPath, field: "packages", message: `\u5DF2\u914D\u7F6E\u7684 Pi \u8D44\u6E90\u672A\u5B89\u88C5\uFF1A${source}` }));
-  const known = /* @__PURE__ */ new Set([...BUILTIN_TOOLS, ...RUNNER_TOOLS]);
-  try {
-    for (const name of await probeTools({ extensions: found.extensions, piCli, cacheFile: toolCache, cwd })) known.add(name);
-  } catch (error) {
-    diagnostics.push({ code: "tool_probe_failed", file: found.settingsPath, field: "extensions", message: `\u8BFB\u53D6\u5DF2\u88C5\u63D2\u4EF6\u6CE8\u518C\u7684\u5DE5\u5177\u5931\u8D25\uFF0C\u5DE5\u5177\u8868\u53EA\u542B\u5185\u7F6E\u5DE5\u5177\uFF1A${error.message}` });
-  }
-  const toolNames = [.../* @__PURE__ */ new Set([...known, ...Object.keys(config.tools), ...config.required_tools])].sort();
-  return {
-    configPath,
-    settingsPath: found.settingsPath,
-    tools: toolNames.map((name) => {
-      const entry = config.tools[name];
-      return {
-        key: entry ? name : null,
-        name,
-        access: accessOf(config, "tools", name),
-        label: entry?.label ?? "",
-        group: entry?.group ?? "",
-        installed: known.has(name) || config.required_tools.includes(name)
-      };
-    }),
-    extensions: catalogEntries(config, "extensions", found.extensions),
-    skills: catalogEntries(config, "skills", found.skills.filter((item) => item.scope === "user")),
-    project_skills: found.skills.filter((item) => item.scope === "project").map(({ name, scope }) => ({ name, scope })),
-    required_tools: config.required_tools,
-    diagnostics
-  };
-}
-function defaultOnTools(config) {
-  return Object.keys(config.tools).filter((name) => config.tools[name].access === "default_on" && !config.required_tools.includes(name));
-}
-var WORKER_RESOURCES_CONFIG, IMPORT_ACCESS, BUILTIN_TOOLS, RUNNER_TOOLS, PI_CLI, PROBE_TIMEOUT_MS, PROBE_SCRIPT, probes, SECTIONS, ENTRY_KEYS, REMOVED_KEYS;
-var init_pi_worker_resources = __esm({
-  async "ops/tools/pi_worker_resources.mjs"() {
-    WORKER_RESOURCES_CONFIG = path14.resolve(path14.dirname(fileURLToPath2(import.meta.url)), "../templates/worker-resources.json");
-    IMPORT_ACCESS = Object.freeze(["off", "optional", "default_on"]);
-    BUILTIN_TOOLS = Object.freeze(["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"]);
-    RUNNER_TOOLS = Object.freeze(["research_search", "research_fetch", "command_job"]);
-    PI_CLI = path14.join(process.env.APPDATA || path14.join(homedir3(), "AppData", "Roaming"), "npm/node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
-    PROBE_TIMEOUT_MS = 6e4;
-    PROBE_SCRIPT = `import { pathToFileURL } from "node:url";
-const { loadExtensions } = await import(pathToFileURL(process.env.PI_TOOL_PROBE_LOADER).href);
-const { extensions, errors } = await loadExtensions(JSON.parse(process.env.PI_TOOL_PROBE_EXTENSIONS), process.cwd());
-if (errors.length) throw new Error(errors.map(({ path, error }) => path + ": " + error).join("; "));
-console.log(JSON.stringify([...new Set(extensions.flatMap((extension) => [...extension.tools.keys()]))]));
-`;
-    probes = /* @__PURE__ */ new Map();
-    SECTIONS = Object.freeze(["tools", "extensions", "skills"]);
-    ENTRY_KEYS = Object.freeze({ tools: ["access", "label", "group"], extensions: ["access", "label"], skills: ["access", "label"] });
-    REMOVED_KEYS = Object.freeze({
-      base_extensions: '\u6539\u5199\u4E3A extensions \u4E2D access = "default_on" \u7684\u6761\u76EE',
-      main_only_extensions: '\u6539\u5199\u4E3A extensions \u4E2D access = "off" \u7684\u6761\u76EE',
-      main_only_skills: '\u6539\u5199\u4E3A skills \u4E2D access = "off" \u7684\u6761\u76EE',
-      force_excluded_tools: '\u6539\u5199\u4E3A tools \u4E2D access = "off" \u7684\u6761\u76EE'
-    });
-    if (path14.basename(process.argv[1] || "") === "pi_worker_resources.mjs") {
-      if (process.argv.slice(2).some((arg) => arg !== "--json")) {
-        console.error("Usage: node ops/tools/pi_worker_resources.mjs --json");
-        process.exitCode = 2;
-      } else {
-        try {
-          console.log(JSON.stringify(await resolveWorkerResourceCatalog(), null, 2));
-        } catch (error) {
-          console.error(error.message);
-          process.exitCode = 1;
-        }
-      }
-    }
-  }
-});
-
-// ops/tools/dispatch_prepare.selftest.mjs
-var dispatch_prepare_selftest_exports = {};
-__export(dispatch_prepare_selftest_exports, {
-  SELF_TEST_CHILD_CATALOG: () => SELF_TEST_CHILD_CATALOG,
-  selfTest: () => selfTest
-});
-import { spawnSync as spawnSync5 } from "node:child_process";
-import { existsSync as existsSync9, mkdirSync as mkdirSync7, mkdtempSync, readFileSync as readFileSync9, readdirSync as readdirSync6, rmSync as rmSync4, statSync as statSync11, writeFileSync as writeFileSync5 } from "node:fs";
-import os2 from "node:os";
-import path15 from "node:path";
-import process7 from "node:process";
-function timeNs() {
-  return `${BigInt(Date.now()) * 1000000n + process7.hrtime.bigint() % 1000000n}`;
-}
-function isFile4(target) {
-  try {
-    return statSync11(target).isFile();
-  } catch {
-    return false;
-  }
-}
-function isDir(target) {
-  try {
-    return statSync11(target).isDirectory();
-  } catch {
-    return false;
-  }
-}
-function readText(target) {
-  return readFileSync9(target, "utf8");
-}
-function deepEqual(left, right) {
-  return JSON.stringify(dpCanonical(left)) === JSON.stringify(dpCanonical(right));
-}
-function dpCanonical(value) {
-  if (Array.isArray(value)) return value.map(dpCanonical);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, dpCanonical(value[key])]));
-  }
-  return value;
-}
-function selfTest() {
-  const original = deps.probePiChildModelCatalogUncached;
-  deps.probePiChildModelCatalogUncached = () => structuredClone(SELF_TEST_CHILD_CATALOG);
-  clearModelCatalogCache();
-  try {
-    return runSelfTestChecks();
-  } finally {
-    deps.probePiChildModelCatalogUncached = original;
-    clearModelCatalogCache();
-  }
-}
-function runSelfTestChecks() {
-  const seed = sampleSeed("general-agent__general-default");
-  const tempPaths = [];
-  const isolatedSubmissions = [];
-  const catalog = projectCatalog(selectionConfig, { piModels: configuredModels });
-  const resolveFor = (role, capability, options = {}) => resolveSelection(selectionConfig, { role, capability, ...options });
-  const everyPickResolvesToItsRow = catalog.roles.every((role) => role.capabilities.every((capability) => projectCatalog(selectionConfig, {
-    role: role.role,
-    capability: capability.id
-  }).roles[0].picks.every((pick) => {
-    const resolved = resolveFor(role.role, capability.id, { pick: pick.id });
-    return resolved.resolved_model === pick.model && resolved.resolved_effort === pick.effort && resolved.effort_range.join() === [pick.effort_min, pick.effort_max].join();
-  })));
-  const isolatedSubmitter = (operation, args) => {
-    if (operation !== "submit-prepared") throw new ToolError2(`unsupported self-test adapter operation: ${operation}`);
-    const dispatchFile = path15.resolve(String(args?.dispatch_file || ""));
-    const controlledRoot = path15.resolve(path15.join(ROOT2, "tmp", "dispatch_prepare"));
-    if (!pyIsRelativeTo(dispatchFile, controlledRoot)) {
-      throw new ToolError2("self-test dispatch envelope escaped tmp/dispatch_prepare");
-    }
-    const envelope = pyJsonLoads(readText(dispatchFile));
-    if (envelope.contract_version !== ASYNC_DISPATCH_CONTRACT_VERSION) {
-      throw new ToolError2("self-test dispatch envelope contract mismatch");
-    }
-    isolatedSubmissions.push(dispatchFile);
-    return { ok: true, task_id: `async-self-test-${String(isolatedSubmissions.length).padStart(2, "0")}` };
-  };
-  const asyncRoot = path15.join(ROOT2, ".runtime", "self-tests", `dispatch-prepare-async-${timeNs()}`);
-  const fakeRunner = path15.join(asyncRoot, "run-pi-task.mjs");
-  mkdirSync7(path15.dirname(fakeRunner), { recursive: true });
-  writeFileSync5(fakeRunner, [
-    "import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';",
-    "import path from 'node:path';",
-    "const args = process.argv.slice(2);",
-    "function value(name, fallback='') { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : fallback; }",
-    "const outDir = value('--outDir');",
-    "const taskFile = value('--taskFile');",
-    "mkdirSync(outDir, { recursive: true });",
-    "const taskText = readFileSync(taskFile, 'utf8');",
-    "writeFileSync(path.join(outDir, 'report.md'), '# fake async dispatch report\\n\\n' + taskText.slice(0, 200) + '\\n', 'utf8');",
-    "writeFileSync(path.join(outDir, 'handoff.md'), 'verdict: done\\nsummary: fake async dispatch completed.\\nfiles_read_or_changed:\\n  - report.md\\nevidence_paths:\\n  - report.md\\nblockers:\\n  - none\\n', 'utf8');",
-    "writeFileSync(path.join(outDir, 'child-final.md'), '## \u7ED3\u8BBA\\npass\\n', 'utf8');",
-    "writeFileSync(path.join(outDir, 'child-task-result.json'), JSON.stringify({ ok: true, status: 'done' }, null, 2), 'utf8');"
-  ].join("\n"), "utf8");
-  seed.scope.read = [String(fakeRunner)];
-  const direct = prepareDirectPreview(seed);
-  if (direct.task_package_path) tempPaths.push(path15.join(ROOT2, String(direct.task_package_path)));
-  const renderedDirect = renderTaskMaterialFile(path15.join(ROOT2, String(direct.task_package_path)));
-  const dryDirect = prepareDispatch(seed, "direct", { action: "preview" });
-  const explicitAsyncPreview = prepareDispatch(seed, "async-subagent", { action: "preview" });
-  const outputVisibilitySeed = exampleSeed("general-agent__general-default");
-  if (!outputVisibilitySeed.scope) outputVisibilitySeed.scope = {};
-  outputVisibilitySeed.scope.read = [String(fakeRunner)];
-  if (!outputVisibilitySeed.scope.write_extra) outputVisibilitySeed.scope.write_extra = [];
-  outputVisibilitySeed.scope.write_extra.push("notes/reports/dispatch-output-visibility-self-test.md");
-  const outputVisibilityDry = prepareDispatch(expandSeed(outputVisibilitySeed), "direct", { action: "preview" });
-  const scopeWriteDedupeSeed = exampleSeed("general-agent__general-default");
-  scopeWriteDedupeSeed.slug = "dispatch-scope-write-dedupe-self-test";
-  if (!scopeWriteDedupeSeed.scope) scopeWriteDedupeSeed.scope = {};
-  scopeWriteDedupeSeed.scope.read = [String(fakeRunner)];
-  if (!scopeWriteDedupeSeed.scope.write_extra) scopeWriteDedupeSeed.scope.write_extra = [];
-  scopeWriteDedupeSeed.scope.write_extra.push("notes/general/dispatch-scope-write-dedupe-self-test.md");
-  const scopeWriteDedupeDry = prepareDispatch(expandSeed(scopeWriteDedupeSeed), "direct", { action: "preview" });
-  const scopeWriteDedupePaths = (scopeWriteDedupeDry.business_output || {}).scope_write || [];
-  const explorerTemplate = renderTemplate("explorer-agent__codebase-scan");
-  let directRuntimeBlocked = false;
-  try {
-    prepareDispatch(seed, "direct");
-  } catch (error) {
-    if (error?.name !== "ToolError") throw error;
-    directRuntimeBlocked = String(error.message).includes("direct subagent dispatch is disabled");
-  }
-  const dispatchTmp = path15.join(ROOT2, "tmp", "dispatch_prepare");
-  const evidenceTmp = path15.join(ROOT2, "tmp", "review_evidence");
-  const fileNames = (dir) => existsSync9(dir) ? new Set(readdirSync6(dir).filter((name) => isFile4(path15.join(dir, name)))) : /* @__PURE__ */ new Set();
-  const sameNames = (left, right) => left.size === right.size && [...left].every((name) => right.has(name));
-  const beforeInvalidRoot = fileNames(dispatchTmp);
-  const beforeInvalidEvidence = fileNames(evidenceTmp);
-  const invalidRootSeed = expandSeed(exampleSeed("verify-agent__code-verification"));
-  invalidRootSeed.scope.read = ["ops/tools/dispatch_prepare.mjs"];
-  let invalidRootRejectedBeforeWrite = false;
-  try {
-    prepareDispatch(invalidRootSeed, "async-subagent", {
-      asyncRunnerPath: fakeRunner,
-      asyncTaskRoot: path15.join(path15.dirname(ROOT2), "outside-runtime")
-    });
-  } catch (error) {
-    if (error?.name !== "ToolError") throw error;
-    invalidRootRejectedBeforeWrite = String(error.message).includes("task_root must stay inside") && sameNames(beforeInvalidRoot, fileNames(dispatchTmp)) && sameNames(beforeInvalidEvidence, fileNames(evidenceTmp));
-  }
-  const asyncDispatch = prepareDispatch(seed, "async-subagent", {
-    asyncRunnerPath: fakeRunner,
-    asyncTaskRoot: asyncRoot,
-    asyncSubmitter: isolatedSubmitter
-  });
-  const auto = prepareDispatch(seed, "auto", {
-    asyncRunnerPath: fakeRunner,
-    asyncTaskRoot: asyncRoot,
-    asyncSubmitter: isolatedSubmitter
-  });
-  const readiness = asyncSubagentReadiness();
-  const [endpointServer, endpointTool] = asyncSubagentEndpoint();
-  const staleContractStatus = asyncDispatchContractStatus({ dispatch_contract_version: "async-dispatch/v1" });
-  const compatibleContractStatus = asyncDispatchContractStatus({
-    dispatch_contract_version: ASYNC_DISPATCH_CONTRACT_VERSION,
-    supported_dispatch_contract_versions: ["async-dispatch/v1", ASYNC_DISPATCH_CONTRACT_VERSION]
-  });
-  const [staleDelivery] = resolveDeliveryWithReadiness(
-    "async-subagent",
-    { status: "unavailable", issues: [String(staleContractStatus.issue)] }
-  );
-  const checks = {
-    list_roles_unique: catalog.roles.length > 0 && new Set(catalog.roles.map((row) => row.role)).size === catalog.roles.length,
-    list_picks_have_ranges: catalog.roles.every((row) => row.picks.every((pick) => pick.id && pick.model && pick.effort_min && pick.effort_max)),
-    list_phase_metadata_present: catalog.roles.every((row) => row.capabilities.every((cap) => cap.dispatch_phase?.kind)),
-    list_models_have_efforts: catalog.models.every((row) => row.model && row.efforts.length > 0),
-    list_picks_are_in_pi_catalog: catalog.warnings.length === 0,
-    every_pick_resolves_to_its_row: everyPickResolvesToItsRow,
-    direct_ok: direct.status === "ok",
-    direct_mode: direct.delivery_mode === "direct_message",
-    direct_file_ref_mode: direct.direct_payload_mode === "file_ref",
-    direct_package_persisted: Boolean(direct.task_package_path) && isFile4(path15.join(ROOT2, String(direct.task_package_path))),
-    direct_spawn_has_file_marker: direct.spawn_payload.includes("DIRECT_TASK_PACKAGE_FILE:"),
-    direct_spawn_has_render_command: direct.spawn_payload.includes("subagent_preload.mjs render --package"),
-    direct_spawn_omits_inline_material: !direct.spawn_payload.includes("## \u4EFB\u52A1\u5305"),
-    async_ok: asyncDispatch.status === "ok",
-    async_mode: asyncDispatch.delivery_mode === "async_subagent",
-    async_has_task_id: Boolean(asyncDispatch.task_id),
-    async_has_wait_tool_arguments: (asyncDispatch.wait_tool_arguments || {}).task_id === asyncDispatch.task_id,
-    async_wait_has_no_revision_dependency: !Object.hasOwn(asyncDispatch.wait_tool_arguments || {}, "after_revision"),
-    async_has_result_tool_arguments: (asyncDispatch.result_tool_arguments || {}).task_id === asyncDispatch.task_id,
-    auto_ok: auto.status === "ok",
-    auto_resolves_async_when_available: auto.resolved_delivery === "async-subagent",
-    auto_has_readiness: auto.delivery_readiness.status === "available",
-    auto_has_task_id: Boolean(auto.task_id),
-    self_test_uses_isolated_submitter: Boolean(isolatedSubmissions.length) && isolatedSubmissions.every((item) => path15.resolve(path15.dirname(path15.dirname(item))) === path15.resolve(path15.join(ROOT2, "tmp", "dispatch_prepare", "preparations")) && path15.basename(path15.dirname(item)).startsWith("prep-")),
-    readiness_auto_approves_async_tools: readiness.approval_mode === "approve",
-    readiness_matches_dispatch_contract: readiness.dispatch_contract_version === ASYNC_DISPATCH_CONTRACT_VERSION && (readiness.supported_dispatch_contract_versions || []).includes(ASYNC_DISPATCH_CONTRACT_VERSION),
-    stale_dispatch_contract_is_rejected: staleContractStatus.compatible === false && String(staleContractStatus.issue).includes(ASYNC_DISPATCH_CONTRACT_VERSION),
-    compatible_dispatch_contract_is_accepted: compatibleContractStatus.compatible === true,
-    explicit_async_delivery_uses_readiness: staleDelivery === "unavailable",
-    readiness_and_submit_share_configured_endpoint: Boolean(endpointServer) && endpointTool !== null && endpointTool !== void 0 && readiness.tool_path === String(endpointTool),
-    dry_run_ok: dryDirect.status === "ok" && dryDirect.dry_run === true,
-    explicit_async_preview_skips_transport_readiness: explicitAsyncPreview.resolved_delivery === "async-subagent" && (explicitAsyncPreview.delivery_readiness || {}).status === "not_checked" && (explicitAsyncPreview.async_preview || {}).model === resolveFor("general-agent", "general-default").resolved_model,
-    dry_run_no_spawn_hint: !dryDirect.spawn_payload.includes("SUBAGENT_TASK_ID"),
-    dry_run_no_writes: deepEqual(dryDirect.writes_performed, []),
-    dry_run_business_output_visible: Boolean((dryDirect.business_output || {}).expected_report_path),
-    dry_run_write_extra_kept_separate: (outputVisibilityDry.business_output || {}).expected_report_path !== "notes/reports/dispatch-output-visibility-self-test.md" && ((outputVisibilityDry.business_output || {}).extra_write_paths || []).includes("notes/reports/dispatch-output-visibility-self-test.md"),
-    business_output_scope_write_deduped: scopeWriteDedupePaths.filter((item) => item === "notes/general/dispatch-scope-write-dedupe-self-test.md").length === 1,
-    direct_runtime_blocked: directRuntimeBlocked,
-    invalid_task_root_rejected_before_write: invalidRootRejectedBeforeWrite
-  };
-  for (const rid of routesWithCards()) {
-    try {
-      const outcome = prepareDirectPreview(expandSeed(exampleSeed(rid)));
-      if (outcome.task_package_path) tempPaths.push(path15.join(ROOT2, String(outcome.task_package_path)));
-      checks[`card::${rid}`] = outcome.status === "ok";
-    } catch (error) {
-      if (!isPyCaughtError(error, /* @__PURE__ */ new Set(["ToolError", "KeyError", "ValueError"]))) throw error;
-      checks[`card::${rid}`] = false;
-    }
-  }
-  const codeTestingSeed = exampleSeed("verify-agent__code-verification");
-  codeTestingSeed.contract.verify_mode = "testing";
-  for (const key of ["changed_surfaces", "allowed_risk_triggers", "disallowed_topics", "issue_admission_required"]) {
-    delete codeTestingSeed.contract[key];
-  }
-  try {
-    expandSeed(codeTestingSeed);
-    checks.code_testing_omits_verification_only_fields = true;
-  } catch (error) {
-    if (error?.name !== "ToolError") throw error;
-    checks.code_testing_omits_verification_only_fields = false;
-  }
-  const codeVerificationSeed = exampleSeed("verify-agent__code-verification");
-  delete codeVerificationSeed.contract.changed_surfaces;
-  try {
-    expandSeed(codeVerificationSeed);
-    checks.code_verification_requires_changed_surfaces = false;
-  } catch (error) {
-    if (error?.name !== "ToolError") throw error;
-    checks.code_verification_requires_changed_surfaces = String(error.message).includes("contract.changed_surfaces");
-  }
-  const plannerSeed = exampleSeed("planner-agent__plan-authoring");
-  if (!plannerSeed.contract) plannerSeed.contract = {};
-  delete plannerSeed.contract.locked_decisions;
-  plannerSeed.contract.mechanical_schema = { interface_contract_kind_values: ["invented"] };
-  plannerSeed.extensions = {
-    capability_contract: {
-      planner: { mechanical_schema: { source: "caller", interface_contract_kind_values: ["invented"] } }
-    }
-  };
-  const plannerExpanded = expandSeed(plannerSeed);
-  const plannerContract = ((plannerExpanded.extensions || {}).capability_contract || {}).planner || {};
-  checks.planner_empty_locked_decisions_allowed = deepEqual(plannerContract.locked_decisions, []) && deepEqual((plannerExpanded.alignment || {}).decision_refs, []);
-  checks.planner_mechanical_schema_injected_from_checker = (plannerContract.mechanical_schema || {}).source === "ops/tools/planning_manifest_check.py" && !((plannerContract.mechanical_schema || {}).interface_contract_kind_values || []).includes("invented") && ((plannerContract.mechanical_schema || {}).interface_contract_kind_values || []).includes("data_shape");
-  const executorRootSeed = exampleSeed("executor-agent__plan-execution");
-  executorRootSeed.contract.dependency_edges = [];
-  executorRootSeed.contract.resource_locks = [];
-  const executorRootExpanded = expandSeed(executorRootSeed);
-  const executorRootContract = ((executorRootExpanded.extensions || {}).capability_contract || {}).executor || {};
-  checks.executor_root_lane_empty_dependency_edges_allowed = deepEqual(executorRootContract.dependency_edges, []);
-  checks.executor_lane_empty_resource_locks_allowed = deepEqual(executorRootContract.resource_locks, []);
-  try {
-    validatePlannerMechanicalSchema({ source: "ops/tools/planning_manifest_check.py" });
-    checks.planner_mechanical_schema_missing_fields_block = false;
-  } catch (error) {
-    if (error?.name !== "ToolError") throw error;
-    checks.planner_mechanical_schema_missing_fields_block = String(error.message).includes("stop before task material write") && String(error.message).includes("interface_contract_kind_values");
-  }
-  const unknownPlanningPassSeed = exampleSeed("planner-agent__plan-authoring");
-  unknownPlanningPassSeed.contract.planning_pass = "revision";
-  checks.planner_planning_pass_passes_through = JSON.stringify(expandSeed(unknownPlanningPassSeed)).includes('"planning_pass":"revision"');
-  const minimal = {
-    route_id: "explorer-agent__codebase-scan",
-    goal: "self-test: \u6478\u6E05 ops/tools \u7684\u811A\u672C\u7ED3\u6784\u548C\u5165\u53E3",
-    scope: { read: ["ops/tools/"] },
-    contract: { scan_mode: "terrain_map", focus: "structure", question: "\u5DE5\u5177\u76EE\u5F55\u6709\u54EA\u4E9B\u5165\u53E3\u811A\u672C\u548C\u804C\u8D23" },
-    slug: "dispatch-prepare-self-test"
-  };
-  const expanded = expandSeed({ ...minimal });
-  const contract = expanded.extensions.capability_contract.explorer || {};
-  const minimalDirect = prepareDirectPreview(expanded);
-  if (minimalDirect.task_package_path) tempPaths.push(path15.join(ROOT2, String(minimalDirect.task_package_path)));
-  const minimalAsync = prepareDispatch(expanded, "async-subagent", {
-    asyncRunnerPath: fakeRunner,
-    asyncTaskRoot: asyncRoot,
-    asyncSubmitter: isolatedSubmitter
-  });
-  if (minimalAsync.task_package_path) tempPaths.push(path15.join(ROOT2, String(minimalAsync.task_package_path)));
-  const modelSelection = minimalAsync.async_model_selection || {};
-  const explorerDefault = resolveFor("explorer-agent", "codebase-scan");
-  const expectedModel = explorerDefault.resolved_model;
-  const expectedEffort = explorerDefault.resolved_effort;
-  Object.assign(checks, {
-    minimal_expanded_full: Object.hasOwn(expanded, "handoff_contract"),
-    minimal_slot_explorer: contract.scan_mode === "terrain_map",
-    minimal_scope_paths_mirrored: deepEqual(contract.scope_paths, ["ops/tools/"]),
-    minimal_report_in_write: expanded.scope.write.includes("notes/explorer/dispatch-prepare-self-test.md"),
-    minimal_dispatch_ok: minimalDirect.status === "ok",
-    minimal_async_primary_model_from_agent_config: Boolean(expectedModel) && modelSelection.primary_model === expectedModel,
-    minimal_async_primary_effort_from_agent_config: Boolean(expectedEffort) && modelSelection.primary_effort === expectedEffort,
-    minimal_template_renders: renderTemplate("explorer-agent__codebase-scan").includes("scan_mode"),
-    minimal_list_has_card: listCards().some((row) => row.minimal_seed)
-  });
-  const piEnvelopes = [];
-  const piCapturingSubmitter = (operation, args) => {
-    const receipt = isolatedSubmitter(operation, args);
-    piEnvelopes.push(pyJsonLoads(readText(String(args.dispatch_file))));
-    return receipt;
-  };
-  const piMinimal = { ...minimal, slug: "dispatch-prepare-pi-self-test", budget: { max_elapsed_minutes: 45 } };
-  const piAsync = prepareDispatch(expandSeed(piMinimal), "async-subagent", {
-    asyncRunnerPath: fakeRunner,
-    asyncTaskRoot: asyncRoot,
-    asyncSubmitter: piCapturingSubmitter
-  });
-  if (piAsync.task_package_path) tempPaths.push(path15.join(ROOT2, String(piAsync.task_package_path)));
-  const piSelection = piAsync.async_model_selection || {};
-  const piDescriptorSelection = (piAsync.descriptor || {}).model_selection || {};
-  const piEnvelope = piEnvelopes.length ? piEnvelopes[piEnvelopes.length - 1] : {};
-  const expectedPiModel = explorerDefault.resolved_model;
-  const expectedPiEffort = explorerDefault.resolved_effort;
-  Object.assign(checks, {
-    pi_async_ok: piAsync.status === "ok" && piAsync.executor === "pi",
-    pi_async_runner_basename: path15.basename(String(piEnvelope.runner_path || "")) === "run-pi-task.mjs",
-    pi_async_envelope_carries_seed_budget: piEnvelope.budget?.max_elapsed_minutes === 45,
-    pi_async_primary_model_from_pi_config: Boolean(expectedPiModel) && piSelection.primary_model === expectedPiModel,
-    pi_async_primary_effort_from_pi_config: Boolean(expectedPiEffort) && piSelection.primary_effort === expectedPiEffort,
-    pi_envelope_model_matches_selection: piEnvelope.model === piSelection.primary_model,
-    pi_envelope_effort_matches_selection: piEnvelope.effort === piSelection.primary_effort,
-    pi_envelope_has_no_model_fallback: !Object.hasOwn(piEnvelope, "model_fallback"),
-    pi_envelope_freezes_pick_efforts_and_range: piEnvelope.selection?.pick === explorerDefault.pick && deepEqual(piEnvelope.selection?.efforts, explorerDefault.efforts) && deepEqual(piEnvelope.selection?.effort_range, explorerDefault.effort_range),
-    pi_descriptor_freezes_selection_sources: piDescriptorSelection.model === piEnvelope.model && piDescriptorSelection.effort === piEnvelope.effort && piDescriptorSelection.model_source === piSelection.model_source && piDescriptorSelection.effort_source === piSelection.effort_source && deepEqual(piDescriptorSelection.child_model, piSelection.child_model),
-    pi_envelope_has_no_executor_field: !Object.hasOwn(piEnvelope, "executor"),
-    pi_envelope_contract_unchanged: piEnvelope.contract_version === ASYNC_DISPATCH_CONTRACT_VERSION
-  });
-  const batchFile = path15.join(ROOT2, "tmp", "dispatch_prepare", `self-test-batch-${timeNs()}.json`);
-  mkdirSync7(path15.dirname(batchFile), { recursive: true });
-  writeFileSync5(batchFile, JSON.stringify([
-    exampleSeed("explorer-agent__codebase-scan"),
-    exampleSeed("explorer-agent__runtime-env-scan")
-  ]), "utf8");
-  try {
-    const batchSeeds = loadSeeds({ seed: batchFile, seed_stdin: false, sample_route: null });
-    const batchOut = batchSeeds.map((item) => prepareDirectPreview(item));
-    for (const item of batchOut) {
-      if (item.task_package_path) tempPaths.push(path15.join(ROOT2, String(item.task_package_path)));
-    }
-    checks.batch_seeds_two = batchOut.length === 2 && batchOut.every((item) => item.delivery_mode === "direct_message");
-    checks.batch_policy_parallel = batchSeeds.every(
-      (item) => item.concurrency_contract.parallel_policy === "allowed_if_no_conflict"
-    );
-    const metadataSeeds = [
-      {
-        route_id: "explorer-agent__codebase-scan",
-        goal: "scan the first batch scope",
-        scope: { read: ["PROJECT.md"] },
-        contract: { scan_mode: "slice_scan", focus: "structure", question: "what is the first batch scope", depth_limit: 1e3 },
-        slug: "self-test-batch-a"
-      },
-      {
-        route_id: "explorer-agent__codebase-scan",
-        goal: "scan the second batch scope",
-        scope: { read: ["AGENTS.md"] },
-        contract: { scan_mode: "slice_scan", focus: "structure", question: "what is the second batch scope", depth_limit: 1e3 },
-        slug: "self-test-batch-b"
-      }
-    ];
-    const metadataBatch = prepareBatchDispatch(
-      metadataSeeds.map((item) => expandDispatchSeed(item)),
-      "async-subagent",
-      { batchId: "batch-self-test", action: "preview", asyncRunnerPath: fakeRunner, asyncTaskRoot: asyncRoot }
-    );
-    checks.batch_metadata_is_stable = metadataBatch.status === "ok" && metadataBatch.batch_id === "batch-self-test" && deepEqual((metadataBatch.dispatches || []).map((item) => item.slice_id), ["self-test-batch-a", "self-test-batch-b"]) && (metadataBatch.dispatches || []).every((item) => item.batch_id === "batch-self-test");
-  } finally {
-    rmSync4(batchFile, { force: true });
-  }
-  const bomSeedFile = path15.join(ROOT2, "tmp", "dispatch_prepare", `self-test-bom-seed-${timeNs()}.json`);
-  mkdirSync7(path15.dirname(bomSeedFile), { recursive: true });
-  writeFileSync5(bomSeedFile, Buffer.concat([
-    Buffer.from([239, 187, 191]),
-    Buffer.from(JSON.stringify(exampleSeed("explorer-agent__codebase-scan")), "utf8")
-  ]));
-  try {
-    const bomSeeds = loadSeeds({ seed: bomSeedFile, seed_stdin: false, sample_route: null });
-    checks.seed_file_tolerates_bom = bomSeeds.length === 1 && bomSeeds[0].route_id === "explorer-agent__codebase-scan";
-  } finally {
-    rmSync4(bomSeedFile, { force: true });
-  }
-  const nameRoot = mkdtempSync(path15.join(os2.tmpdir(), "dispatch-prepare-server-name-self-test-"));
-  try {
-    const newConfig = path15.join(nameRoot, "new.toml");
-    writeFileSync5(newConfig, `[mcp_servers.${ASYNC_MCP_SERVER_NAME}]
-command = "new"
-`, "utf8");
-    const resolved = _serverFromConfig(newConfig);
-    checks.server_name_resolves_new_registration = resolved !== null && resolved.server_name === ASYNC_MCP_SERVER_NAME && resolved.command === "new";
-  } finally {
-    rmSync4(nameRoot, { recursive: true, force: true });
-  }
-  const sampleGlobalServer = { source: "global", config_path: "global-config" };
-  checks.project_async_mcp_registration_ignored = selectAsyncSubagentServer({ source: "project", config_path: "project-config" }, sampleGlobalServer) === sampleGlobalServer;
-  checks.global_async_mcp_registration_selected = selectAsyncSubagentServer(null, sampleGlobalServer) === sampleGlobalServer;
-  const resolvedServer = asyncSubagentServer();
-  const resolvedScript = resolvedServer ? asyncServerScriptPath(resolvedServer) : null;
-  checks.async_server_script_resolves = resolvedServer === null || resolvedScript !== null && isFile4(resolvedScript);
-  try {
-    expandSeed({ ...minimal, goal: "<\u672C\u6B21\u626B\u63CF\u8981\u56DE\u7B54\u7684\u4E00\u53E5\u8BDD\u95EE\u9898>" });
-    checks.minimal_placeholder_rejected = false;
-  } catch (error) {
-    if (error?.name !== "ToolError") throw error;
-    checks.minimal_placeholder_rejected = true;
-  }
-  const documentScanSeed = expandSeed(exampleSeed("research-agent__document-scan"));
-  const documentScanOk = prepareDirectPreview(documentScanSeed);
-  if (documentScanOk.task_package_path) tempPaths.push(path15.join(ROOT2, String(documentScanOk.task_package_path)));
-  checks.vision_requirement_passes_with_configured_model = documentScanOk.status === "ok";
-  const documentScanOverride = prepareDirectPreview(documentScanSeed, { asyncModel: "no-vision-fixture-model" });
-  checks.vision_requirement_is_task_guidance = documentScanOverride.status === "ok";
-  const readOnlyPackage = {
-    agent: { role: "general-agent", runtime_role: "general-agent", capability: { name: "general-default" } },
-    scope: { read: ["a/"], write: [], delete: [] },
-    runtime_context: { network_needed: "no" },
-    tool_contract: { allowed: ["read", "grep", "find", "ls"], network_allowed: false, install_allowed: false },
-    extensions: {}
-  };
-  const crossRepoTarget = path15.join(asyncRoot, "target-repo");
-  mkdirSync7(crossRepoTarget, { recursive: true });
-  writeFileSync5(path15.join(crossRepoTarget, "marker.txt"), "cross-repo self-test\n", "utf8");
-  const crossRepoSeed = structuredClone(expanded);
-  crossRepoSeed.scope.read = ["marker.txt"];
-  if (crossRepoSeed.inputs && typeof crossRepoSeed.inputs === "object" && !Array.isArray(crossRepoSeed.inputs)) {
-    crossRepoSeed.inputs.files = ["marker.txt"];
-  }
-  if (!crossRepoSeed.extensions) crossRepoSeed.extensions = {};
-  crossRepoSeed.extensions.cross_repo_acceptance = { result_mode: "read_only_audit" };
-  const crossRepoPrepared = prepareDispatch(crossRepoSeed, "async-subagent", {
-    asyncRunnerPath: fakeRunner,
-    asyncTaskRoot: asyncRoot,
-    asyncTargetCwd: crossRepoTarget,
-    asyncSubmitter: isolatedSubmitter
-  });
-  const crossRepoPackagePath = path15.join(ROOT2, String(crossRepoPrepared.task_package_path));
-  const crossRepoPackage = pyJsonLoads(readText(crossRepoPackagePath)).task_package;
-  checks.cross_repo_target_repo_bound_into_task_package = path15.resolve(crossRepoPackage.runtime_context.target_repo) === path15.resolve(crossRepoTarget);
-  tempPaths.push(
-    crossRepoPackagePath,
-    withSuffix(crossRepoPackagePath, ".task.md"),
-    withSuffix(crossRepoPackagePath, ".dispatch.json")
-  );
-  readOnlyPackage.extensions = { cross_repo_acceptance: { result_mode: "read_only_audit" } };
-  const crossRepoOptions = resolveAsyncRuntimeOptions(readOnlyPackage, {
-    runnerPath: fakeRunner,
-    targetCwd: crossRepoTarget
-  });
-  checks.cross_repo_task_root_stays_in_controller_runtime = pyIsRelativeTo(
-    String(crossRepoOptions.task_root),
-    path15.resolve(path15.join(ROOT2, ".runtime"))
-  ) && !pyIsRelativeTo(String(crossRepoOptions.task_root), path15.resolve(path15.join(crossRepoTarget, ".runtime")));
-  const simulationPackage = structuredClone(readOnlyPackage);
-  simulationPackage.extensions.cross_repo_acceptance = {
-    result_mode: "simulated_planning",
-    simulation: { role: "target-reviewer", persona: { instructions: "\u53EA\u8BFB\u68C0\u67E5\u76EE\u6807\u4ED3\u5165\u53E3", boundaries: ["\u4E0D\u5199\u76EE\u6807\u4ED3"] } }
-  };
-  const simulationOptions = resolveAsyncRuntimeOptions(simulationPackage, {
-    runnerPath: fakeRunner,
-    targetCwd: crossRepoTarget
-  });
-  checks.cross_repo_simulation_profile_comes_from_seed = simulationOptions.result_mode === "simulated_planning" && simulationOptions.simulation_profile.role === "target-reviewer" && simulationOptions.simulation_profile.persona.instructions === "\u53EA\u8BFB\u68C0\u67E5\u76EE\u6807\u4ED3\u5165\u53E3";
-  const missingModePackage = structuredClone(readOnlyPackage);
-  missingModePackage.extensions = {};
-  const defaultAudit = resolveAsyncRuntimeOptions(missingModePackage, {
-    runnerPath: fakeRunner,
-    targetCwd: crossRepoTarget
-  });
-  checks.cross_repo_result_mode_defaults_read_only = defaultAudit.result_mode === "read_only_audit" && defaultAudit.warnings.length > 0;
-  const evidencePackage = structuredClone(readOnlyPackage);
-  evidencePackage.scope.write = ["notes/x.md"];
-  evidencePackage.extensions = { review_execution: { profile: PROFILE } };
-  const evidenceOptions = resolveAsyncRuntimeOptions(evidencePackage, {
-    runnerPath: fakeRunner,
-    taskRoot: asyncRoot,
-    targetCwd: ROOT2
-  });
-  checks.evidence_only_resolves_isolated_execution_profile = evidenceOptions.execution_profile === PROFILE && evidenceOptions.context_mode === "isolated";
-  const semanticPackage = structuredClone(readOnlyPackage);
-  semanticPackage.scope.write = ["notes/verify/semantic-self-test.md"];
-  semanticPackage.extensions = { review_execution: { profile: SEMANTIC_PROFILE } };
-  const semanticOptions = resolveAsyncRuntimeOptions(semanticPackage, {
-    runnerPath: fakeRunner,
-    taskRoot: asyncRoot,
-    targetCwd: ROOT2
-  });
-  checks.semantic_review_keeps_standard_project_aware = semanticOptions.execution_profile === "standard" && semanticOptions.context_mode === "project-aware";
-  const semanticNetworkLocalTools = structuredClone(semanticPackage);
-  semanticNetworkLocalTools.runtime_context = { network_needed: "yes" };
-  semanticNetworkLocalTools.tool_contract = { allowed: ["read", "grep", "write"] };
-  const semanticLocalOptions = resolveAsyncRuntimeOptions(semanticNetworkLocalTools, {
-    runnerPath: fakeRunner,
-    taskRoot: asyncRoot,
-    targetCwd: ROOT2
-  });
-  checks.semantic_review_network_needed_preserves_explicit_tools = deepEqual(semanticLocalOptions.tool_allowlist, ["read", "grep", "write"]);
-  const semanticNetworkNoTool = structuredClone(semanticPackage);
-  semanticNetworkNoTool.runtime_context = { network_needed: "yes" };
-  semanticNetworkNoTool.tool_contract = { network_allowed: true, allowed: null };
-  const inheritedNetworkOptions = resolveAsyncRuntimeOptions(semanticNetworkNoTool, {
-    runnerPath: fakeRunner,
-    taskRoot: asyncRoot,
-    targetCwd: ROOT2
-  });
-  checks.semantic_review_network_needed_accepts_inherited_tools = inheritedNetworkOptions.tool_allowlist === null && inheritedNetworkOptions.tool_allowlist_source === "pi_configured_tools";
-  const evidenceNetworkPackage = structuredClone(evidencePackage);
-  evidenceNetworkPackage.runtime_context = { network_needed: "yes" };
-  const assistedOptions = resolveAsyncRuntimeOptions(evidenceNetworkPackage, {
-    runnerPath: fakeRunner,
-    taskRoot: asyncRoot,
-    targetCwd: ROOT2
-  });
-  checks.evidence_network_uses_assisted_profile = assistedOptions.execution_profile === "standard" && assistedOptions.warnings.length > 0;
-  const semanticPreview = prepareDispatch(
-    expandDispatchSeed({
-      route_id: "semantic-review-agent__rule-quality-inspection",
-      goal: "semantic review material self-test",
-      scope: { read: ["AGENTS.md", "ops/skills/rule-authoring/SKILL.md"] },
-      contract: { target_files: ["AGENTS.md"], inspection_focus: ["single_direction"] }
-    }),
-    "async-subagent",
-    { action: "preview", asyncRunnerPath: fakeRunner, asyncTaskRoot: asyncRoot }
-  );
-  checks.semantic_preview_uses_full_review_material = (semanticPreview.review_evidence || {}).profile === SEMANTIC_PROFILE && (semanticPreview.review_evidence || {}).material_mode === "full";
-  const brokenRouteSeed = exampleSeed("explorer-agent__codebase-scan");
-  brokenRouteSeed.route_id = "nonexistent-agent__no-such-capability";
-  const batchPartial = prepareBatchDispatch([seed, brokenRouteSeed], "async-subagent", {
-    asyncRunnerPath: fakeRunner,
-    asyncTaskRoot: asyncRoot,
-    asyncSubmitter: isolatedSubmitter
-  });
-  for (const item of batchPartial.dispatches) {
-    if (item.task_package_path) tempPaths.push(path15.join(ROOT2, String(item.task_package_path)));
-  }
-  checks.batch_partial_status_on_mixed_seeds = batchPartial.status === "partial";
-  checks.batch_partial_keeps_first_task_id = Boolean(batchPartial.committed_task_ids.length);
-  checks.batch_partial_lists_failed_index = deepEqual(batchPartial.failed_seed_indexes, [2]);
-  const batchPartialFailure = batchPartial.dispatches[1];
-  checks.batch_partial_failure_carries_phase = batchPartialFailure.phase === "seed" && String(batchPartialFailure.error || "").startsWith("[seed] ");
-  checks.batch_partial_dispatches_len_matches_seeds = batchPartial.dispatches.length === 2;
-  const conflictSeedA = exampleSeed("explorer-agent__codebase-scan");
-  pushWriteExtra(conflictSeedA, "notes/conflict/self-test.md");
-  const conflictSeedB = exampleSeed("explorer-agent__runtime-env-scan");
-  pushWriteExtra(conflictSeedB, "notes/conflict/self-test.md");
-  const conflictSeedC = exampleSeed("explorer-agent__codebase-scan");
-  conflictSeedC.slug = "independent-conflict-self-test";
-  pushWriteExtra(conflictSeedC, "notes/conflict/independent-self-test.md");
-  const batchConflict = prepareBatchDispatch([conflictSeedA, conflictSeedB, conflictSeedC].map((seed2) => expandDispatchSeed(seed2)), "async-subagent", {
-    asyncRunnerPath: fakeRunner,
-    asyncTaskRoot: asyncRoot,
-    asyncSubmitter: isolatedSubmitter
-  });
-  checks.batch_write_conflict_isolates_participants = batchConflict.status === "partial" && batchConflict.committed_task_ids.length === 1 && deepEqual(batchConflict.dispatches.map((item) => item.status), ["failed", "failed", "ok"]) && deepEqual(batchConflict.failed_seed_indexes, [1, 2]) && deepEqual(batchConflict.not_submitted_seed_indexes, []) && Boolean((batchConflict.batch_write_conflicts || []).length);
-  const resolvedConflictSeedA = exampleSeed("explorer-agent__codebase-scan");
-  resolvedConflictSeedA.expected_output = {
-    mode: "file",
-    resolved_file_path: path15.join(ROOT2, "notes/conflict/resolved-self-test.md")
-  };
-  const resolvedConflictSeedB = exampleSeed("explorer-agent__runtime-env-scan");
-  resolvedConflictSeedB.handoff_contract = {
-    resolved_handoff_file: path15.join(ROOT2, "notes/conflict/resolved-self-test.md")
-  };
-  const resolvedBatchConflict = prepareBatchDispatch([resolvedConflictSeedA, resolvedConflictSeedB], "async-subagent", {
-    asyncRunnerPath: fakeRunner,
-    asyncTaskRoot: asyncRoot,
-    asyncSubmitter: isolatedSubmitter
-  });
-  checks.batch_resolved_write_conflict_blocks_all = resolvedBatchConflict.status === "failed" && deepEqual(resolvedBatchConflict.committed_task_ids, []) && deepEqual(resolvedBatchConflict.failed_seed_indexes, [1, 2]) && deepEqual(resolvedBatchConflict.not_submitted_seed_indexes, []) && Boolean((resolvedBatchConflict.batch_write_conflicts || []).length);
-  checks.scope_preflight_small_scope_no_warning = (dryDirect.scope_preflight || {}).scope_preflight_warning === null && (dryDirect.scope_preflight || {}).scope_file_count === 1;
-  const heavyDir = mkdtempSync(path15.join(os2.tmpdir(), "dispatch-prepare-preflight-self-test-"));
-  try {
-    const initialized = spawnSync5("git", ["init", "-q", heavyDir], { encoding: "utf8", windowsHide: true });
-    if (initialized.status !== 0) throw new Error(`preflight fixture git init failed: ${initialized.stderr}`);
-    for (let index = 0; index < PREFLIGHT_FILE_THRESHOLD + 100; index += 1) {
-      writeFileSync5(path15.join(heavyDir, `f${index}.txt`), "x", "utf8");
-    }
-    const heavyPreflight = computeScopePreflight([heavyDir], { baseRoot: heavyDir });
-    checks.scope_preflight_over_threshold_warns = Boolean(heavyPreflight.scope_preflight_warning);
-    checks.scope_preflight_over_threshold_file_count = heavyPreflight.scope_file_count === PREFLIGHT_FILE_THRESHOLD + 100;
-  } finally {
-    rmSync4(heavyDir, { recursive: true, force: true });
-  }
-  const gitRoot = mkdtempSync(path15.join(os2.tmpdir(), "dispatch-prepare-git-ignore-self-test-"));
-  try {
-    const initialized = spawnSync5("git", ["init", "-q", gitRoot], { encoding: "utf8", windowsHide: true });
-    writeFileSync5(path15.join(gitRoot, ".gitignore"), ".runtime/\nnode_modules/\ntmp/\nops/dist/\n", "utf8");
-    writeFileSync5(path15.join(gitRoot, "kept.txt"), "kept\n", "utf8");
-    for (const relative of [".runtime/tasks", "node_modules/pkg", "tmp/cache", "ops/dist/assets"]) {
-      const ignoredDir = path15.join(gitRoot, relative);
-      mkdirSync7(ignoredDir, { recursive: true });
-      writeFileSync5(path15.join(ignoredDir, "ignored.txt"), "ignored\n", "utf8");
-    }
-    const originalWalk = deps.walk;
-    deps.walk = function* poisonWalk() {
-      throw new Error("ignored tree walk");
-    };
-    let ignoredPreflight = null;
-    try {
-      ignoredPreflight = computeScopePreflight(["."], { baseRoot: gitRoot });
-    } catch {
-      ignoredPreflight = null;
-    } finally {
-      deps.walk = originalWalk;
-    }
-    checks.scope_preflight_respects_git_ignore = ignoredPreflight !== null && initialized.status === 0 && ignoredPreflight.scope_file_count === 2;
-  } finally {
-    rmSync4(gitRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-  }
-  const missingPreflight = computeScopePreflight(["notes/does-not-exist-preflight-self-test/"]);
-  checks.scope_preflight_missing_path_is_reported = missingPreflight.scope_file_count === 0 && deepEqual(missingPreflight.scope_missing_paths, ["notes/does-not-exist-preflight-self-test/"]) && deepEqual(missingPreflight.scope_unreadable_paths, []);
-  const urlPreflight = computeScopePreflight(["https://example.com/docs", "ops/tools/dispatch_prepare.mjs"]);
-  checks.scope_preflight_url_entries_skip_stat = urlPreflight.scope_url_count === 1 && deepEqual(urlPreflight.scope_missing_paths, []) && urlPreflight.scope_file_count === 1;
-  try {
-    enforceScopePreflight(urlPreflight);
-    checks.scope_preflight_url_entries_pass_enforcement = true;
-  } catch (error) {
-    if (error?.name !== "ToolError") throw error;
-    checks.scope_preflight_url_entries_pass_enforcement = false;
-  }
-  checks.scope_preflight_missing_path_is_diagnostic = enforceScopePreflight(missingPreflight).length > 0;
-  const layeredSeed = {
-    route_id: "explorer-agent__codebase-scan",
-    goal: "self-test layered read scope",
-    scope: { read: ["ops/tools/", "runs/"] },
-    contract: { scan_mode: "terrain_map", focus: "structure", question: "\u5206\u5C42\u8BFB\u53D6\u81EA\u6D4B" },
-    slug: "dispatch-prepare-layers-self-test",
-    read_scope_layers: {
-      entry: ["ops/tools/seed_minimal.mjs"],
-      index: ["ops/tools/"],
-      deep: [{ path: "notes/", when: "\u547D\u4E2D\u626B\u63CF\u63A5\u7F1D\u65F6" }],
-      deferred: ["runs/"]
-    },
-    budget: { max_tool_calls: 40, max_elapsed_minutes: 10 }
-  };
-  const extractedLayers = readScopeLayersFromSeed(layeredSeed);
-  const layeredPreflightPaths = preflightReadPaths(extractedLayers, layeredSeed.scope.read);
-  const layeredDirective = renderReadScopeLayers(extractedLayers);
-  const extractedBudget = seedBudget(layeredSeed);
-  let nonpositiveBudgetRejected = false;
-  try {
-    seedBudget({ budget: { max_elapsed_minutes: -1 } });
-    nonpositiveBudgetRejected = false;
-  } catch (error) {
-    if (error?.name !== "ToolError") throw error;
-    nonpositiveBudgetRejected = true;
-  }
-  const layeredDry = prepareDispatch(expandSeed({ ...layeredSeed }), "direct", { action: "preview" });
-  checks.read_scope_layers_extracted = extractedLayers !== null && deepEqual(extractedLayers.deferred, ["runs/"]) && deepEqual(extractedLayers.deep, [{ path: "notes/", when: "\u547D\u4E2D\u626B\u63CF\u63A5\u7F1D\u65F6" }]);
-  checks.read_scope_layers_preflight_entry_index_only = deepEqual(layeredPreflightPaths, ["ops/tools/seed_minimal.mjs", "ops/tools/"]) && !layeredPreflightPaths.includes("runs/");
-  checks.read_scope_layers_dry_run_carries_directive = Object.hasOwn(layeredDry, "read_scope_layers_directive") && layeredDry.budget_enforcement?.max_elapsed_minutes === "enforced_per_attempt";
-  checks.seed_budget_rejects_nonpositive = nonpositiveBudgetRejected;
-  checks.seed_budget_ignores_legacy_tool_calls = deepEqual(extractedBudget, { max_elapsed_minutes: 10 }) && deepEqual(layeredDry.budget_enforcement, { max_elapsed_minutes: "enforced_per_attempt" });
-  const ownedPreparationRoots = /* @__PURE__ */ new Set();
-  for (const item of isolatedSubmissions) {
-    if (path15.basename(path15.dirname(item)).startsWith("prep-")) ownedPreparationRoots.add(path15.resolve(path15.dirname(item)));
-  }
-  for (const item of tempPaths) {
-    if (path15.basename(path15.dirname(item)).startsWith("prep-")) ownedPreparationRoots.add(path15.resolve(path15.dirname(item)));
-  }
-  for (const preparation of ownedPreparationRoots) {
-    try {
-      rmSync4(preparation, { recursive: true, force: false, maxRetries: 10, retryDelay: 50 });
-    } catch {
-      checks[`cleanup::${rel(preparation)}`] = false;
-    }
-  }
-  for (const item of tempPaths) {
-    if (path15.basename(path15.dirname(item)).startsWith("prep-")) continue;
-    try {
-      rmSync4(item, { force: true });
-    } catch {
-      checks[`cleanup::${rel(item)}`] = false;
-    }
-  }
-  const registryRoot = process7.env.SUBAGENT_REGISTRY_ROOT || defaultRegistryRoot();
-  if (isDir(registryRoot)) {
-    for (const name of readdirSync6(registryRoot)) {
-      if (!name.endsWith(".json")) continue;
-      const registryFile = path15.join(registryRoot, name);
-      try {
-        const record2 = pyJsonLoads(readText(registryFile));
-        if (path15.resolve(String(record2.task_root || "")) === path15.resolve(asyncRoot)) rmSync4(registryFile, { force: true });
-      } catch {
-        continue;
-      }
-    }
-  }
-  const selfTestRoot = path15.join(ROOT2, ".runtime", "self-tests");
-  if (pyIsRelativeTo(path15.resolve(asyncRoot), path15.resolve(selfTestRoot))) {
-    rmSync4(asyncRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-  } else {
-    checks["cleanup::async_root_boundary"] = false;
-  }
-  return {
-    status: Object.values(checks).every(Boolean) ? "ok" : "failed",
-    checks,
-    verification: {
-      readiness_and_submit_share_configured_endpoint: checks.readiness_and_submit_share_configured_endpoint,
-      invalid_input_has_no_evidence_or_material_writes: checks.invalid_task_root_rejected_before_write,
-      auto_submit_returns_task_id: checks.auto_has_task_id,
-      prepared_submit_returns_task_id: checks.async_has_task_id,
-      direct_runtime_is_blocked: checks.direct_runtime_blocked,
-      async_failure_has_no_sync_fallback: checks.direct_runtime_blocked
-    }
-  };
-}
-function withSuffix(target, suffix) {
-  const dir = path15.dirname(target);
-  const base = path15.basename(target);
-  const dot = base.lastIndexOf(".");
-  return path15.join(dir, (dot > 0 ? base.slice(0, dot) : base) + suffix);
-}
-function pushWriteExtra(seed, value) {
-  if (!seed.scope) seed.scope = {};
-  if (!seed.scope.write_extra) seed.scope.write_extra = [];
-  seed.scope.write_extra.push(value);
-}
-var ROOT2, ToolError2, deps, selectionConfig, configuredModels, SELF_TEST_CHILD_CATALOG;
-var init_dispatch_prepare_selftest = __esm({
-  async "ops/tools/dispatch_prepare.selftest.mjs"() {
-    await init_dispatch_prepare();
-    init_seed_minimal();
-    init_py();
-    init_tool_common();
-    init_model_selection();
-    ({ ROOT: ROOT2, ToolError: ToolError2, deps } = dispatch_prepare_exports);
-    selectionConfig = loadSelectionConfig(modelConfigSources());
-    configuredModels = [...new Set([...selectionConfig.roles.values()].flatMap((role) => role.picks.map((pick) => pick.model)))].sort();
-    SELF_TEST_CHILD_CATALOG = {
-      status: "ok",
-      models: configuredModels,
-      model_count: configuredModels.length,
-      source: "dispatch_prepare self-test child catalog",
-      error: null
-    };
-  }
-});
-
-// ops/tools/dispatch-core/dispatch_prepare.mjs
-var dispatch_prepare_exports = {};
-__export(dispatch_prepare_exports, {
-  ACCEPTANCE_SYNTHESIS_PROFILE: () => ACCEPTANCE_SYNTHESIS_PROFILE,
-  ASYNC_DISPATCH_CONTRACT_VERSION: () => ASYNC_DISPATCH_CONTRACT_VERSION,
-  ASYNC_MCP_SERVER_NAME: () => ASYNC_MCP_SERVER_NAME,
-  CROSS_REPO_RESULT_MODES: () => CROSS_REPO_RESULT_MODES,
-  EVIDENCE_ONLY_PROFILE: () => PROFILE,
-  GLOBAL_CONFIG_PATH: () => GLOBAL_CONFIG_PATH,
-  PI_ASYNC_RUNNER_SENTINEL: () => PI_ASYNC_RUNNER_SENTINEL,
-  PREFLIGHT_BINARY_LIKE_EXTENSIONS: () => PREFLIGHT_BINARY_LIKE_EXTENSIONS,
-  PREFLIGHT_BYTES_THRESHOLD: () => PREFLIGHT_BYTES_THRESHOLD,
-  PREFLIGHT_FILE_THRESHOLD: () => PREFLIGHT_FILE_THRESHOLD,
-  PREFLIGHT_GIT_TIMEOUT_SECONDS: () => PREFLIGHT_GIT_TIMEOUT_SECONDS,
-  PREFLIGHT_LARGE_FILE_BYTES: () => PREFLIGHT_LARGE_FILE_BYTES,
-  PREFLIGHT_STAT_FILE_CAP: () => PREFLIGHT_STAT_FILE_CAP,
-  PREFLIGHT_WALK_SKIP_DIRS: () => PREFLIGHT_WALK_SKIP_DIRS,
-  PREFLIGHT_WALK_SKIP_PATHS: () => PREFLIGHT_WALK_SKIP_PATHS,
-  PREPARED_DISPATCH_CONTRACT_VERSION: () => DISPATCH_CONTRACT_VERSION,
-  PROJECT_ASYNC_TASK_ROOT: () => PROJECT_ASYNC_TASK_ROOT,
-  PreparedDispatchError: () => PreparedDispatchError,
-  ROOT: () => ROOT,
-  RUNTIME_ROOT: () => RUNTIME_ROOT,
-  SEMANTIC_REVIEW_PROFILE: () => SEMANTIC_PROFILE,
-  ToolError: () => ToolError,
-  ValidTaskId: () => _validTaskId,
-  _probePiChildModelCatalogUncached: () => _probePiChildModelCatalogUncached,
-  _serverFromConfig: () => _serverFromConfig,
-  _validTaskId: () => _validTaskId,
-  agentConfigEntry: () => agentConfigEntry,
-  agentPanelLaunchText: () => agentPanelLaunchText,
-  applyRoleWorkerResources: () => applyRoleWorkerResources,
-  asyncDispatchContractStatus: () => asyncDispatchContractStatus,
-  asyncServerEnv: () => asyncServerEnv,
-  asyncServerScriptPath: () => asyncServerScriptPath,
-  asyncSubagentEndpoint: () => asyncSubagentEndpoint,
-  asyncSubagentReadiness: () => asyncSubagentReadiness,
-  asyncSubagentServer: () => asyncSubagentServer,
-  attachAgentPanelLaunch: () => attachAgentPanelLaunch,
-  attachReviewEvidence: () => attachReviewEvidence,
-  batchWriteConflicts: () => batchWriteConflicts,
-  buildPackage: () => buildPackage,
-  callAsyncInternalAdapter: () => callAsyncInternalAdapter,
-  cardFor: () => cardFor,
-  checkRouteCard: () => checkRouteCard,
-  clampDisplayTitle: () => clampDisplayTitle,
-  clearCaches: () => clearCaches,
-  clearModelCatalogCache: () => clearModelCatalogCache,
-  compilePreparedDispatch: () => compilePreparedDispatch,
-  computeScopePreflight: () => computeScopePreflight,
-  conditionalRequiredFiles: () => conditionalRequiredFiles,
-  conflictPaths: () => conflictPaths,
-  currentDispatchPhase: () => currentDispatchPhase,
-  defaultRegistryRoot: () => defaultRegistryRoot,
-  deps: () => deps2,
-  emit: () => emit,
-  enforceScopePreflight: () => enforceScopePreflight,
-  exampleSeed: () => exampleSeed,
-  expandDispatchSeed: () => expandDispatchSeed,
-  expandSeed: () => expandSeed,
-  isPyCaughtError: () => isPyCaughtError,
-  isStaticReview: () => isStaticReview,
-  jsonDumpsIndent2: () => jsonDumpsIndent2,
-  legacyOriginId: () => legacyOriginId,
-  lintOrFail: () => lintOrFail,
-  lintPackage: () => lintPackage,
-  listCards: () => listCards,
-  loadSeeds: () => loadSeeds,
-  loadToml: () => loadToml,
-  makeBatchId: () => makeBatchId,
-  markDispatchPhase: () => markDispatchPhase,
-  normalizeDispatchAction: () => normalizeDispatchAction,
-  packagePathForTemp: () => packagePathForTemp,
-  parseSeed: () => parseSeed,
-  piChildCatalogCommand: () => piChildCatalogCommand,
-  piChildModelExtensionProfile: () => piChildModelExtensionProfile,
-  preflightReadPaths: () => preflightReadPaths,
-  prepareAsyncSubagent: () => prepareAsyncSubagent,
-  prepareBatchDispatch: () => prepareBatchDispatch,
-  prepareDirect: () => prepareDirect,
-  prepareDirectPreview: () => prepareDirectPreview,
-  prepareDispatch: () => prepareDispatch,
-  prepareDryRun: () => prepareDryRun,
-  probePiChildModelCatalog: () => probePiChildModelCatalog,
-  profileFor: () => profileFor,
-  projectConditionalRequiredFiles: () => projectConditionalRequiredFiles,
-  pyList: () => pyList,
-  pySlice: () => pySlice,
-  readScopeLayersFromSeed: () => readScopeLayersFromSeed,
-  readSeedFileText: () => readSeedFileText,
-  readStdinText: () => readStdinText,
-  rel: () => rel,
-  renderAsyncTaskPayload: () => renderAsyncTaskPayload,
-  renderDirectFileRefPayload: () => renderDirectFileRefPayload,
-  renderReadScopeLayers: () => renderReadScopeLayers,
-  renderTaskMaterialFile: () => renderTaskMaterialFile,
-  renderTemplate: () => renderTemplate,
-  requirePiChildModel: () => requirePiChildModel,
-  resolveAsyncModelSelection: () => resolveAsyncModelSelection,
-  resolveAsyncRuntimeOptions: () => resolveAsyncRuntimeOptions,
-  resolveDelivery: () => resolveDelivery,
-  resolveDeliveryWithReadiness: () => resolveDeliveryWithReadiness,
-  resolveRoleModelSelection: () => resolveRoleModelSelection,
-  reviewExecutionProfile: () => reviewExecutionProfile,
-  routeIdFromAgent: () => routeIdFromAgent,
-  routesWithCards: () => routesWithCards,
-  sampleSeed: () => sampleSeed,
-  seedBudget: () => seedBudget,
-  seedWriteConflictPaths: () => seedWriteConflictPaths,
-  selectAsyncSubagentServer: () => selectAsyncSubagentServer,
-  selfTest: () => selfTest2,
-  shutilWhich: () => shutilWhich,
-  sliceMetadata: () => sliceMetadata,
-  taskPackageOutputSummary: () => taskPackageOutputSummary,
-  taskToolAllowlist: () => taskToolAllowlist,
-  truthyText: () => truthyText,
-  verifyPreparedDispatch: () => verifyPreparedDispatch,
-  walkDir: () => walkDir
-});
-import { spawnSync as spawnSync6 } from "node:child_process";
-import { createHash as createHash5 } from "node:crypto";
-import { existsSync as existsSync10, mkdirSync as mkdirSync8, readdirSync as readdirSync7, readFileSync as readFileSync10, statSync as statSync12, writeFileSync as writeFileSync6 } from "node:fs";
+// ops/tools/dispatch-core/dispatch-prepare/seed.mjs
+import { mkdirSync as mkdirSync6, readFileSync as readFileSync8, writeFileSync as writeFileSync4 } from "node:fs";
 import path16 from "node:path";
-import process8 from "node:process";
-function clearCaches() {
-  for (const cache of Object.values(caches)) cache.clear();
-}
-function clearModelCatalogCache() {
-  caches.childModelCatalog.clear();
-}
-function compareCodePoints2(left, right) {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-function sortedStrings(values) {
-  return [...values].sort(compareCodePoints2);
-}
-function pySlice(value, limit) {
-  return Array.from(String(value)).slice(0, limit).join("");
-}
-function pyList(value) {
-  if (Array.isArray(value)) return [...value];
-  if (typeof value === "string") return Array.from(value);
-  if (isRecord(value)) return Object.keys(value);
-  return [];
-}
-function isSystemError(error) {
-  return Boolean(error) && typeof error.code === "string" && (error.errno !== void 0 || error.syscall !== void 0);
-}
-function isPyCaughtError(error, names) {
-  if (!error) return false;
-  if (names.has(String(error.name))) return true;
-  return names.has("OSError") && isSystemError(error);
-}
-function statOrNull3(target) {
-  try {
-    return statSync12(target);
-  } catch {
-    return null;
-  }
-}
-function isFile5(target) {
-  return Boolean(statOrNull3(target)?.isFile());
-}
-function isDirectory2(target) {
-  return Boolean(statOrNull3(target)?.isDirectory());
-}
-function pathParts2(value) {
-  return String(value ?? "").split(/[\\/]+/).filter((part) => part && part !== ".");
-}
-function jsonDumpsIndent2(value) {
-  return JSON.stringify(value, null, 2);
-}
-function jsonDumpsCompact(value) {
-  return JSON.stringify(value);
-}
-function shutilWhich(name) {
-  const candidate = String(name ?? "");
-  if (!candidate) return null;
-  const isWindows = process8.platform === "win32";
-  const exts = isWindows ? String(process8.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean) : [""];
-  const hasExt = isWindows && exts.some((ext) => candidate.toLowerCase().endsWith(ext.toLowerCase()));
-  const names = isWindows && !hasExt ? exts.map((ext) => candidate + ext) : [candidate];
-  if (candidate.includes("/") || candidate.includes("\\")) {
-    for (const item of names) if (isFile5(item)) return item;
-    return null;
-  }
-  const dirs = String(process8.env.PATH || "").split(path16.delimiter).filter(Boolean);
-  if (isWindows) dirs.unshift(process8.cwd());
-  for (const dir of dirs) {
-    for (const item of names) {
-      const full = path16.join(dir, item);
-      if (isFile5(full)) return full;
-    }
-  }
-  return null;
-}
-function defaultRegistryRoot() {
-  return path16.join(homeDir(), ".subagent-control", "async_task_registry");
-}
-function configSource(_configPath) {
-  return "global";
-}
-function configBase(configPath) {
-  return path16.dirname(String(configPath));
-}
-function resolveConfigPath(configPath, value) {
-  const raw = String(value || ".");
-  if (isAbsoluteLikePython(raw)) return resolveLikePython(raw);
-  return resolveLikePython(pathlibJoin(configBase(configPath), raw));
-}
-function _serverFromConfig(configPath) {
-  const config = loadToml(configPath);
-  const rawServers = isRecord(config.mcp_servers) ? config.mcp_servers : {};
-  const serverName = ASYNC_MCP_SERVER_NAME;
-  const server = rawServers[serverName];
-  if (!isRecord(server)) return null;
-  const args = Array.isArray(server.args) ? server.args : [];
-  const env = isRecord(server.env) ? server.env : {};
-  return {
-    source: configSource(configPath),
-    config_path: String(configPath),
-    server_name: serverName,
-    command: pyStr(pyTruthy(server.command) ? server.command : ""),
-    args: args.map((item) => pyStr(item)),
-    cwd: String(resolveConfigPath(configPath, pyStr(pyTruthy(server.cwd) ? server.cwd : "."))),
-    env: Object.fromEntries(Object.entries(env).map(([key, value]) => [String(key), pyStr(value)])),
-    approval_mode: pyStr(pyTruthy(server.default_tools_approval_mode) ? server.default_tools_approval_mode : "")
-  };
-}
-function asyncSubagentServerImpl() {
-  const envConfig = pyStrip(String(process8.env.COCKPIT_GLOBAL_CONFIG || ""));
-  const globalConfig = deps2.globalConfigPath || (envConfig || path16.join(homeDir(), ".codex", "config.toml"));
-  return _serverFromConfig(globalConfig);
-}
-function asyncSubagentServer() {
-  if (!caches.asyncSubagentServer.has("value")) {
-    caches.asyncSubagentServer.set("value", deps2.asyncSubagentServer());
-  }
-  return caches.asyncSubagentServer.get("value");
-}
-function selectAsyncSubagentServer(projectServer, globalServer) {
-  return globalServer;
-}
-function asyncServerScriptPath(server) {
-  const cwd = resolveLikePython(pyStr(pyTruthy(server?.cwd) ? server.cwd : ROOT));
-  for (const arg of pyTruthy(server?.args) ? server.args : []) {
-    if (pyStr(arg).endsWith(".mjs")) {
-      const candidate = pyStr(arg);
-      return isAbsoluteLikePython(candidate) ? resolveLikePython(candidate) : resolveLikePython(pathlibJoin(cwd, candidate));
-    }
-  }
-  return null;
-}
-function asyncSubagentEndpointImpl() {
-  const server = asyncSubagentServer();
-  return [server, server ? asyncServerScriptPath(server) : null];
-}
-function asyncSubagentEndpoint() {
-  if (!caches.asyncSubagentEndpoint.has("value")) {
-    caches.asyncSubagentEndpoint.set("value", deps2.asyncSubagentEndpoint());
-  }
-  return caches.asyncSubagentEndpoint.get("value");
-}
-function asyncServerEnv(server) {
-  return { ...process8.env, ...pyTruthy(server?.env) ? server.env : {} };
-}
-function preflightPathIsSkipped(relative, { directory }) {
-  const all = pathParts2(relative);
-  const parts = directory ? all : all.slice(0, -1);
-  if (parts.some((part) => PREFLIGHT_WALK_SKIP_DIRS.has(part))) return true;
-  return PREFLIGHT_WALK_SKIP_PATHS.some(
-    (prefix) => prefix.length <= all.length && prefix.every((part, index) => all[index] === part)
-  );
-}
-function preflightGitRoot(baseRoot) {
-  let completed;
-  try {
-    completed = spawnSync6("git", ["-C", String(baseRoot), "rev-parse", "--show-toplevel"], {
-      encoding: "utf8",
-      timeout: PREFLIGHT_GIT_TIMEOUT_SECONDS * 1e3,
-      windowsHide: true
-    });
-  } catch {
-    return null;
-  }
-  if (completed.error) return null;
-  const stdout = String(completed.stdout ?? "");
-  if (completed.status !== 0 || !pyStrip(stdout)) return null;
-  const root = resolveLikePython(pyStrip(stdout));
-  return isDirectory2(root) ? root : null;
-}
-function preflightGitFiles(directory, gitRoot) {
-  let relative;
-  try {
-    relative = relativePartsOrThrow(resolveLikePython(directory), resolveLikePython(gitRoot));
-  } catch {
-    return null;
-  }
-  const argv = ["-C", String(gitRoot), "ls-files", "--cached", "--others", "--exclude-standard", "-z"];
-  if (relative.length) argv.push("--", relative.join("/"));
-  let completed;
-  try {
-    completed = spawnSync6("git", argv, {
-      timeout: PREFLIGHT_GIT_TIMEOUT_SECONDS * 1e3,
-      windowsHide: true,
-      maxBuffer: 256 * 1024 * 1024
-    });
-  } catch {
-    return null;
-  }
-  if (completed.error) return null;
-  if (completed.status !== 0) return null;
-  const files = [];
-  const raw = Buffer.isBuffer(completed.stdout) ? completed.stdout : Buffer.from(String(completed.stdout ?? ""));
-  for (const chunk of raw.toString("utf8").split("\0")) {
-    if (!chunk) continue;
-    if (preflightPathIsSkipped(chunk, { directory: false })) continue;
-    const candidate = path16.join(String(gitRoot), chunk);
-    try {
-      relativePartsOrThrow(resolveLikePython(candidate), resolveLikePython(directory));
-    } catch {
-      continue;
-    }
-    if (isFile5(candidate)) files.push(candidate);
-  }
-  return files;
-}
-function relativePartsOrThrow(child, parent) {
-  if (!pyIsRelativeTo(child, parent)) throw new Error("not relative");
-  return pathParts2(child).slice(pathParts2(parent).length);
-}
-function* walkDir(top, onError) {
-  const stack = [String(top)];
-  while (stack.length) {
-    const dirpath = stack.pop();
-    let entries;
-    try {
-      entries = readdirSync7(dirpath, { withFileTypes: true });
-    } catch (error) {
-      if (onError) onError(error, dirpath);
-      continue;
-    }
-    const dirnames = [];
-    const filenames = [];
-    for (const entry of entries) {
-      if (entry.isDirectory()) dirnames.push(entry.name);
-      else filenames.push(entry.name);
-    }
-    const frame = { dirpath, dirnames, filenames };
-    yield frame;
-    for (let index = frame.dirnames.length - 1; index >= 0; index -= 1) {
-      stack.push(path16.join(dirpath, frame.dirnames[index]));
-    }
-  }
-}
-function computeScopePreflight(readPaths, { baseRoot = ROOT } = {}) {
-  let fileCount = 0;
-  let totalBytes = 0;
-  let largeFileCount = 0;
-  let binaryLikeCount = 0;
-  let truncated = false;
-  let urlCount = 0;
-  const missingPaths = [];
-  const unreadablePaths = [];
-  const resolvedBaseRoot = resolveLikePython(baseRoot);
-  const gitRoot = preflightGitRoot(resolvedBaseRoot);
-  const accountFile = (target) => {
-    if (fileCount >= PREFLIGHT_STAT_FILE_CAP) {
-      truncated = true;
-      return false;
-    }
-    let size;
-    try {
-      size = statSync12(target).size;
-    } catch (error) {
-      unreadablePaths.push(`${target}: ${error.message}`);
-      return true;
-    }
-    fileCount += 1;
-    totalBytes += size;
-    if (size > PREFLIGHT_LARGE_FILE_BYTES) largeFileCount += 1;
-    if (PREFLIGHT_BINARY_LIKE_EXTENSIONS.has(path16.extname(String(target)).toLowerCase())) binaryLikeCount += 1;
-    return true;
-  };
-  const recordWalkError = (error, filename) => {
-    unreadablePaths.push(`${filename || baseRoot}: ${error.message}`);
-  };
-  for (const raw of readPaths) {
-    if (truncated) break;
-    const lowered = pyStrip(raw).toLowerCase();
-    if (lowered.startsWith("http://") || lowered.startsWith("https://")) {
-      urlCount += 1;
-      continue;
-    }
-    const candidate = String(raw);
-    const resolved = isAbsoluteLikePython(candidate) ? candidate : pathlibJoin(resolvedBaseRoot, candidate);
-    let info;
-    try {
-      info = existsSync10(resolved) ? statSync12(resolved) : null;
-    } catch (error) {
-      unreadablePaths.push(`${raw}: ${error.message}`);
-      continue;
-    }
-    if (!info) {
-      missingPaths.push(raw);
-      continue;
-    }
-    if (info.isFile()) {
-      if (!accountFile(resolved)) break;
-      continue;
-    }
-    if (!info.isDirectory()) {
-      unreadablePaths.push(`${raw}: path is neither a regular file nor a directory`);
-      continue;
-    }
-    const gitFiles = gitRoot !== null ? preflightGitFiles(resolved, gitRoot) : null;
-    if (gitFiles !== null) {
-      for (const item of gitFiles) {
-        if (!accountFile(item)) break;
-      }
-      continue;
-    }
-    for (const frame of deps2.walk(resolved, recordWalkError)) {
-      let currentRelative;
-      try {
-        currentRelative = relativePartsOrThrow(resolveLikePython(frame.dirpath), resolvedBaseRoot).join("/");
-      } catch {
-        currentRelative = "";
-      }
-      frame.dirnames = frame.dirnames.filter(
-        (name) => !preflightPathIsSkipped(currentRelative ? `${currentRelative}/${name}` : name, { directory: true })
-      );
-      let stop = false;
-      for (const name of frame.filenames) {
-        if (!accountFile(path16.join(frame.dirpath, name))) {
-          stop = true;
-          break;
-        }
-      }
-      if (stop) break;
-    }
-  }
-  const result = {
-    scope_file_count: fileCount,
-    scope_total_bytes: totalBytes,
-    scope_large_file_count: largeFileCount,
-    scope_binary_like_count: binaryLikeCount,
-    scope_stat_truncated: truncated,
-    scope_url_count: urlCount,
-    scope_missing_paths: missingPaths,
-    scope_unreadable_paths: unreadablePaths,
-    scope_preflight_warning: null
-  };
-  if (fileCount > PREFLIGHT_FILE_THRESHOLD || totalBytes > PREFLIGHT_BYTES_THRESHOLD) {
-    result.scope_preflight_warning = `scope.read \u9884\u4F30 ${fileCount} \u4E2A\u6587\u4EF6\u3001${totalBytes} \u5B57\u8282\uFF0C\u8D85\u51FA\u9884\u8B66\u9608\u503C\uFF08\u6587\u4EF6 ${PREFLIGHT_FILE_THRESHOLD} / \u5B57\u8282 ${PREFLIGHT_BYTES_THRESHOLD}\uFF09\uFF1B\u5EFA\u8BAE\u6309 ops/skills/subagent-fleet-discipline/references/parallel-slicing.md \u7684\u4EA7\u80FD\u89C4\u683C\u62C6\u5206`;
-  }
-  return result;
-}
-function enforceScopePreflight(scopePreflight) {
-  const missing = pyList(pyTruthy(scopePreflight?.scope_missing_paths) ? scopePreflight.scope_missing_paths : []).map(pyStr);
-  const unreadable = pyList(pyTruthy(scopePreflight?.scope_unreadable_paths) ? scopePreflight.scope_unreadable_paths : []).map(pyStr);
-  return [
-    ...missing.length ? [`scope.read path does not exist: ${missing.join(", ")}`] : [],
-    ...unreadable.length ? [`scope.read path is not readable: ${unreadable.join("; ")}`] : []
-  ];
-}
-function readScopeLayersFromSeed(seed) {
-  const layers = seed?.read_scope_layers;
-  if (!isRecord(layers)) return null;
-  const strings = (key) => pyList(pyTruthy(layers[key]) ? layers[key] : []).filter((item) => typeof item === "string" && pyStrip(item));
-  const deep = [];
-  for (const item of pyList(pyTruthy(layers.deep) ? layers.deep : [])) {
-    if (isRecord(item) && typeof item.path === "string" && pyStrip(item.path)) {
-      deep.push({ path: item.path, when: pyStr(pyTruthy(item.when) ? item.when : "") });
-    } else if (typeof item === "string" && pyStrip(item)) {
-      deep.push({ path: item, when: "" });
-    }
-  }
-  return { entry: strings("entry"), index: strings("index"), deep, deferred: strings("deferred") };
-}
-function preflightReadPaths(layers, fallbackRead) {
-  if (layers === null || layers === void 0) return [...pyList(fallbackRead)];
-  return [...pyGetItem(layers, "entry"), ...pyGetItem(layers, "index")];
-}
-function renderReadScopeLayers(layers) {
-  const lines = ["\u5206\u5C42\u8BFB\u53D6\u6307\u4EE4\uFF08read_scope_layers\uFF09\uFF1A"];
-  lines.push("- entry\uFF1A\u5FC5\u8BFB\u5168\u6587\u3002");
-  for (const item of pyGetItem(layers, "entry")) lines.push(`  - ${item}`);
-  lines.push("- index\uFF1A\u53EA\u5217\u76EE\u5F55/\u6E05\u5355\uFF0C\u4E0D\u8BFB\u6587\u4EF6\u5185\u5BB9\u3002");
-  for (const item of pyGetItem(layers, "index")) lines.push(`  - ${item}`);
-  lines.push("- deep\uFF1A\u4EC5\u547D\u4E2D when \u6761\u4EF6\u624D\u6DF1\u5165\u3002");
-  for (const item of pyGetItem(layers, "deep")) lines.push(`  - ${item.path}\uFF08when: ${item.when}\uFF09`);
-  lines.push("- deferred\uFF1A\u9ED8\u8BA4\u7981\u8BFB\uFF1B\u8BFB\u524D\u5FC5\u987B\u5728\u62A5\u544A\u8BF4\u660E\u7406\u7531\u3002");
-  for (const item of pyGetItem(layers, "deferred")) lines.push(`  - ${item}`);
-  return lines.join("\n");
-}
 function seedBudget(seed) {
   const raw = seed?.budget;
   if (raw === null || raw === void 0) return {};
@@ -8557,7 +7096,7 @@ function batchWriteConflicts(seeds) {
 function readSeedFileText(target) {
   let rawBytes;
   try {
-    rawBytes = readFileSync10(String(target));
+    rawBytes = readFileSync8(String(target));
   } catch (error) {
     const detail = systemErrorText(error);
     throw new ToolError(`cannot read --seed file: ${target}: ${detail}`);
@@ -8628,15 +7167,100 @@ function packagePathForTemp(pkg) {
     120
   );
   const target = path16.join(ROOT, "tmp", "dispatch_prepare", `${safe}-${ids.uuidHex()}.task-package.json`);
-  mkdirSync8(path16.dirname(target), { recursive: true });
-  writeFileSync6(target, `${jsonDumpsCompact(pkg)}
+  mkdirSync6(path16.dirname(target), { recursive: true });
+  writeFileSync4(target, `${jsonDumpsCompact(pkg)}
 `, "utf8");
   return target;
+}
+var init_seed = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/seed.mjs"() {
+    init_tool_common();
+    init_py();
+    init_seed_minimal();
+    init_task_package_build();
+    init_task_package_lint();
+    init_py_utils();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/server.mjs
+import { readFileSync as readFileSync9 } from "node:fs";
+import path17 from "node:path";
+import process10 from "node:process";
+function defaultRegistryRoot() {
+  return path17.join(homeDir(), ".subagent-control", "async_task_registry");
+}
+function configSource(_configPath) {
+  return "global";
+}
+function configBase(configPath) {
+  return path17.dirname(String(configPath));
+}
+function resolveConfigPath(configPath, value) {
+  const raw = String(value || ".");
+  if (isAbsoluteLikePython(raw)) return resolveLikePython(raw);
+  return resolveLikePython(pathlibJoin(configBase(configPath), raw));
+}
+function _serverFromConfig(configPath) {
+  const config = loadToml(configPath);
+  const rawServers = isRecord(config.mcp_servers) ? config.mcp_servers : {};
+  const serverName = ASYNC_MCP_SERVER_NAME;
+  const server = rawServers[serverName];
+  if (!isRecord(server)) return null;
+  const args = Array.isArray(server.args) ? server.args : [];
+  const env = isRecord(server.env) ? server.env : {};
+  return {
+    source: configSource(configPath),
+    config_path: String(configPath),
+    server_name: serverName,
+    command: pyStr(pyTruthy(server.command) ? server.command : ""),
+    args: args.map((item) => pyStr(item)),
+    cwd: String(resolveConfigPath(configPath, pyStr(pyTruthy(server.cwd) ? server.cwd : "."))),
+    env: Object.fromEntries(Object.entries(env).map(([key, value]) => [String(key), pyStr(value)])),
+    approval_mode: pyStr(pyTruthy(server.default_tools_approval_mode) ? server.default_tools_approval_mode : "")
+  };
+}
+function asyncSubagentServerImpl() {
+  const envConfig = pyStrip(String(process10.env.COCKPIT_GLOBAL_CONFIG || ""));
+  const globalConfig = deps.globalConfigPath || (envConfig || path17.join(homeDir(), ".codex", "config.toml"));
+  return _serverFromConfig(globalConfig);
+}
+function asyncSubagentServer() {
+  if (!caches.asyncSubagentServer.has("value")) {
+    caches.asyncSubagentServer.set("value", deps.asyncSubagentServer());
+  }
+  return caches.asyncSubagentServer.get("value");
+}
+function selectAsyncSubagentServer(projectServer, globalServer) {
+  return globalServer;
+}
+function asyncServerScriptPath(server) {
+  const cwd = resolveLikePython(pyStr(pyTruthy(server?.cwd) ? server.cwd : ROOT));
+  for (const arg of pyTruthy(server?.args) ? server.args : []) {
+    if (pyStr(arg).endsWith(".mjs")) {
+      const candidate = pyStr(arg);
+      return isAbsoluteLikePython(candidate) ? resolveLikePython(candidate) : resolveLikePython(pathlibJoin(cwd, candidate));
+    }
+  }
+  return null;
+}
+function asyncSubagentEndpointImpl() {
+  const server = asyncSubagentServer();
+  return [server, server ? asyncServerScriptPath(server) : null];
+}
+function asyncSubagentEndpoint() {
+  if (!caches.asyncSubagentEndpoint.has("value")) {
+    caches.asyncSubagentEndpoint.set("value", deps.asyncSubagentEndpoint());
+  }
+  return caches.asyncSubagentEndpoint.get("value");
+}
+function asyncServerEnv(server) {
+  return { ...process10.env, ...pyTruthy(server?.env) ? server.env : {} };
 }
 function loadToml(target) {
   let text3;
   try {
-    text3 = readFileSync10(String(target), "utf8");
+    text3 = readFileSync9(String(target), "utf8");
   } catch (error) {
     if (error?.code === "ENOENT") return {};
     throw new ToolError(`cannot parse toml: ${rel(target)}: ${error.message}`);
@@ -8649,6 +7273,18 @@ function loadToml(target) {
   }
   return isRecord(data) ? data : {};
 }
+var init_server = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/server.mjs"() {
+    init_dist();
+    init_tool_common();
+    init_py();
+    init_constants();
+    init_deps();
+    init_state();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/delivery.mjs
 function resolveDeliveryWithReadiness(delivery, readiness) {
   if (delivery !== "auto" && delivery !== "async-subagent") return [delivery, { status: "not_checked", issues: [] }];
   if (pyGetItem(readiness, "status") === "available") return ["async-subagent", readiness];
@@ -8659,7 +7295,7 @@ function resolveDeliveryImpl(delivery) {
   return resolveDeliveryWithReadiness(delivery, asyncSubagentReadiness());
 }
 function resolveDelivery(delivery) {
-  return deps2.resolveDelivery(delivery);
+  return deps.resolveDelivery(delivery);
 }
 function asyncDispatchContractStatus(buildInfo) {
   const current = pyStrip(pyStr(pyTruthy(buildInfo?.dispatch_contract_version) ? buildInfo.dispatch_contract_version : ""));
@@ -8694,14 +7330,14 @@ function asyncSubagentReadinessImpl() {
   } else if (server.approval_mode !== "approve") {
     issues.push("mcp_servers.asyncSubagent.default_tools_approval_mode must be approve");
   }
-  if (pyTruthy(toolPath) && !isFile5(toolPath)) {
+  if (pyTruthy(toolPath) && !isFile3(toolPath)) {
     issues.push(`missing async tool: ${toolPath}`);
   } else if (!pyTruthy(toolPath)) {
     issues.push("mcp_servers.asyncSubagent args do not include an .mjs server script");
   }
   if (!issues.length) {
     try {
-      buildInfo = deps2.callAsyncInternalAdapter("build-info", {});
+      buildInfo = deps.callAsyncInternalAdapter("build-info", {});
       contractStatus = asyncDispatchContractStatus(buildInfo);
       if (contractStatus.issue) issues.push(pyStr(contractStatus.issue));
     } catch (error) {
@@ -8725,7 +7361,7 @@ function asyncSubagentReadinessImpl() {
 }
 function asyncSubagentReadiness() {
   if (!caches.asyncSubagentReadiness.has("value")) {
-    caches.asyncSubagentReadiness.set("value", deps2.asyncSubagentReadiness());
+    caches.asyncSubagentReadiness.set("value", deps.asyncSubagentReadiness());
   }
   return caches.asyncSubagentReadiness.get("value");
 }
@@ -8761,7 +7397,7 @@ function callAsyncInternalAdapterImpl(operation, args) {
       "async subagent MCP server is missing from the user-level config (~/.codex/config.toml); register it with python -B ops/tools/deploy_subagent_bundle.py --apply and re-check build-info with --delivery auto, or dispatch through the Pi native dispatch_prepare tool, which uses the session AsyncTaskService instead of this endpoint"
     );
   }
-  if (!pyTruthy(toolPath) || !isFile5(toolPath)) {
+  if (!pyTruthy(toolPath) || !isFile3(toolPath)) {
     throw new ToolError("configured async subagent MCP server script is unavailable");
   }
   const argv = [String(toolPath), "internal", operation];
@@ -8808,7 +7444,7 @@ function callAsyncInternalAdapterImpl(operation, args) {
   return response;
 }
 function callAsyncInternalAdapter(operation, args) {
-  return deps2.callAsyncInternalAdapter(operation, args);
+  return deps.callAsyncInternalAdapter(operation, args);
 }
 function prepareDirect(pkg) {
   const taskPackage = pyGetItem(pkg, "task_package");
@@ -8826,6 +7462,513 @@ function prepareDirect(pkg) {
     spawn_payload: renderDirectFileRefPayload(packagePath)
   };
 }
+var init_delivery = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/delivery.mjs"() {
+    init_tool_common();
+    init_py();
+    init_constants();
+    init_deps();
+    init_py_utils();
+    init_seed();
+    init_server();
+    init_state();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/scope.mjs
+import { spawnSync as spawnSync5 } from "node:child_process";
+import { existsSync as existsSync8, readdirSync as readdirSync6, statSync as statSync10 } from "node:fs";
+import path18 from "node:path";
+function preflightPathIsSkipped(relative, { directory }) {
+  const all = pathParts2(relative);
+  const parts = directory ? all : all.slice(0, -1);
+  if (parts.some((part) => PREFLIGHT_WALK_SKIP_DIRS.has(part))) return true;
+  return PREFLIGHT_WALK_SKIP_PATHS.some(
+    (prefix) => prefix.length <= all.length && prefix.every((part, index) => all[index] === part)
+  );
+}
+function preflightGitRoot(baseRoot) {
+  let completed;
+  try {
+    completed = spawnSync5("git", ["-C", String(baseRoot), "rev-parse", "--show-toplevel"], {
+      encoding: "utf8",
+      timeout: PREFLIGHT_GIT_TIMEOUT_SECONDS * 1e3,
+      windowsHide: true
+    });
+  } catch {
+    return null;
+  }
+  if (completed.error) return null;
+  const stdout = String(completed.stdout ?? "");
+  if (completed.status !== 0 || !pyStrip(stdout)) return null;
+  const root = resolveLikePython(pyStrip(stdout));
+  return isDirectory2(root) ? root : null;
+}
+function preflightGitFiles(directory, gitRoot) {
+  let relative;
+  try {
+    relative = relativePartsOrThrow(resolveLikePython(directory), resolveLikePython(gitRoot));
+  } catch {
+    return null;
+  }
+  const argv = ["-C", String(gitRoot), "ls-files", "--cached", "--others", "--exclude-standard", "-z"];
+  if (relative.length) argv.push("--", relative.join("/"));
+  let completed;
+  try {
+    completed = spawnSync5("git", argv, {
+      timeout: PREFLIGHT_GIT_TIMEOUT_SECONDS * 1e3,
+      windowsHide: true,
+      maxBuffer: 256 * 1024 * 1024
+    });
+  } catch {
+    return null;
+  }
+  if (completed.error) return null;
+  if (completed.status !== 0) return null;
+  const files = [];
+  const raw = Buffer.isBuffer(completed.stdout) ? completed.stdout : Buffer.from(String(completed.stdout ?? ""));
+  for (const chunk of raw.toString("utf8").split("\0")) {
+    if (!chunk) continue;
+    if (preflightPathIsSkipped(chunk, { directory: false })) continue;
+    const candidate = path18.join(String(gitRoot), chunk);
+    try {
+      relativePartsOrThrow(resolveLikePython(candidate), resolveLikePython(directory));
+    } catch {
+      continue;
+    }
+    if (isFile3(candidate)) files.push(candidate);
+  }
+  return files;
+}
+function relativePartsOrThrow(child, parent) {
+  if (!pyIsRelativeTo(child, parent)) throw new Error("not relative");
+  return pathParts2(child).slice(pathParts2(parent).length);
+}
+function* walkDir(top, onError) {
+  const stack = [String(top)];
+  while (stack.length) {
+    const dirpath = stack.pop();
+    let entries;
+    try {
+      entries = readdirSync6(dirpath, { withFileTypes: true });
+    } catch (error) {
+      if (onError) onError(error, dirpath);
+      continue;
+    }
+    const dirnames = [];
+    const filenames = [];
+    for (const entry of entries) {
+      if (entry.isDirectory()) dirnames.push(entry.name);
+      else filenames.push(entry.name);
+    }
+    const frame = { dirpath, dirnames, filenames };
+    yield frame;
+    for (let index = frame.dirnames.length - 1; index >= 0; index -= 1) {
+      stack.push(path18.join(dirpath, frame.dirnames[index]));
+    }
+  }
+}
+function computeScopePreflight(readPaths, { baseRoot = ROOT } = {}) {
+  let fileCount = 0;
+  let totalBytes = 0;
+  let largeFileCount = 0;
+  let binaryLikeCount = 0;
+  let truncated = false;
+  let urlCount = 0;
+  const missingPaths = [];
+  const unreadablePaths = [];
+  const resolvedBaseRoot = resolveLikePython(baseRoot);
+  const gitRoot = preflightGitRoot(resolvedBaseRoot);
+  const accountFile = (target) => {
+    if (fileCount >= PREFLIGHT_STAT_FILE_CAP) {
+      truncated = true;
+      return false;
+    }
+    let size;
+    try {
+      size = statSync10(target).size;
+    } catch (error) {
+      unreadablePaths.push(`${target}: ${error.message}`);
+      return true;
+    }
+    fileCount += 1;
+    totalBytes += size;
+    if (size > PREFLIGHT_LARGE_FILE_BYTES) largeFileCount += 1;
+    if (PREFLIGHT_BINARY_LIKE_EXTENSIONS.has(path18.extname(String(target)).toLowerCase())) binaryLikeCount += 1;
+    return true;
+  };
+  const recordWalkError = (error, filename) => {
+    unreadablePaths.push(`${filename || baseRoot}: ${error.message}`);
+  };
+  for (const raw of readPaths) {
+    if (truncated) break;
+    const lowered = pyStrip(raw).toLowerCase();
+    if (lowered.startsWith("http://") || lowered.startsWith("https://")) {
+      urlCount += 1;
+      continue;
+    }
+    const candidate = String(raw);
+    const resolved = isAbsoluteLikePython(candidate) ? candidate : pathlibJoin(resolvedBaseRoot, candidate);
+    let info;
+    try {
+      info = existsSync8(resolved) ? statSync10(resolved) : null;
+    } catch (error) {
+      unreadablePaths.push(`${raw}: ${error.message}`);
+      continue;
+    }
+    if (!info) {
+      missingPaths.push(raw);
+      continue;
+    }
+    if (info.isFile()) {
+      if (!accountFile(resolved)) break;
+      continue;
+    }
+    if (!info.isDirectory()) {
+      unreadablePaths.push(`${raw}: path is neither a regular file nor a directory`);
+      continue;
+    }
+    const gitFiles = gitRoot !== null ? preflightGitFiles(resolved, gitRoot) : null;
+    if (gitFiles !== null) {
+      for (const item of gitFiles) {
+        if (!accountFile(item)) break;
+      }
+      continue;
+    }
+    for (const frame of deps.walk(resolved, recordWalkError)) {
+      let currentRelative;
+      try {
+        currentRelative = relativePartsOrThrow(resolveLikePython(frame.dirpath), resolvedBaseRoot).join("/");
+      } catch {
+        currentRelative = "";
+      }
+      frame.dirnames = frame.dirnames.filter(
+        (name) => !preflightPathIsSkipped(currentRelative ? `${currentRelative}/${name}` : name, { directory: true })
+      );
+      let stop = false;
+      for (const name of frame.filenames) {
+        if (!accountFile(path18.join(frame.dirpath, name))) {
+          stop = true;
+          break;
+        }
+      }
+      if (stop) break;
+    }
+  }
+  const result = {
+    scope_file_count: fileCount,
+    scope_total_bytes: totalBytes,
+    scope_large_file_count: largeFileCount,
+    scope_binary_like_count: binaryLikeCount,
+    scope_stat_truncated: truncated,
+    scope_url_count: urlCount,
+    scope_missing_paths: missingPaths,
+    scope_unreadable_paths: unreadablePaths,
+    scope_preflight_warning: null
+  };
+  if (fileCount > PREFLIGHT_FILE_THRESHOLD || totalBytes > PREFLIGHT_BYTES_THRESHOLD) {
+    result.scope_preflight_warning = `scope.read \u9884\u4F30 ${fileCount} \u4E2A\u6587\u4EF6\u3001${totalBytes} \u5B57\u8282\uFF0C\u8D85\u51FA\u9884\u8B66\u9608\u503C\uFF08\u6587\u4EF6 ${PREFLIGHT_FILE_THRESHOLD} / \u5B57\u8282 ${PREFLIGHT_BYTES_THRESHOLD}\uFF09\uFF1B\u5EFA\u8BAE\u6309 ops/skills/subagent-fleet-discipline/references/parallel-slicing.md \u7684\u4EA7\u80FD\u89C4\u683C\u62C6\u5206`;
+  }
+  return result;
+}
+function enforceScopePreflight(scopePreflight) {
+  const missing = pyList(pyTruthy(scopePreflight?.scope_missing_paths) ? scopePreflight.scope_missing_paths : []).map(pyStr);
+  const unreadable = pyList(pyTruthy(scopePreflight?.scope_unreadable_paths) ? scopePreflight.scope_unreadable_paths : []).map(pyStr);
+  return [
+    ...missing.length ? [`scope.read path does not exist: ${missing.join(", ")}`] : [],
+    ...unreadable.length ? [`scope.read path is not readable: ${unreadable.join("; ")}`] : []
+  ];
+}
+function readScopeLayersFromSeed(seed) {
+  const layers = seed?.read_scope_layers;
+  if (!isRecord(layers)) return null;
+  const strings = (key) => pyList(pyTruthy(layers[key]) ? layers[key] : []).filter((item) => typeof item === "string" && pyStrip(item));
+  const deep = [];
+  for (const item of pyList(pyTruthy(layers.deep) ? layers.deep : [])) {
+    if (isRecord(item) && typeof item.path === "string" && pyStrip(item.path)) {
+      deep.push({ path: item.path, when: pyStr(pyTruthy(item.when) ? item.when : "") });
+    } else if (typeof item === "string" && pyStrip(item)) {
+      deep.push({ path: item, when: "" });
+    }
+  }
+  return { entry: strings("entry"), index: strings("index"), deep, deferred: strings("deferred") };
+}
+function preflightReadPaths(layers, fallbackRead) {
+  if (layers === null || layers === void 0) return [...pyList(fallbackRead)];
+  return [...pyGetItem(layers, "entry"), ...pyGetItem(layers, "index")];
+}
+function renderReadScopeLayers(layers) {
+  const lines = ["\u5206\u5C42\u8BFB\u53D6\u6307\u4EE4\uFF08read_scope_layers\uFF09\uFF1A"];
+  lines.push("- entry\uFF1A\u5FC5\u8BFB\u5168\u6587\u3002");
+  for (const item of pyGetItem(layers, "entry")) lines.push(`  - ${item}`);
+  lines.push("- index\uFF1A\u53EA\u5217\u76EE\u5F55/\u6E05\u5355\uFF0C\u4E0D\u8BFB\u6587\u4EF6\u5185\u5BB9\u3002");
+  for (const item of pyGetItem(layers, "index")) lines.push(`  - ${item}`);
+  lines.push("- deep\uFF1A\u4EC5\u547D\u4E2D when \u6761\u4EF6\u624D\u6DF1\u5165\u3002");
+  for (const item of pyGetItem(layers, "deep")) lines.push(`  - ${item.path}\uFF08when: ${item.when}\uFF09`);
+  lines.push("- deferred\uFF1A\u9ED8\u8BA4\u7981\u8BFB\uFF1B\u8BFB\u524D\u5FC5\u987B\u5728\u62A5\u544A\u8BF4\u660E\u7406\u7531\u3002");
+  for (const item of pyGetItem(layers, "deferred")) lines.push(`  - ${item}`);
+  return lines.join("\n");
+}
+var init_scope = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/scope.mjs"() {
+    init_tool_common();
+    init_py();
+    init_constants();
+    init_deps();
+    init_py_utils();
+  }
+});
+
+// ops/tools/pi_worker_resources.mjs
+import { spawn } from "node:child_process";
+import { existsSync as existsSync9, mkdirSync as mkdirSync7, readFileSync as readFileSync10, statSync as statSync11, writeFileSync as writeFileSync5 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import path19 from "node:path";
+import { fileURLToPath as fileURLToPath2, pathToFileURL } from "node:url";
+function configError(code, file, field, message) {
+  return Object.assign(new Error(`${file} ${field}\uFF1A${message}`), { code, file, field });
+}
+function literalLength(key) {
+  return key.replaceAll("*", "").length;
+}
+function matches(value, pattern) {
+  const escaped = pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+  return new RegExp(`^${escaped}$`, "i").test(value);
+}
+function packageJsonName(dir) {
+  const file = path19.join(dir, "package.json");
+  if (!existsSync9(file)) return null;
+  const name = JSON.parse(readFileSync10(file, "utf8")).name;
+  return typeof name === "string" && name.trim() ? name.trim() : null;
+}
+function resourceName(file) {
+  const parts = String(file).replaceAll("\\", "/").split("/").filter(Boolean);
+  const last = parts.length - 1;
+  if (parts[last] === "SKILL.md") return parts[last - 1];
+  const modules = parts.lastIndexOf("node_modules");
+  if (modules >= 0 && modules < last) {
+    return parts[modules + 1].startsWith("@") ? `${parts[modules + 1]}/${parts[modules + 2]}` : parts[modules + 1];
+  }
+  const local = parts.lastIndexOf("local-packages");
+  if (local >= 0 && local < last) {
+    const dir = parts.slice(0, local + 2).join("/");
+    return packageJsonName(/^[A-Za-z]:$/.test(parts[0]) ? dir : `/${dir}`) ?? parts[local + 1];
+  }
+  const extensions = parts.lastIndexOf("extensions");
+  if (extensions >= 0 && extensions === last - 1) return parts[last].replace(/\.[^.]+$/, "");
+  if (extensions >= 0 && extensions < last) return parts[extensions + 1];
+  return parts[last].replace(/\.[^.]+$/, "");
+}
+function loadWorkerResourcesConfig(configPath = WORKER_RESOURCES_CONFIG) {
+  const raw = JSON.parse(readFileSync10(configPath, "utf8"));
+  for (const [key, hint] of Object.entries(REMOVED_KEYS)) {
+    if (raw[key] !== void 0) throw configError("field_removed", configPath, key, `\u5DF2\u5220\u9664\uFF0C${hint}`);
+  }
+  if (raw.version !== 2) throw configError("value_invalid", configPath, "version", "\u5FC5\u987B\u4E3A 2");
+  const config = { configPath };
+  for (const section of SECTIONS) {
+    const entries = raw[section];
+    if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
+      throw configError("value_invalid", configPath, section, "\u5FC5\u987B\u5B58\u5728\u4E14\u662F\u5BF9\u8C61\uFF1B\u6CA1\u6709\u6761\u76EE\u65F6\u5199 {}");
+    }
+    for (const [key, entry] of Object.entries(entries)) {
+      const field = `${section}.${key}`;
+      if (section === "tools" && key.includes("*")) throw configError("value_invalid", configPath, field, "\u5DE5\u5177\u53EA\u5199\u5177\u4F53\u540D\u5B57\uFF0C\u4E0D\u652F\u6301 *");
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw configError("value_invalid", configPath, field, "\u5FC5\u987B\u662F\u5BF9\u8C61");
+      const unknown = Object.keys(entry).find((item) => !ENTRY_KEYS[section].includes(item));
+      if (unknown) throw configError("field_unknown", configPath, `${field}.${unknown}`, `\u672A\u77E5\u5B57\u6BB5\uFF1B\u53EF\u7528\u5B57\u6BB5\uFF1A${ENTRY_KEYS[section].join("\u3001")}`);
+      if (!IMPORT_ACCESS.includes(entry.access)) throw configError("value_invalid", configPath, `${field}.access`, `\u5FC5\u987B\u662F ${IMPORT_ACCESS.join(" / ")} \u4E4B\u4E00`);
+      for (const text3 of ["label", "group"]) {
+        if (entry[text3] !== void 0 && typeof entry[text3] !== "string") throw configError("value_invalid", configPath, `${field}.${text3}`, "\u5FC5\u987B\u662F\u5B57\u7B26\u4E32");
+      }
+    }
+    config[section] = entries;
+  }
+  const required = raw.required_tools;
+  if (!Array.isArray(required) || required.some((name) => typeof name !== "string" || !name.trim())) {
+    throw configError("value_invalid", configPath, "required_tools", "\u5FC5\u987B\u662F\u5DE5\u5177\u540D\u6570\u7EC4");
+  }
+  for (const name of required) {
+    if (config.tools[name]?.access === "off") throw configError("value_invalid", configPath, `tools.${name}.access`, "\u8FD0\u884C\u5FC5\u9700\u5DE5\u5177\u4E0D\u80FD\u8BBE\u4E3A off");
+  }
+  config.required_tools = [...required];
+  return config;
+}
+function importEntry(config, section, name) {
+  const hits = Object.keys(config[section]).filter((key) => matches(name, key));
+  if (!hits.length) return null;
+  const rank2 = (key) => key.includes("*") ? literalLength(key) : Number.POSITIVE_INFINITY;
+  const best = Math.max(...hits.map(rank2));
+  const top = hits.filter((key) => rank2(key) === best);
+  if (top.length > 1) {
+    throw configError("value_invalid", config.configPath, section, `${name} \u540C\u65F6\u5339\u914D ${top.join("\u3001")}\uFF1B\u5220\u53BB\u91CD\u590D\u6216\u5199\u51FA\u66F4\u5177\u4F53\u7684\u952E`);
+  }
+  return { key: top[0], ...config[section][top[0]] };
+}
+function accessOf(config, section, name) {
+  if (section === "tools" && config.required_tools.includes(name)) return "default_on";
+  return importEntry(config, section, name)?.access ?? "off";
+}
+async function discoverWorkerResources({
+  cwd = process.cwd(),
+  agentDir = process.env.PI_CODING_AGENT_DIR || path19.join(homedir3(), ".pi", "agent"),
+  piCli = PI_CLI
+} = {}) {
+  const { DefaultPackageManager, SettingsManager } = await import(pathToFileURL(path19.join(path19.dirname(piCli), "index.js")).href);
+  const settingsPath = path19.join(agentDir, "settings.json");
+  const settings = existsSync9(settingsPath) ? JSON.parse(readFileSync10(settingsPath, "utf8")) : {};
+  const manager = new DefaultPackageManager({ cwd, agentDir, settingsManager: SettingsManager.inMemory(settings) });
+  const missing = [];
+  const resolved = await manager.resolve(async (source) => {
+    missing.push(source);
+    return "skip";
+  });
+  const enabled = (type) => (resolved[type] || []).filter((item) => item.enabled && ["user", "project"].includes(item.metadata?.scope)).map((item) => ({ name: resourceName(item.path), path: item.path, scope: item.metadata.scope }));
+  return { settingsPath, extensions: enabled("extensions"), skills: enabled("skills"), missing };
+}
+function probeRegisteredTools({ extensions, piCli = PI_CLI, cacheFile, cwd = process.cwd() }) {
+  const key = JSON.stringify(["registration-only/v1", path19.resolve(cwd), ...[piCli, ...extensions.map((item) => item.path)].map((file) => [file, existsSync9(file) ? statSync11(file).mtimeMs : 0])]);
+  const cached = existsSync9(cacheFile) ? JSON.parse(readFileSync10(cacheFile, "utf8")) : null;
+  if (cached?.key === key) return Promise.resolve(cached.tools);
+  const id = `${cacheFile}
+${key}`;
+  if (!probes.has(id)) {
+    probes.set(id, runToolProbe(extensions, piCli, cwd).then((tools) => {
+      mkdirSync7(path19.dirname(cacheFile), { recursive: true });
+      writeFileSync5(cacheFile, JSON.stringify({ key, tools }));
+      return tools;
+    }).finally(() => probes.delete(id)));
+  }
+  return probes.get(id);
+}
+function runToolProbe(extensions, piCli, cwd) {
+  const loader = path19.join(path19.dirname(piCli), "core", "extensions", "loader.js");
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["--input-type=module", "-e", PROBE_SCRIPT], {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      env: { ...process.env, PI_TOOL_PROBE_LOADER: loader, PI_TOOL_PROBE_EXTENSIONS: JSON.stringify(extensions.map((item) => item.path)) }
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    const timer = setTimeout(() => child.kill(), PROBE_TIMEOUT_MS);
+    child.on("error", reject);
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        reject(new Error(`Pi \u6269\u5C55\u6CE8\u518C\u63A2\u6D4B\u5931\u8D25\uFF08exit ${code}\uFF09${stderr.trim() ? `\uFF1A${stderr.trim().slice(-400)}` : ""}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout.trim()));
+      } catch (error) {
+        reject(new Error(`Pi \u5DE5\u5177\u6CE8\u518C\u8868\u65E0\u6CD5\u89E3\u6790\uFF1A${error.message}`));
+      }
+    });
+  });
+}
+function catalogEntries(config, section, installed) {
+  const rows = installed.map(({ name, scope }) => {
+    const entry = importEntry(config, section, name);
+    return { key: entry?.key ?? null, name, access: entry?.access ?? "off", label: entry?.label ?? "", installed: true, scope };
+  });
+  for (const [key, entry] of Object.entries(config[section])) {
+    if (!installed.some(({ name }) => matches(name, key))) {
+      rows.push({ key, name: key, access: entry.access, label: entry.label ?? "", installed: false, scope: null });
+    }
+  }
+  return rows;
+}
+async function resolveWorkerResourceCatalog({
+  cwd = process.cwd(),
+  agentDir,
+  configPath = WORKER_RESOURCES_CONFIG,
+  piCli = PI_CLI,
+  toolCache = path19.join(cwd, ".runtime", "cockpit", "worker-tool-probe.json"),
+  probeTools = probeRegisteredTools
+} = {}) {
+  const config = loadWorkerResourcesConfig(configPath);
+  const found = await discoverWorkerResources({ cwd, agentDir, piCli });
+  const diagnostics = found.missing.map((source) => ({ code: "not_installed", file: found.settingsPath, field: "packages", message: `\u5DF2\u914D\u7F6E\u7684 Pi \u8D44\u6E90\u672A\u5B89\u88C5\uFF1A${source}` }));
+  const known = /* @__PURE__ */ new Set([...BUILTIN_TOOLS, ...RUNNER_TOOLS]);
+  try {
+    for (const name of await probeTools({ extensions: found.extensions, piCli, cacheFile: toolCache, cwd })) known.add(name);
+  } catch (error) {
+    diagnostics.push({ code: "tool_probe_failed", file: found.settingsPath, field: "extensions", message: `\u8BFB\u53D6\u5DF2\u88C5\u63D2\u4EF6\u6CE8\u518C\u7684\u5DE5\u5177\u5931\u8D25\uFF0C\u5DE5\u5177\u8868\u53EA\u542B\u5185\u7F6E\u5DE5\u5177\uFF1A${error.message}` });
+  }
+  const toolNames = [.../* @__PURE__ */ new Set([...known, ...Object.keys(config.tools), ...config.required_tools])].sort();
+  return {
+    configPath,
+    settingsPath: found.settingsPath,
+    tools: toolNames.map((name) => {
+      const entry = config.tools[name];
+      return {
+        key: entry ? name : null,
+        name,
+        access: accessOf(config, "tools", name),
+        label: entry?.label ?? "",
+        group: entry?.group ?? "",
+        installed: known.has(name) || config.required_tools.includes(name)
+      };
+    }),
+    extensions: catalogEntries(config, "extensions", found.extensions),
+    skills: catalogEntries(config, "skills", found.skills.filter((item) => item.scope === "user")),
+    project_skills: found.skills.filter((item) => item.scope === "project").map(({ name, scope }) => ({ name, scope })),
+    required_tools: config.required_tools,
+    diagnostics
+  };
+}
+function defaultOnTools(config) {
+  return Object.keys(config.tools).filter((name) => config.tools[name].access === "default_on" && !config.required_tools.includes(name));
+}
+var WORKER_RESOURCES_CONFIG, IMPORT_ACCESS, BUILTIN_TOOLS, RUNNER_TOOLS, PI_CLI, PROBE_TIMEOUT_MS, PROBE_SCRIPT, probes, SECTIONS, ENTRY_KEYS, REMOVED_KEYS;
+var init_pi_worker_resources = __esm({
+  async "ops/tools/pi_worker_resources.mjs"() {
+    WORKER_RESOURCES_CONFIG = path19.resolve(path19.dirname(fileURLToPath2(import.meta.url)), "../templates/worker-resources.json");
+    IMPORT_ACCESS = Object.freeze(["off", "optional", "default_on"]);
+    BUILTIN_TOOLS = Object.freeze(["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"]);
+    RUNNER_TOOLS = Object.freeze(["research_search", "research_fetch", "command_job"]);
+    PI_CLI = path19.join(process.env.APPDATA || path19.join(homedir3(), "AppData", "Roaming"), "npm/node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
+    PROBE_TIMEOUT_MS = 6e4;
+    PROBE_SCRIPT = `import { pathToFileURL } from "node:url";
+const { loadExtensions } = await import(pathToFileURL(process.env.PI_TOOL_PROBE_LOADER).href);
+const { extensions, errors } = await loadExtensions(JSON.parse(process.env.PI_TOOL_PROBE_EXTENSIONS), process.cwd());
+if (errors.length) throw new Error(errors.map(({ path, error }) => path + ": " + error).join("; "));
+console.log(JSON.stringify([...new Set(extensions.flatMap((extension) => [...extension.tools.keys()]))]));
+`;
+    probes = /* @__PURE__ */ new Map();
+    SECTIONS = Object.freeze(["tools", "extensions", "skills"]);
+    ENTRY_KEYS = Object.freeze({ tools: ["access", "label", "group"], extensions: ["access", "label"], skills: ["access", "label"] });
+    REMOVED_KEYS = Object.freeze({
+      base_extensions: '\u6539\u5199\u4E3A extensions \u4E2D access = "default_on" \u7684\u6761\u76EE',
+      main_only_extensions: '\u6539\u5199\u4E3A extensions \u4E2D access = "off" \u7684\u6761\u76EE',
+      main_only_skills: '\u6539\u5199\u4E3A skills \u4E2D access = "off" \u7684\u6761\u76EE',
+      force_excluded_tools: '\u6539\u5199\u4E3A tools \u4E2D access = "off" \u7684\u6761\u76EE'
+    });
+    if (path19.basename(process.argv[1] || "") === "pi_worker_resources.mjs") {
+      if (process.argv.slice(2).some((arg) => arg !== "--json")) {
+        console.error("Usage: node ops/tools/pi_worker_resources.mjs --json");
+        process.exitCode = 2;
+      } else {
+        try {
+          console.log(JSON.stringify(await resolveWorkerResourceCatalog(), null, 2));
+        } catch (error) {
+          console.error(error.message);
+          process.exitCode = 1;
+        }
+      }
+    }
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/worker.mjs
 function taskToolAllowlist(taskPackage) {
   const contract = isRecord(taskPackage?.tool_contract) ? taskPackage.tool_contract : {};
   const allowed = contract.allowed;
@@ -8868,232 +8011,415 @@ function agentConfigEntryImpl(agentType) {
   return loadRoleConfig(agentType);
 }
 function agentConfigEntry(agentType) {
-  return deps2.agentConfigEntry(agentType);
+  return deps.agentConfigEntry(agentType);
 }
-function piChildCatalogCommandImpl() {
-  const configured = pyStrip(String(process8.env.PI_CONTROL_PI || ""));
-  if (configured) {
-    const suffix = path16.extname(configured).toLowerCase();
-    if ([".js", ".mjs", ".cjs"].includes(suffix)) {
-      const node = shutilWhich("node");
-      return node ? [node, configured] : [];
-    }
-    return [configured];
+var init_worker = __esm({
+  async "ops/tools/dispatch-core/dispatch-prepare/worker.mjs"() {
+    init_tool_common();
+    init_py();
+    init_model_selection();
+    init_seed_minimal();
+    init_task_package_profiles();
+    await init_pi_worker_resources();
+    init_deps();
   }
-  let executable = process8.platform === "win32" ? shutilWhich("pi.cmd") : shutilWhich("pi");
-  if (!executable && process8.platform === "win32") executable = shutilWhich("pi");
-  return executable ? [executable] : [];
+});
+
+// ops/tools/dispatch-core/subagent_preload.mjs
+import { opendirSync as opendirSync2, statSync as statSync12 } from "node:fs";
+import path20 from "node:path";
+function jsonErrorLine2(text3, error) {
+  const message = String(error?.message ?? "");
+  const line = /\(line (\d+) column \d+\)/.exec(message);
+  if (line) return Number(line[1]);
+  const position = /position (\d+)/.exec(message);
+  if (position) return text3.slice(0, Number(position[1])).split("\n").length;
+  return 1;
 }
-function piChildCatalogCommand() {
-  return deps2.piChildCatalogCommand();
+function orNull(value) {
+  return value === void 0 ? null : value;
 }
-function piChildModelExtensionProfileImpl() {
-  if (pyStrip(String(process8.env.PI_CONTROL_PI || ""))) {
-    return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions: [], error: null };
-  }
-  let extensions;
+function isFile4(target) {
   try {
-    extensions = resolvePiChildModelExtensions();
+    return statSync12(target).isFile();
+  } catch {
+    return false;
+  }
+}
+function repoPath(value) {
+  const raw = pyStrip(pyStr(pyOr(value, "")));
+  if (!raw) throw new ToolError("empty required_files path");
+  const projectReal = resolveLikePython(ROOT);
+  const lexical = path20.resolve(ROOT, raw);
+  const lexicalRelative = path20.relative(projectReal, lexical);
+  if (lexicalRelative.startsWith("..") || path20.isAbsolute(lexicalRelative)) {
+    throw new ToolError(`required file escapes repository: ${raw}`);
+  }
+  const resolved = resolveLikePython(lexical);
+  const relative = path20.relative(projectReal, resolved);
+  if (relative.startsWith("..") || path20.isAbsolute(relative)) {
+    if (!isSameOrInside(resolved, RUNTIME_ROOT)) {
+      throw new ToolError(`required file escapes repository: ${raw}`);
+    }
+  }
+  if (!isFile4(resolved)) throw new ToolError(`required file not found: ${raw}`);
+  return resolved;
+}
+function packageFromData(data) {
+  if (!isRecord(data)) throw pyError("AttributeError", `'${pyTypeName(data)}' object has no attribute 'get'`);
+  const pkg = Object.hasOwn(data, "task_package") ? data.task_package : data;
+  if (!isRecord(pkg)) throw new ToolError("task_package root is not an object");
+  const agent = pkg.agent;
+  if (!isRecord(agent)) throw new ToolError("task_package.agent is missing or not an object");
+  const requiredFiles = agent.required_files;
+  if (!Array.isArray(requiredFiles) || !requiredFiles.every((item) => typeof item === "string")) {
+    throw new ToolError("task_package.agent.required_files must be a string list");
+  }
+  const role = pyStrip(pyStr(pyOr(agent.role, agent.runtime_role, "")));
+  if (!role) throw new ToolError("task_package.agent.role is missing");
+  return pkg;
+}
+function loadPackage(file) {
+  return packageFromData(loadJson(file));
+}
+function readRequiredFiles(pkg) {
+  const files = [];
+  for (const item of pyGetItem(pyGetItem(pkg, "agent"), "required_files")) {
+    const target = resolveLikePython(path20.resolve(RUNTIME_ROOT, item));
+    if (!isSameOrInside(target, RUNTIME_ROOT)) throw new ToolError(`required prompt escapes runtime: ${item}`);
+    files.push({ path: item, content: pyReadText(target) });
+  }
+  return files;
+}
+function roleDeveloperInstructions(pkg) {
+  const agent = isRecord(pkg?.agent) ? pkg.agent : {};
+  const role = pyStrip(pyStr(pyOr(agent.runtime_role, agent.role, "")));
+  const roleConfig = loadRoleConfig(role, { globalDefault: true });
+  const rolePath = path20.join(RUNTIME_ROOT, "ops", "agents", `${role}.toml`);
+  const instructions = pyStrip(pyStr(pyOr(roleConfig.developer_instructions, "")));
+  if (!instructions) throw new ToolError(`runtime role has no developer_instructions: ${role}`);
+  return { path: rel(rolePath), content: instructions };
+}
+function reviewEvidenceSupport(pkg) {
+  const extensions = isRecord(pkg?.extensions) ? pkg.extensions : {};
+  const reference = isRecord(extensions.review_evidence) ? extensions.review_evidence : {};
+  const rawPath = reference.path;
+  if (typeof rawPath !== "string" || !pyStrip(rawPath)) return null;
+  const target = repoPath(rawPath);
+  try {
+    const info = statSync12(target);
+    if (info.isFile() && info.size > REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET) {
+      return {
+        path: rawPath,
+        heading: "\u673A\u68B0\u8BC1\u636E\u5305",
+        content: `${JSON.stringify({
+          schema_version: 1,
+          injection_bounded: true,
+          omitted: true,
+          complete: false,
+          path: rawPath,
+          bytes: info.size,
+          byte_budget: REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET,
+          reason: "review evidence exceeds injection byte budget and was not preloaded",
+          read_authorization: "unchanged"
+        })}
+`
+      };
+    }
+  } catch {
+  }
+  let content;
+  try {
+    content = pyReadText(target);
   } catch (error) {
-    return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions: [], error: pySlice(String(error?.message ?? error), 500) };
+    if (error?.name === "UnicodeDecodeError") throw new ToolError(`review evidence is not valid UTF-8: ${rawPath}`);
+    throw error;
   }
-  if (!extensions.every((item) => typeof item === "string" && isAbsoluteLikePython(item) && isFile5(item))) {
-    return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions: [], error: "model extension profile returned invalid paths" };
+  let evidence;
+  try {
+    evidence = JSON.parse(content);
+  } catch (error) {
+    throw new ToolError(`review evidence is not valid JSON: ${rawPath}:${jsonErrorLine2(content, error)}`);
   }
-  return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions, error: null };
+  if (!isRecord(evidence)) throw new ToolError(`review evidence JSON root must be an object: ${rawPath}`);
+  return { path: rawPath, content, heading: "\u673A\u68B0\u8BC1\u636E\u5305" };
 }
-function piChildModelExtensionProfile() {
-  if (!caches.piChildModelExtensionProfile.has("value")) {
-    caches.piChildModelExtensionProfile.set("value", deps2.piChildModelExtensionProfile());
-  }
-  return caches.piChildModelExtensionProfile.get("value");
+function reviewCoverageFiles(pkg) {
+  const agent = isRecord(pkg?.agent) ? pkg.agent : {};
+  const capability = isRecord(agent.capability) ? agent.capability : {};
+  const capabilityName = pyStr(pyOr(capability.name, "")).replaceAll("-", "_");
+  const extensions = isRecord(pkg?.extensions) ? pkg.extensions : {};
+  const contracts = isRecord(extensions.capability_contract) ? extensions.capability_contract : {};
+  const review = isRecord(extensions.review_execution) ? extensions.review_execution : {};
+  const contractSlot = pyStrip(pyStr(pyOr(review.contract_slot, "")));
+  const direct = contractSlot ? contracts[contractSlot] : contracts[capabilityName];
+  const candidates = Object.values(contracts).filter((value) => isRecord(value));
+  const contract = isRecord(direct) ? direct : !contractSlot && candidates.length === 1 ? candidates[0] : {};
+  const rawFiles = Array.isArray(contract.target_files) ? contract.target_files : contract.affected_files;
+  const coverageFiles = Array.isArray(rawFiles) ? rawFiles : [];
+  return coverageFiles.filter((item) => pyStrip(pyStr(item))).map((item) => pyStr(item));
 }
-function probePiChildModelCatalogUncachedImpl(targetCwd) {
-  const command = piChildCatalogCommand();
-  const extensionProfile = piChildModelExtensionProfile();
-  if (!command.length || pyTruthy(extensionProfile.error)) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: "pi --list-models (child model profile)",
-      error: pyTruthy(extensionProfile.error) ? extensionProfile.error : "Pi executable not found"
-    };
-  }
-  const argv = [...command.slice(1), "-ne", "-ns", "-np", "--no-themes", "-nc", "--no-approve"];
-  for (const extensionPath of extensionProfile.extensions) argv.push("-e", extensionPath);
-  argv.push("--list-models");
-  const completed = pySpawnSync(command[0], argv, {
-    cwd: String(targetCwd),
-    encoding: "utf8",
-    timeout: 3e4,
-    windowsHide: true,
-    maxBuffer: 64 * 1024 * 1024
-  });
-  if (completed.error) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: pySlice(String(completed.error.message ?? completed.error), 500)
-    };
-  }
-  const stdout = String(completed.stdout ?? "");
-  const stderr = String(completed.stderr ?? "");
-  if (completed.status !== 0) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: pySlice(pyStrip(stderr || stdout), 500)
-    };
-  }
-  const models = /* @__PURE__ */ new Set();
-  const details = {};
-  for (const line of pySplitLines(stdout)) {
-    const columns = line.split(PY_SPLIT_RE).filter((item) => item !== "");
-    if (columns.length < 2 || columns[0].toLowerCase() === "provider") continue;
-    const provider = pyStrip(columns[0]);
-    const modelId = pyStrip(columns[1]);
-    if (!provider || !modelId) continue;
-    const key = `${provider}/${modelId}`;
-    models.add(key);
-    const images = columns.length >= 6 ? pyStrip(columns[5]).toLowerCase() : "";
-    details[key] = {
-      context_window: columns.length >= 3 ? pyStrip(columns[2]) || null : null,
-      supports_vision: images === "yes" ? true : images === "no" ? false : null
-    };
-  }
-  if (!models.size) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: "Pi returned no parseable child models"
-    };
-  }
-  const ordered = sortedStrings(models);
+function outputTemplateFor(pkg) {
+  const extensions = isRecord(pkg) && isRecord(pkg.extensions) ? pkg.extensions : {};
+  const review = isRecord(extensions.review_execution) ? extensions.review_execution : {};
+  const hasCoverageFiles = reviewCoverageFiles(pkg).length > 0;
+  const reviewedExample = hasCoverageFiles ? '["$target_files"]' : '["<exact path from task_package.scope.read>"]';
+  const coverageHint = hasCoverageFiles ? "\u5B8C\u6574\u8986\u76D6\u80FD\u529B\u5408\u540C\u6295\u5F71\u7684\u6587\u4EF6\u96C6\u5408\u65F6\u4F7F\u7528 `$target_files`\uFF1B\u90E8\u5206\u8986\u76D6\u4F7F\u7528\u7CBE\u786E\u8DEF\u5F84\u5E76\u8FD4\u56DE needs_owner\u3002" : "\u4ECE task_package.scope.read \u7CBE\u786E\u5217\u51FA\u5B9E\u9645\u6D88\u8D39\u8DEF\u5F84\uFF1B\u672A\u6D88\u8D39\u8DEF\u5F84\u8FDB\u5165 not_reviewed \u5E76\u8FD4\u56DE needs_owner\u3002";
+  const semanticReview = review.profile === "semantic_review_v2";
+  const actualReadsField = semanticReview ? ',"actual_reads":["<\u5B9E\u9645\u6D88\u8D39\u7684\u6388\u6743\u8DEF\u5F84>"]' : "";
+  const actualReadsHint = semanticReview ? "`scope.read` \u662F\u8BFB\u53D6\u6388\u6743\uFF0C\u4E0D\u662F\u5168\u6587\u6D88\u8D39\u4E49\u52A1\u3002\u6309\u672C\u6B21\u76EE\u6807\u6838\u5BF9 target_files \u4E2D\u7684\u5BA1\u67E5\u5BF9\u8C61\u4E0E\u5FC5\u8981\u4E0A\u4E0B\u6E38\uFF1B`actual_reads` \u5217\u5B9E\u9645\u6D88\u8D39\u7684\u7CBE\u786E\u8DEF\u5F84\uFF0C\u786E\u5DF2\u5168\u90E8\u6D88\u8D39\u65F6\u53EF\u7B80\u5199 `$scope_read`\u3002\u672A\u8BFB\u7684\u975E\u76EE\u6807\u6388\u6743\u6750\u6599\u4E0D\u6784\u6210\u7F3A\u53E3\uFF1B\u7F3A\u5C11\u5B8C\u6210\u76EE\u6807\u6240\u9700\u8BC1\u636E\u65F6\u624D\u8BB0\u5F55 evidence_gaps \u5E76\u8FD4\u56DE needs_owner\u3002" : "";
+  return `\u7ED3\u6784\u5316\u7ED3\u679C\u7528 \`submit_review_result\` \u5DE5\u5177\u63D0\u4EA4\uFF08\u5DE5\u5177\u5F53\u573A\u6821\u9A8C\uFF0C\u8FD4\u56DE\u9519\u8BEF\u65F6\u4FEE\u6B63\u540E\u518D\u63D0\u4EA4\uFF09\uFF1B\u8FD4\u56DE ok:true \u5373\u4EA4\u4ED8\u5B8C\u6210\uFF0C\u6700\u7EC8\u56DE\u590D\u4E00\u53E5\u8BDD\u5199\u660E gate \u4E0E\u7ED3\u8BBA\u3002
+\u5DE5\u5177\u4E0D\u53EF\u7528\u65F6\uFF0C\u6700\u7EC8\u56DE\u590D\u6309\u516D\u8282\u5199\uFF0C\u5E76\u5728 \`## \u4E8B\u5B9E\u4E0E\u8BC1\u636E\` \u653E\u4E00\u4E2A \`json review_result_v1\` \u4EE3\u7801\u5757\uFF1A
+{"schema_version":1,"gate":"pass | fail | needs_owner","summary":"\u4E00\u53E5\u7ED3\u8BBA","findings":[],"evidence_gaps":[],"scope":{"reviewed":${reviewedExample},"not_reviewed":[]${actualReadsField}},"output":{}}
+${coverageHint}${actualReadsHint}\u6700\u7EC8\u53EA\u8FD4\u56DE\u7ED3\u6784\u5316\u7ED3\u679C\uFF1B\u62A5\u544A\u6B63\u6587\u548C FINAL_HANDOFF \u7531 runner \u673A\u68B0\u751F\u6210\u3002
+`;
+}
+function structuredReview(pkg) {
+  const extensions = isRecord(pkg?.extensions) ? pkg.extensions : {};
+  const review = isRecord(extensions.review_execution) ? extensions.review_execution : {};
+  return STRUCTURED_PROFILES.has(review.profile);
+}
+function reviewPackageProjection(pkg) {
+  if (!structuredReview(pkg)) return pkg;
+  const runtime = isRecord(pkg?.runtime_context) ? pkg.runtime_context : {};
+  const agent = isRecord(pkg?.agent) ? pkg.agent : {};
+  const extensions = isRecord(pkg?.extensions) ? pkg.extensions : {};
   return {
-    status: "ok",
-    models: ordered,
-    model_details: Object.fromEntries(ordered.map((key) => [key, details[key]])),
-    model_count: ordered.length,
-    source: `pi --list-models (${extensionProfile.profile})`,
-    error: null
-  };
-}
-function _probePiChildModelCatalogUncached(targetCwd) {
-  return deps2.probePiChildModelCatalogUncached(targetCwd);
-}
-function piChildCatalogCacheIdentity(targetCwd) {
-  const command = piChildCatalogCommand();
-  const extensionProfile = piChildModelExtensionProfile();
-  const extensions = Array.isArray(extensionProfile.extensions) ? extensionProfile.extensions : [];
-  const agentDir = resolvePiAgentDir();
-  const configPaths = [
-    ...extensions,
-    ...CHILD_CATALOG_CONFIG_SURFACE.map((name) => path16.join(agentDir, ...String(name).split("/")))
-  ];
-  return {
-    schema: CATALOG_CACHE_SCHEMA,
-    platform: process8.platform,
-    pi_control_pi: pyStrip(String(process8.env.PI_CONTROL_PI || "")),
-    command,
-    extension_profile: {
-      profile: extensionProfile.profile,
-      extensions,
-      error: extensionProfile.error ?? null
+    version: orNull(pkg.version),
+    package_id: orNull(pkg.package_id),
+    agent: {
+      role: orNull(agent.role),
+      runtime_role: orNull(agent.runtime_role),
+      capability: orNull(agent.capability),
+      required_files: orNull(agent.required_files)
     },
-    config_fingerprints: fingerprintPaths(configPaths),
-    target_cwd: String(targetCwd)
+    goal: orNull(pkg.goal),
+    scope: orNull(pkg.scope),
+    tool_contract: orNull(pkg.tool_contract),
+    expected_output: orNull(pkg.expected_output),
+    runtime_context: {
+      cwd: orNull(runtime.cwd),
+      output_root: orNull(runtime.output_root),
+      target_repo: orNull(runtime.target_repo)
+    },
+    extensions: {
+      ...isRecord(extensions.model_config) ? { model_config: extensions.model_config } : {},
+      capability_contract: orNull(extensions.capability_contract),
+      review_execution: orNull(extensions.review_execution),
+      review_evidence: orNull(extensions.review_evidence)
+    },
+    handoff_contract: orNull(pkg.handoff_contract)
   };
 }
-function piChildCatalogCacheFile() {
-  const override = pyStrip(String(process8.env.SUBAGENT_CATALOG_CACHE_DIR || ""));
-  const cacheDir = override ? resolveLikePython(override) : path16.join(ROOT, ".runtime", "cockpit", "cache");
-  return path16.join(cacheDir, CATALOG_CACHE_FILE_NAME);
-}
-function childCatalogFileLayerEnabled() {
-  return deps2.probePiChildModelCatalogUncached === probePiChildModelCatalogUncachedImpl;
-}
-function rememberChildCatalog(key, value) {
-  caches.childModelCatalog.set(key, value);
-  while (caches.childModelCatalog.size > 8) {
-    caches.childModelCatalog.delete(caches.childModelCatalog.keys().next().value);
+function* scopeFiles(target, missingPaths) {
+  if (isFile4(target)) {
+    yield target;
+    return;
   }
-  return value;
-}
-function probePiChildModelCatalogFresh(key, { cacheWrite = false } = {}) {
-  let identityBefore = null;
-  if (cacheWrite && childCatalogFileLayerEnabled()) {
-    try {
-      identityBefore = piChildCatalogCacheIdentity(key);
-    } catch {
+  let directory;
+  try {
+    directory = opendirSync2(target);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    missingPaths.push(target);
+    return;
+  }
+  try {
+    let entry;
+    while ((entry = directory.readSync()) !== null) {
+      const child = path20.join(target, entry.name);
+      if (entry.isDirectory()) yield* scopeFiles(child, missingPaths);
+      else if (isFile4(child)) yield child;
     }
+  } finally {
+    directory.closeSync();
   }
-  const value = deps2.probePiChildModelCatalogUncached(key);
-  rememberChildCatalog(key, value);
-  if (identityBefore && value?.status === "ok") {
-    try {
-      const identity = piChildCatalogCacheIdentity(key);
-      if (catalogCacheKey(identityBefore) === catalogCacheKey(identity)) {
-        writeCatalogCacheEntry(piChildCatalogCacheFile(), catalogCacheKey(identity), identity, value);
+}
+function runtimeMaterial(pkg, requiredFiles) {
+  const agent = isRecord(pkg) ? pkg.agent : {};
+  const capability = isRecord(agent) ? agent.capability : {};
+  const commonPath = "ops/agent-prompts/_common.md";
+  const capabilityPath = isRecord(capability) ? pyStr(pyOr(capability.file, "")) : "";
+  const byPath = new Map(requiredFiles.map((item) => [item.path, item.content]));
+  const compactReview = structuredReview(pkg);
+  const supportFiles = requiredFiles.filter((item) => item.path !== commonPath && item.path !== capabilityPath);
+  const evidence = reviewEvidenceSupport(pkg);
+  if (evidence !== null) supportFiles.push(evidence);
+  const omittedScopeFiles = [];
+  if (inlinesScopeRead(pkg)) {
+    let remaining = REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET;
+    const base = pyStr(pyOr(pkg.runtime_context?.target_repo, ROOT));
+    for (const item of filledList(pkg.scope?.read)) {
+      const target = path20.resolve(base, pyStr(item));
+      const missingPaths = [];
+      for (const file of scopeFiles(target, missingPaths)) {
+        const shown = path20.relative(base, file).replaceAll("\\", "/");
+        const bytes = statSync12(file).size;
+        if (bytes > remaining) {
+          omittedScopeFiles.push({ path: shown, bytes });
+          continue;
+        }
+        remaining -= bytes;
+        supportFiles.push({ path: shown, heading: `\u5377\u5B97\uFF1A${shown}`, content: pyReadText(file) });
       }
-    } catch {
+      for (const missing of missingPaths) {
+        omittedScopeFiles.push({ path: path20.relative(base, missing).replaceAll("\\", "/"), missing: true });
+      }
     }
   }
-  return value;
+  return {
+    schema_version: 3,
+    task_package: reviewPackageProjection(pkg),
+    common_prompt: {
+      path: commonPath,
+      content: byPath.has(commonPath) ? byPath.get(commonPath) : ""
+    },
+    capability_prompt: {
+      path: capabilityPath,
+      content: byPath.has(capabilityPath) ? byPath.get(capabilityPath) : ""
+    },
+    support_files: supportFiles,
+    omitted_scope_files: omittedScopeFiles,
+    output_template: compactReview ? { format: "review_result_v1", content: outputTemplateFor(pkg) } : null
+  };
 }
-function probePiChildModelCatalogImpl(targetCwd, options = {}) {
-  const key = String(targetCwd);
-  if (caches.childModelCatalog.has(key)) {
-    const value = caches.childModelCatalog.get(key);
-    caches.childModelCatalog.delete(key);
-    caches.childModelCatalog.set(key, value);
-    return value;
-  }
-  if (childCatalogFileLayerEnabled()) {
-    let cached = null;
-    try {
-      const identity = piChildCatalogCacheIdentity(key);
-      cached = readCatalogCacheEntry(piChildCatalogCacheFile(), catalogCacheKey(identity));
-    } catch {
-      cached = null;
-    }
-    if (cached) {
-      cacheServedCatalogs.add(cached.catalog);
-      return rememberChildCatalog(key, cached.catalog);
-    }
-  }
-  return probePiChildModelCatalogFresh(key, options);
+function contains(collection, value) {
+  if (collection instanceof Set) return collection.has(value);
+  if (Array.isArray(collection)) return collection.includes(value);
+  return false;
 }
-function probePiChildModelCatalog(targetCwd, options = {}) {
-  return deps2.probePiChildModelCatalog(targetCwd, options);
+function renderedMaterialBody(item, requiredPaths) {
+  const content = pyStr(pyOr(item?.content, ""));
+  const itemPath = pyStr(pyOr(item?.path, ""));
+  if (!contains(requiredPaths, itemPath)) return [content];
+  const marker = JSON.stringify({ path: itemPath });
+  return [
+    `<!-- subagent-required-material:start ${marker} -->`,
+    content,
+    "<!-- subagent-required-material:end -->"
+  ];
 }
-function requirePiChildModel(model, targetCwd, options = {}) {
-  const resolvedCwd = String(resolveLikePython(targetCwd));
-  let catalog = probePiChildModelCatalog(resolvedCwd, options);
-  if (catalog?.status === "ok" && cacheServedCatalogs.has(catalog) && !new Set(pyTruthy(catalog.models) ? catalog.models : []).has(model)) {
-    catalog = probePiChildModelCatalogFresh(resolvedCwd, options);
-  }
-  if (catalog?.status !== "ok") {
-    return {
-      status: "unknown",
-      source: catalog?.source ?? "Pi child catalog probe",
-      warning: `Pi child model catalog probe failed: ${pyStr(catalog?.error || "unknown error")}; continuing to runner model validation`
-    };
-  }
-  const available = new Set(pyTruthy(catalog.models) ? catalog.models : []);
-  if (!available.has(model)) {
-    throw new ToolError(
-      `resolved model ${model} is not available in the Pi child model profile (${pyStr(catalog.source)}); available models: ${[...available].sort().join(", ") || "(none)"}; nothing was dispatched and no other model was substituted; choose a model from this list and retry`
+function jsonBlock(value) {
+  return `\`\`\`json
+${JSON.stringify(value, null, 2)}
+\`\`\``;
+}
+function inlinesScopeRead(pkg) {
+  const allowed = isRecord(pkg?.tool_contract) ? pkg.tool_contract.allowed : null;
+  return Array.isArray(allowed) && !allowed.some((name) => pyStrip(pyStr(name)) === "read") && !structuredReview(pkg);
+}
+function filledList(value) {
+  return Array.isArray(value) ? value.filter((item) => item !== null && item !== void 0 && pyStrip(pyStr(item)) !== "") : [];
+}
+function renderTaskCard(pkg, packagePath = "", omittedScopeFiles = []) {
+  const scope = isRecord(pkg?.scope) ? pkg.scope : {};
+  const extensions = isRecord(pkg?.extensions) ? pkg.extensions : {};
+  const expected = isRecord(pkg?.expected_output) ? pkg.expected_output : {};
+  const tools = isRecord(pkg?.tool_contract) ? pkg.tool_contract : {};
+  const alignment = isRecord(pkg?.alignment) ? pkg.alignment : {};
+  const goal = pyStrip(pyStr(pyOr(pkg?.goal, "")));
+  const lines = ["## \u4EFB\u52A1\u5361", ""];
+  lines.push(packagePath ? `\u4EFB\u52A1\u5305 \`${pyStr(pkg?.package_id)}\`\uFF1B\u5B8C\u6574 JSON \u5728 \`${packagePath}\`\uFF0C\u80FD\u529B\u89C4\u5219\u91CC\u7684 \`task_package.*\` \u5B57\u6BB5\u90FD\u5728\u5176\u4E2D\u3002` : `\u4EFB\u52A1\u5305 \`${pyStr(pkg?.package_id)}\`\u3002`);
+  lines.push("", "### \u76EE\u6807", goal);
+  const inputs = isRecord(pkg?.inputs) ? Object.fromEntries(Object.entries(pkg.inputs).filter(([key, value]) => !(key === "question" && pyStrip(pyStr(value)) === goal))) : {};
+  if (Object.keys(inputs).length) lines.push("", "### \u8F93\u5165", jsonBlock(inputs));
+  const readLabel = inlinesScopeRead(pkg) ? omittedScopeFiles.length ? "\u5FC5\u8BFB\uFF08\u90E8\u5206\u5168\u6587\u5DF2\u5728\u4E0A\u6587\u300C\u5377\u5B97\u300D\u5404\u8282\uFF0C\u672A\u5185\u8054\u9879\u89C1\u4E0B\uFF09" : "\u5FC5\u8BFB\uFF08\u5168\u6587\u5DF2\u5728\u4E0A\u6587\u300C\u5377\u5B97\u300D\u5404\u8282\uFF09" : "\u5FC5\u8BFB";
+  const scopeRows = [[readLabel, scope.read], ["\u53EF\u5199", scope.write], ["\u53EF\u5220", scope.delete], ["\u4E0D\u505A", scope.out_of_scope]].map(([label, value]) => [label, filledList(value)]).filter(([, items]) => items.length);
+  lines.push("", "### \u8303\u56F4", ...scopeRows.length ? scopeRows.map(([label, items]) => `- ${label}\uFF1A${items.map((item) => `\`${pyStr(item)}\``).join("\u3001")}`) : ["- \u672A\u58F0\u660E"]);
+  const budgetOmissions = omittedScopeFiles.filter((item) => !item.missing);
+  const missingOmissions = omittedScopeFiles.filter((item) => item.missing);
+  if (budgetOmissions.length) {
+    lines.push(
+      `- \u672A\u5185\u8054\uFF08\u5377\u5B97\u5168\u6587\u9884\u7B97 ${REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET} \u5B57\u8282\uFF09\uFF1A`,
+      ...budgetOmissions.map((item) => `  - \`${item.path}\`\uFF1A${item.bytes} \u5B57\u8282`)
     );
   }
-  return { status: "available", source: pyStr(pyTruthy(catalog.source) ? catalog.source : "") };
+  if (missingOmissions.length) {
+    lines.push(
+      "- \u7F3A\u5931\u7684\u5FC5\u8BFB\u8DEF\u5F84\uFF08\u672A\u5185\u8054\uFF09\uFF1A",
+      ...missingOmissions.map((item) => `  - \`${item.path}\``)
+    );
+  }
+  const facts = filledList(pkg?.known_facts);
+  if (facts.length) lines.push("", "### \u5DF2\u77E5\u4E8B\u5B9E", ...facts.map((item) => `- ${pyStr(item)}`));
+  if (isRecord(extensions.capability_contract) && Object.keys(extensions.capability_contract).length) {
+    lines.push("", "### \u80FD\u529B\u5408\u540C", jsonBlock(extensions.capability_contract));
+  }
+  for (const [key, label] of [["review_execution", "\u5BA1\u67E5\u6267\u884C"], ["review_evidence", "\u5BA1\u67E5\u8BC1\u636E"]]) {
+    if (isRecord(extensions[key]) && Object.keys(extensions[key]).length) lines.push("", `### ${label}`, jsonBlock(extensions[key]));
+  }
+  const outputRows = [];
+  const reportPath = pyStr(pyOr(expected.resolved_file_path, expected.file_path, ""));
+  if (reportPath) outputRows.push(`- \u62A5\u544A\uFF1A\`${reportPath}\``);
+  const sections = filledList(expected.required_sections);
+  if (sections.length) outputRows.push(`- \u62A5\u544A\u7AE0\u8282\uFF1A${sections.map((item) => pyStr(item)).join("\u3001")}`);
+  const gate = pyStrip(pyStr(pyOr(expected.business_gate, "")));
+  if (gate) outputRows.push(`- \u4E1A\u52A1\u95E8\uFF1A\`${gate}\``);
+  if (outputRows.length) lines.push("", "### \u4EA7\u7269", ...outputRows);
+  const toolRows = [];
+  const declaredOnly = !isRecord(pkg?.worker_resources) || Array.isArray(pkg.worker_resources.declared_tools);
+  if (Array.isArray(tools.allowed) && declaredOnly) toolRows.push(`- \u53EA\u7528\uFF1A${tools.allowed.length ? tools.allowed.join("\u3001") : "\u65E0"}`);
+  const forbidden = filledList(tools.forbidden);
+  if (forbidden.length) toolRows.push(`- \u7981\u7528\uFF1A${forbidden.map((item) => pyStr(item)).join("\u3001")}`);
+  toolRows.push(`- \u8054\u7F51\uFF1A${tools.network_allowed === true ? "\u5141\u8BB8" : "\u4E0D\u5141\u8BB8"}\uFF1B\u5B89\u88C5\u4F9D\u8D56\uFF1A${tools.install_allowed === true ? "\u5141\u8BB8" : "\u4E0D\u5141\u8BB8"}`);
+  lines.push("", "### \u5DE5\u5177", ...toolRows);
+  if (isRecord(alignment.guard) && alignment.guard.required === true) lines.push("", "### \u5BF9\u9F50\u5B88\u536B", jsonBlock(alignment));
+  const stops = filledList(pkg?.stop_conditions);
+  if (stops.length) lines.push("", "### \u505C\u6B62\u6761\u4EF6", ...stops.map((item) => `- ${pyStr(item)}`));
+  return lines.join("\n");
 }
+function renderFullTaskMaterial(material, packagePath = "") {
+  const pkg = material?.task_package;
+  const common = isRecord(material?.common_prompt) ? material.common_prompt : {};
+  const capability = isRecord(material?.capability_prompt) ? material.capability_prompt : {};
+  const output = isRecord(material?.output_template) ? material.output_template : {};
+  const supportFiles = Array.isArray(material?.support_files) ? material.support_files : [];
+  const agent = isRecord(pkg) && isRecord(pkg.agent) ? pkg.agent : {};
+  const required = Array.isArray(agent.required_files) ? agent.required_files : [];
+  const requiredPaths = new Set(required.map((item) => pyStr(item)));
+  const goal = pyStrip(pyStr(pyOr(pkg?.goal, "")));
+  const headline = goal.split("\n")[0];
+  const parts = [
+    `\u672C\u6B21\u4EFB\u52A1\uFF1A${headline}`,
+    "\u5B8C\u6574\u4EFB\u52A1\u5361\u5728\u672C\u6587\u672B\u5C3E\u7684\u300C\u4EFB\u52A1\u5361\u300D\u4E00\u8282\u3002\u5148\u8BFB\u4E0B\u9762\u7684\u89C4\u5219\uFF0C\u518D\u6309\u4EFB\u52A1\u5361\u6267\u884C\u3002",
+    "",
+    "## \u516C\u5171\u89C4\u5219",
+    ...renderedMaterialBody(common, requiredPaths),
+    "",
+    "## \u80FD\u529B\u89C4\u5219",
+    ...renderedMaterialBody(capability, requiredPaths)
+  ];
+  for (const item of supportFiles) {
+    if (!isRecord(item)) continue;
+    const content = item.content;
+    if (typeof content === "string" && content) {
+      parts.push("", `## ${pyStr(pyOr(item.heading, "\u8865\u5145\u6750\u6599"))}`, ...renderedMaterialBody(item, requiredPaths));
+    }
+  }
+  parts.push("", renderTaskCard(pkg, packagePath, material.omitted_scope_files ?? []));
+  if (output.content) parts.push("", "## \u7ED3\u6784\u5316\u7ED3\u679C", pyStr(output.content));
+  return pyStrip(parts.join("\n"));
+}
+function renderDirectTaskMaterial(pkg, packagePath = "") {
+  const requiredFiles = readRequiredFiles(pkg);
+  const material = runtimeMaterial(pkg, requiredFiles);
+  return renderFullTaskMaterial(material, packagePath);
+}
+function renderTaskMaterialFile(packagePath) {
+  return renderDirectTaskMaterial(loadPackage(packagePath), path20.resolve(packagePath));
+}
+var REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET, STRUCTURED_PROFILES;
+var init_subagent_preload = __esm({
+  "ops/tools/dispatch-core/subagent_preload.mjs"() {
+    init_tool_common();
+    init_py();
+    REVIEW_EVIDENCE_INJECTION_BYTE_BUDGET = 2e5 * 4;
+    STRUCTURED_PROFILES = /* @__PURE__ */ new Set(["evidence_only_v1", "semantic_review_v2", "acceptance_synthesis_v1"]);
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/runtime.mjs
+import path21 from "node:path";
 function resolveFromPicks(agentType, capability, options = {}) {
   const selection = resolveSelection(loadSelectionConfig(modelConfigSources()), {
     role: agentType,
@@ -9172,9 +8498,9 @@ function resolveAsyncRuntimeOptions(taskPackage, options = {}) {
   }
   const effectiveTargetCwd = resolveLikePython(pyTruthy(targetCwd) ? targetCwd : ROOT);
   if (!isDirectory2(effectiveTargetCwd)) throw new ToolError(`async target_cwd does not exist: ${effectiveTargetCwd}`);
-  const controllerRuntime = resolveLikePython(path16.join(ROOT, ".runtime"));
+  const controllerRuntime = resolveLikePython(path21.join(ROOT, ".runtime"));
   const effectiveTaskRoot = resolveLikePython(
-    pyTruthy(taskRoot) ? taskRoot : path16.join(controllerRuntime, "cockpit", "async_tasks")
+    pyTruthy(taskRoot) ? taskRoot : path21.join(controllerRuntime, "cockpit", "async_tasks")
   );
   if (!pyIsRelativeTo(effectiveTaskRoot, controllerRuntime)) {
     throw new ToolError("async task_root must stay inside the controller repository .runtime");
@@ -9185,7 +8511,7 @@ function resolveAsyncRuntimeOptions(taskPackage, options = {}) {
     effectiveRunnerPath = requestedRunnerPath;
   } else if (pyTruthy(requestedRunnerPath)) {
     effectiveRunnerPath = String(resolveLikePython(requestedRunnerPath));
-    if (!isFile5(effectiveRunnerPath)) throw new ToolError(`async runner does not exist: ${effectiveRunnerPath}`);
+    if (!isFile3(effectiveRunnerPath)) throw new ToolError(`async runner does not exist: ${effectiveRunnerPath}`);
   }
   const extensions = isRecord(taskPackage?.extensions) ? taskPackage.extensions : {};
   const crossRepo = isRecord(extensions.cross_repo_acceptance) ? extensions.cross_repo_acceptance : {};
@@ -9258,15 +8584,50 @@ function resolveAsyncRuntimeOptions(taskPackage, options = {}) {
     stall_silence_ms: stallSilenceMs
   };
 }
-function currentDispatchPhase() {
-  return dispatchPhaseState.phase;
+var init_runtime = __esm({
+  async "ops/tools/dispatch-core/dispatch-prepare/runtime.mjs"() {
+    init_tool_common();
+    init_py();
+    init_model_selection();
+    init_review_evidence();
+    init_task_package_build();
+    init_catalog();
+    init_constants();
+    init_py_utils();
+    await init_worker();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/batch-meta.mjs
+function makeBatchId(_seeds) {
+  const now = clock.now();
+  const pad = (value, width) => String(value).padStart(width, "0");
+  const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1, 2)}${pad(now.getUTCDate(), 2)}T${pad(now.getUTCHours(), 2)}${pad(now.getUTCMinutes(), 2)}${pad(now.getUTCSeconds(), 2)}${pad(now.getUTCMilliseconds(), 3)}Z`;
+  return `batch-${stamp}-${ids.uuidHex().slice(0, 12)}`;
 }
-function markDispatchPhase(phase) {
-  dispatchPhaseState.phase = phase;
-  process8.stderr.write(`[dispatch-phase] seed=${dispatchPhaseState.seedIndex} phase=${phase}
-`);
-  return null;
+function sliceMetadata(seed, index) {
+  const sliceId = pyStrip(pyStr(
+    pyTruthy(seed?.slice_id) ? seed.slice_id : pyTruthy(seed?.slug) ? seed.slug : `slice-${String(index + 1).padStart(2, "0")}`
+  ));
+  const displayTitle = pyStrip(pyStr(
+    pyTruthy(seed?.title) ? seed.title : pyTruthy(seed?.goal) ? seed.goal : sliceId
+  ));
+  return [pySlice(sliceId, 120), pySlice(displayTitle, 240)];
 }
+function clampDisplayTitle(text3, limitBytes = 120) {
+  const encoded = Buffer.from(pyStr(text3), "utf8").subarray(0, limitBytes);
+  return pyStrip(new TextDecoder("utf-8", { fatal: false }).decode(encoded).replace(/\uFFFD+$/, ""));
+}
+var init_batch_meta = __esm({
+  "ops/tools/dispatch-core/dispatch-prepare/batch-meta.mjs"() {
+    init_tool_common();
+    init_py();
+    init_py_utils();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/prepare-async.mjs
+import path22 from "node:path";
 function prepareAsyncSubagent(pkg, options = {}) {
   const {
     model = "",
@@ -9379,9 +8740,9 @@ function prepareAsyncSubagent(pkg, options = {}) {
       reviewHolder.value = value;
       return value;
     }
-    const evidence = deps2.attachReviewEvidence(pkg, {
+    const evidence = deps.attachReviewEvidence(pkg, {
       execute: true,
-      outputPath: path16.join(String(materialRoot), "review-evidence.json")
+      outputPath: path22.join(String(materialRoot), "review-evidence.json")
     });
     reviewHolder.value = evidence;
     return { writes_performed: pyTruthy(evidence) ? ["review-evidence.json"] : [] };
@@ -9410,7 +8771,7 @@ function prepareAsyncSubagent(pkg, options = {}) {
   let descriptor;
   try {
     const selection = isRecord(opts.model_selection) ? opts.model_selection : null;
-    descriptor = deps2.compilePreparedDispatch(pkg, {
+    descriptor = deps.compilePreparedDispatch(pkg, {
       producerRoot: ROOT,
       resolvedRuntimeOptions: {
         ...opts,
@@ -9439,7 +8800,7 @@ function prepareAsyncSubagent(pkg, options = {}) {
   }
   let verifiedDescriptor;
   try {
-    verifiedDescriptor = deps2.verifyPreparedDispatch(pyGetItem(descriptor, "descriptor_file"));
+    verifiedDescriptor = deps.verifyPreparedDispatch(pyGetItem(descriptor, "descriptor_file"));
   } catch (error) {
     if (isPyCaughtError(error, /* @__PURE__ */ new Set(["PreparedDispatchError", "OSError", "ValueError"]))) {
       throw new ToolError(`prepared dispatch verification failed: ${error.message}`);
@@ -9498,7 +8859,7 @@ function prepareAsyncSubagent(pkg, options = {}) {
   }
   if (normalizedAction === "prepare") return baseResult;
   markDispatchPhase("submit");
-  const submit = submitter || deps2.callAsyncInternalAdapter;
+  const submit = submitter || deps.callAsyncInternalAdapter;
   const receipt = submit("submit-prepared", { dispatch_file: verifiedDescriptor.dispatch_file });
   if (!isRecord(receipt)) throw new ToolError("async transport returned a malformed receipt; task_id is ambiguous");
   const rawTaskId = receipt.task_id;
@@ -9510,9 +8871,9 @@ function prepareAsyncSubagent(pkg, options = {}) {
   Object.assign(baseResult, {
     task_id: taskId,
     task_dir: String(taskDir),
-    status_path: String(path16.join(taskDir, "status.json")),
-    handoff_path: String(path16.join(taskDir, "handoff.md")),
-    report_path: String(path16.join(taskDir, "report.md")),
+    status_path: String(path22.join(taskDir, "status.json")),
+    handoff_path: String(path22.join(taskDir, "handoff.md")),
+    report_path: String(path22.join(taskDir, "report.md")),
     wait_tool_arguments: { task_id: taskId, timeout_ms: 6e4 },
     get_tool_arguments: { task_ids: [taskId], detail: "compact" },
     result_tool_arguments: { task_id: taskId },
@@ -9520,6 +8881,28 @@ function prepareAsyncSubagent(pkg, options = {}) {
   });
   return baseResult;
 }
+var init_prepare_async = __esm({
+  async "ops/tools/dispatch-core/dispatch-prepare/prepare-async.mjs"() {
+    init_tool_common();
+    init_py();
+    init_review_evidence();
+    init_subagent_preload();
+    init_batch_meta();
+    init_constants();
+    init_delivery();
+    init_deps();
+    init_py_utils();
+    init_seed();
+    await init_runtime();
+    init_state();
+    await init_worker();
+  }
+});
+
+// ops/tools/dispatch-core/dispatch-prepare/dispatch-run.mjs
+import { createHash as createHash5 } from "node:crypto";
+import path23 from "node:path";
+import process11 from "node:process";
 function taskPackageOutputSummary(taskPackage) {
   const expected = isRecord(taskPackage?.expected_output) ? taskPackage.expected_output : {};
   const handoff = isRecord(taskPackage?.handoff_contract) ? taskPackage.handoff_contract : {};
@@ -9591,7 +8974,7 @@ function normalizeDispatchAction(action = "") {
   return requested || "submit";
 }
 function legacyOriginId() {
-  return String(process8.env.CODEX_THREAD_ID || "");
+  return String(process11.env.CODEX_THREAD_ID || "");
 }
 function prepareDispatch(seed, delivery, options = {}) {
   const {
@@ -9634,7 +9017,7 @@ function prepareDispatch(seed, delivery, options = {}) {
   lintOrFail(pkg);
   const compiledTask = pyGetItem(pkg, "task_package");
   compiledTask.extensions.model_config = { global_root: modelConfigSources().global_root, project_root: ROOT };
-  const importedResources = loadWorkerResourcesConfig(path16.join(RUNTIME_ROOT, "ops", "templates", "worker-resources.json"));
+  const importedResources = loadWorkerResourcesConfig(path23.join(RUNTIME_ROOT, "ops", "templates", "worker-resources.json"));
   applyRoleWorkerResources(compiledTask, loadSelectionConfig(modelConfigSources()), importedResources);
   const resourceSnapshot = {
     tools: importedResources.tools,
@@ -9650,11 +9033,11 @@ function prepareDispatch(seed, delivery, options = {}) {
     resolvedDelivery = "async-subagent";
     readiness = { status: "not_checked", issues: [] };
   } else {
-    [resolvedDelivery, readiness] = deps2.resolveDelivery(delivery);
+    [resolvedDelivery, readiness] = deps.resolveDelivery(delivery);
   }
   const staticReview = isStaticReview(pyGetItem(pkg, "task_package"));
   const deferFinalRuntimeResolution = resolvedDelivery === "async-subagent" && ["prepare", "submit"].includes(normalizedAction) && staticReview;
-  const reviewEvidence = preview ? deps2.attachReviewEvidence(pkg, { execute: false }) : null;
+  const reviewEvidence = preview ? deps.attachReviewEvidence(pkg, { execute: false }) : null;
   let resolvedAsyncOptions = null;
   if (["preview", "prepare", "submit"].includes(normalizedAction) && resolvedDelivery === "async-subagent" && !deferFinalRuntimeResolution) {
     resolvedAsyncOptions = resolveAsyncRuntimeOptions(pyGetItem(pkg, "task_package"), {
@@ -9763,25 +9146,6 @@ function prepareDispatch(seed, delivery, options = {}) {
   result.delivery_readiness = readiness;
   return result;
 }
-function makeBatchId(_seeds) {
-  const now = clock.now();
-  const pad = (value, width) => String(value).padStart(width, "0");
-  const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1, 2)}${pad(now.getUTCDate(), 2)}T${pad(now.getUTCHours(), 2)}${pad(now.getUTCMinutes(), 2)}${pad(now.getUTCSeconds(), 2)}${pad(now.getUTCMilliseconds(), 3)}Z`;
-  return `batch-${stamp}-${ids.uuidHex().slice(0, 12)}`;
-}
-function sliceMetadata(seed, index) {
-  const sliceId = pyStrip(pyStr(
-    pyTruthy(seed?.slice_id) ? seed.slice_id : pyTruthy(seed?.slug) ? seed.slug : `slice-${String(index + 1).padStart(2, "0")}`
-  ));
-  const displayTitle = pyStrip(pyStr(
-    pyTruthy(seed?.title) ? seed.title : pyTruthy(seed?.goal) ? seed.goal : sliceId
-  ));
-  return [pySlice(sliceId, 120), pySlice(displayTitle, 240)];
-}
-function clampDisplayTitle(text3, limitBytes = 120) {
-  const encoded = Buffer.from(pyStr(text3), "utf8").subarray(0, limitBytes);
-  return pyStrip(new TextDecoder("utf-8", { fatal: false }).decode(encoded).replace(/\uFFFD+$/, ""));
-}
 function prepareBatchDispatch(seeds, delivery, options = {}) {
   const { batchId = "", ...kwargs } = options;
   const batchAction = normalizeDispatchAction(pyStr(pyTruthy(kwargs.action) ? kwargs.action : ""));
@@ -9852,7 +9216,7 @@ function prepareBatchDispatch(seeds, delivery, options = {}) {
   };
 }
 async function attachAgentPanelLaunch(result, { dryRun, ensure = null } = {}) {
-  const ensureFn = ensure || deps2.ensureAgentPanel;
+  const ensureFn = ensure || deps.ensureAgentPanel;
   if (dryRun) return result;
   let taskIds = [...pyList(pyTruthy(result?.committed_task_ids) ? result.committed_task_ids : [])];
   if (result?.status === "ok" && result?.action !== "prepare" && result?.delivery_mode === "async_subagent" && pyTruthy(result?.task_id)) {
@@ -9895,65 +9259,924 @@ function prepareDirectPreview(seed, { asyncModel = "" } = {}) {
   lintOrFail(pkg);
   return prepareDirect(pkg);
 }
-async function selfTest2() {
-  const selftest = await init_dispatch_prepare_selftest().then(() => dispatch_prepare_selftest_exports);
-  return selftest.selfTest();
-}
-var PREFLIGHT_FILE_THRESHOLD, PREFLIGHT_BYTES_THRESHOLD, PREFLIGHT_LARGE_FILE_BYTES, PREFLIGHT_WALK_SKIP_DIRS, PREFLIGHT_WALK_SKIP_PATHS, PREFLIGHT_GIT_TIMEOUT_SECONDS, PREFLIGHT_STAT_FILE_CAP, PREFLIGHT_BINARY_LIKE_EXTENSIONS, ASYNC_MCP_SERVER_NAME, ASYNC_DISPATCH_CONTRACT_VERSION, CROSS_REPO_RESULT_MODES, ACCEPTANCE_SYNTHESIS_PROFILE, PI_ASYNC_RUNNER_SENTINEL, GLOBAL_CONFIG_PATH, PROJECT_ASYNC_TASK_ROOT, deps2, caches, PY_SPLIT_RE, CHILD_CATALOG_CONFIG_SURFACE, cacheServedCatalogs, dispatchPhaseState;
-var init_dispatch_prepare = __esm({
-  async "ops/tools/dispatch-core/dispatch_prepare.mjs"() {
-    init_tool_common();
-    init_py();
-    init_dist();
-    init_model_catalog_cache();
+var init_dispatch_run = __esm({
+  async "ops/tools/dispatch-core/dispatch-prepare/dispatch-run.mjs"() {
     init_agent_panel_launcher();
-    init_prepared_dispatch();
+    init_model_selection();
+    init_py();
     init_review_evidence();
     init_seed_minimal();
     init_subagent_preload();
     init_task_package_build();
+    init_tool_common();
+    await init_pi_worker_resources();
+    init_batch_meta();
+    init_deps();
+    init_delivery();
+    await init_prepare_async();
+    init_py_utils();
+    await init_runtime();
+    init_seed();
+    init_scope();
+    init_state();
+    await init_worker();
+  }
+});
+
+// ops/tools/dispatch_prepare.selftest.mjs
+var dispatch_prepare_selftest_exports = {};
+__export(dispatch_prepare_selftest_exports, {
+  SELF_TEST_CHILD_CATALOG: () => SELF_TEST_CHILD_CATALOG,
+  selfTest: () => selfTest
+});
+import { spawnSync as spawnSync6 } from "node:child_process";
+import { existsSync as existsSync10, mkdirSync as mkdirSync8, mkdtempSync, readFileSync as readFileSync11, readdirSync as readdirSync7, rmSync as rmSync4, statSync as statSync13, writeFileSync as writeFileSync6 } from "node:fs";
+import os2 from "node:os";
+import path24 from "node:path";
+import process12 from "node:process";
+function timeNs() {
+  return `${BigInt(Date.now()) * 1000000n + process12.hrtime.bigint() % 1000000n}`;
+}
+function isFile5(target) {
+  try {
+    return statSync13(target).isFile();
+  } catch {
+    return false;
+  }
+}
+function isDir(target) {
+  try {
+    return statSync13(target).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function readText(target) {
+  return readFileSync11(target, "utf8");
+}
+function deepEqual(left, right) {
+  return JSON.stringify(dpCanonical(left)) === JSON.stringify(dpCanonical(right));
+}
+function dpCanonical(value) {
+  if (Array.isArray(value)) return value.map(dpCanonical);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, dpCanonical(value[key])]));
+  }
+  return value;
+}
+function selfTest() {
+  const original = deps2.probePiChildModelCatalogUncached;
+  deps2.probePiChildModelCatalogUncached = () => structuredClone(SELF_TEST_CHILD_CATALOG);
+  clearModelCatalogCache();
+  try {
+    return runSelfTestChecks();
+  } finally {
+    deps2.probePiChildModelCatalogUncached = original;
+    clearModelCatalogCache();
+  }
+}
+function runSelfTestChecks() {
+  const seed = sampleSeed("general-agent__general-default");
+  const tempPaths = [];
+  const isolatedSubmissions = [];
+  const catalog = projectCatalog(selectionConfig, { piModels: configuredModels });
+  const resolveFor = (role, capability, options = {}) => resolveSelection(selectionConfig, { role, capability, ...options });
+  const everyPickResolvesToItsRow = catalog.roles.every((role) => role.capabilities.every((capability) => projectCatalog(selectionConfig, {
+    role: role.role,
+    capability: capability.id
+  }).roles[0].picks.every((pick) => {
+    const resolved = resolveFor(role.role, capability.id, { pick: pick.id });
+    return resolved.resolved_model === pick.model && resolved.resolved_effort === pick.effort && resolved.effort_range.join() === [pick.effort_min, pick.effort_max].join();
+  })));
+  const isolatedSubmitter = (operation, args) => {
+    if (operation !== "submit-prepared") throw new ToolError2(`unsupported self-test adapter operation: ${operation}`);
+    const dispatchFile = path24.resolve(String(args?.dispatch_file || ""));
+    const controlledRoot = path24.resolve(path24.join(ROOT2, "tmp", "dispatch_prepare"));
+    if (!pyIsRelativeTo(dispatchFile, controlledRoot)) {
+      throw new ToolError2("self-test dispatch envelope escaped tmp/dispatch_prepare");
+    }
+    const envelope = pyJsonLoads(readText(dispatchFile));
+    if (envelope.contract_version !== ASYNC_DISPATCH_CONTRACT_VERSION) {
+      throw new ToolError2("self-test dispatch envelope contract mismatch");
+    }
+    isolatedSubmissions.push(dispatchFile);
+    return { ok: true, task_id: `async-self-test-${String(isolatedSubmissions.length).padStart(2, "0")}` };
+  };
+  const asyncRoot = path24.join(ROOT2, ".runtime", "self-tests", `dispatch-prepare-async-${timeNs()}`);
+  const fakeRunner = path24.join(asyncRoot, "run-pi-task.mjs");
+  mkdirSync8(path24.dirname(fakeRunner), { recursive: true });
+  writeFileSync6(fakeRunner, [
+    "import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';",
+    "import path from 'node:path';",
+    "const args = process.argv.slice(2);",
+    "function value(name, fallback='') { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : fallback; }",
+    "const outDir = value('--outDir');",
+    "const taskFile = value('--taskFile');",
+    "mkdirSync(outDir, { recursive: true });",
+    "const taskText = readFileSync(taskFile, 'utf8');",
+    "writeFileSync(path.join(outDir, 'report.md'), '# fake async dispatch report\\n\\n' + taskText.slice(0, 200) + '\\n', 'utf8');",
+    "writeFileSync(path.join(outDir, 'handoff.md'), 'verdict: done\\nsummary: fake async dispatch completed.\\nfiles_read_or_changed:\\n  - report.md\\nevidence_paths:\\n  - report.md\\nblockers:\\n  - none\\n', 'utf8');",
+    "writeFileSync(path.join(outDir, 'child-final.md'), '## \u7ED3\u8BBA\\npass\\n', 'utf8');",
+    "writeFileSync(path.join(outDir, 'child-task-result.json'), JSON.stringify({ ok: true, status: 'done' }, null, 2), 'utf8');"
+  ].join("\n"), "utf8");
+  seed.scope.read = [String(fakeRunner)];
+  const direct = prepareDirectPreview(seed);
+  if (direct.task_package_path) tempPaths.push(path24.join(ROOT2, String(direct.task_package_path)));
+  const renderedDirect = renderTaskMaterialFile(path24.join(ROOT2, String(direct.task_package_path)));
+  const dryDirect = prepareDispatch(seed, "direct", { action: "preview" });
+  const explicitAsyncPreview = prepareDispatch(seed, "async-subagent", { action: "preview" });
+  const outputVisibilitySeed = exampleSeed("general-agent__general-default");
+  if (!outputVisibilitySeed.scope) outputVisibilitySeed.scope = {};
+  outputVisibilitySeed.scope.read = [String(fakeRunner)];
+  if (!outputVisibilitySeed.scope.write_extra) outputVisibilitySeed.scope.write_extra = [];
+  outputVisibilitySeed.scope.write_extra.push("notes/reports/dispatch-output-visibility-self-test.md");
+  const outputVisibilityDry = prepareDispatch(expandSeed(outputVisibilitySeed), "direct", { action: "preview" });
+  const scopeWriteDedupeSeed = exampleSeed("general-agent__general-default");
+  scopeWriteDedupeSeed.slug = "dispatch-scope-write-dedupe-self-test";
+  if (!scopeWriteDedupeSeed.scope) scopeWriteDedupeSeed.scope = {};
+  scopeWriteDedupeSeed.scope.read = [String(fakeRunner)];
+  if (!scopeWriteDedupeSeed.scope.write_extra) scopeWriteDedupeSeed.scope.write_extra = [];
+  scopeWriteDedupeSeed.scope.write_extra.push("notes/general/dispatch-scope-write-dedupe-self-test.md");
+  const scopeWriteDedupeDry = prepareDispatch(expandSeed(scopeWriteDedupeSeed), "direct", { action: "preview" });
+  const scopeWriteDedupePaths = (scopeWriteDedupeDry.business_output || {}).scope_write || [];
+  const explorerTemplate = renderTemplate("explorer-agent__codebase-scan");
+  let directRuntimeBlocked = false;
+  try {
+    prepareDispatch(seed, "direct");
+  } catch (error) {
+    if (error?.name !== "ToolError") throw error;
+    directRuntimeBlocked = String(error.message).includes("direct subagent dispatch is disabled");
+  }
+  const dispatchTmp = path24.join(ROOT2, "tmp", "dispatch_prepare");
+  const evidenceTmp = path24.join(ROOT2, "tmp", "review_evidence");
+  const fileNames = (dir) => existsSync10(dir) ? new Set(readdirSync7(dir).filter((name) => isFile5(path24.join(dir, name)))) : /* @__PURE__ */ new Set();
+  const sameNames = (left, right) => left.size === right.size && [...left].every((name) => right.has(name));
+  const beforeInvalidRoot = fileNames(dispatchTmp);
+  const beforeInvalidEvidence = fileNames(evidenceTmp);
+  const invalidRootSeed = expandSeed(exampleSeed("verify-agent__code-verification"));
+  invalidRootSeed.scope.read = ["ops/tools/dispatch_prepare.mjs"];
+  let invalidRootRejectedBeforeWrite = false;
+  try {
+    prepareDispatch(invalidRootSeed, "async-subagent", {
+      asyncRunnerPath: fakeRunner,
+      asyncTaskRoot: path24.join(path24.dirname(ROOT2), "outside-runtime")
+    });
+  } catch (error) {
+    if (error?.name !== "ToolError") throw error;
+    invalidRootRejectedBeforeWrite = String(error.message).includes("task_root must stay inside") && sameNames(beforeInvalidRoot, fileNames(dispatchTmp)) && sameNames(beforeInvalidEvidence, fileNames(evidenceTmp));
+  }
+  const asyncDispatch = prepareDispatch(seed, "async-subagent", {
+    asyncRunnerPath: fakeRunner,
+    asyncTaskRoot: asyncRoot,
+    asyncSubmitter: isolatedSubmitter
+  });
+  const auto = prepareDispatch(seed, "auto", {
+    asyncRunnerPath: fakeRunner,
+    asyncTaskRoot: asyncRoot,
+    asyncSubmitter: isolatedSubmitter
+  });
+  const readiness = asyncSubagentReadiness();
+  const [endpointServer, endpointTool] = asyncSubagentEndpoint();
+  const staleContractStatus = asyncDispatchContractStatus({ dispatch_contract_version: "async-dispatch/v1" });
+  const compatibleContractStatus = asyncDispatchContractStatus({
+    dispatch_contract_version: ASYNC_DISPATCH_CONTRACT_VERSION,
+    supported_dispatch_contract_versions: ["async-dispatch/v1", ASYNC_DISPATCH_CONTRACT_VERSION]
+  });
+  const [staleDelivery] = resolveDeliveryWithReadiness(
+    "async-subagent",
+    { status: "unavailable", issues: [String(staleContractStatus.issue)] }
+  );
+  const checks = {
+    list_roles_unique: catalog.roles.length > 0 && new Set(catalog.roles.map((row) => row.role)).size === catalog.roles.length,
+    list_picks_have_ranges: catalog.roles.every((row) => row.picks.every((pick) => pick.id && pick.model && pick.effort_min && pick.effort_max)),
+    list_phase_metadata_present: catalog.roles.every((row) => row.capabilities.every((cap) => cap.dispatch_phase?.kind)),
+    list_models_have_efforts: catalog.models.every((row) => row.model && row.efforts.length > 0),
+    list_picks_are_in_pi_catalog: catalog.warnings.length === 0,
+    every_pick_resolves_to_its_row: everyPickResolvesToItsRow,
+    direct_ok: direct.status === "ok",
+    direct_mode: direct.delivery_mode === "direct_message",
+    direct_file_ref_mode: direct.direct_payload_mode === "file_ref",
+    direct_package_persisted: Boolean(direct.task_package_path) && isFile5(path24.join(ROOT2, String(direct.task_package_path))),
+    direct_spawn_has_file_marker: direct.spawn_payload.includes("DIRECT_TASK_PACKAGE_FILE:"),
+    direct_spawn_has_render_command: direct.spawn_payload.includes("subagent_preload.mjs render --package"),
+    direct_spawn_omits_inline_material: !direct.spawn_payload.includes("## \u4EFB\u52A1\u5305"),
+    async_ok: asyncDispatch.status === "ok",
+    async_mode: asyncDispatch.delivery_mode === "async_subagent",
+    async_has_task_id: Boolean(asyncDispatch.task_id),
+    async_has_wait_tool_arguments: (asyncDispatch.wait_tool_arguments || {}).task_id === asyncDispatch.task_id,
+    async_wait_has_no_revision_dependency: !Object.hasOwn(asyncDispatch.wait_tool_arguments || {}, "after_revision"),
+    async_has_result_tool_arguments: (asyncDispatch.result_tool_arguments || {}).task_id === asyncDispatch.task_id,
+    auto_ok: auto.status === "ok",
+    auto_resolves_async_when_available: auto.resolved_delivery === "async-subagent",
+    auto_has_readiness: auto.delivery_readiness.status === "available",
+    auto_has_task_id: Boolean(auto.task_id),
+    self_test_uses_isolated_submitter: Boolean(isolatedSubmissions.length) && isolatedSubmissions.every((item) => path24.resolve(path24.dirname(path24.dirname(item))) === path24.resolve(path24.join(ROOT2, "tmp", "dispatch_prepare", "preparations")) && path24.basename(path24.dirname(item)).startsWith("prep-")),
+    readiness_auto_approves_async_tools: readiness.approval_mode === "approve",
+    readiness_matches_dispatch_contract: readiness.dispatch_contract_version === ASYNC_DISPATCH_CONTRACT_VERSION && (readiness.supported_dispatch_contract_versions || []).includes(ASYNC_DISPATCH_CONTRACT_VERSION),
+    stale_dispatch_contract_is_rejected: staleContractStatus.compatible === false && String(staleContractStatus.issue).includes(ASYNC_DISPATCH_CONTRACT_VERSION),
+    compatible_dispatch_contract_is_accepted: compatibleContractStatus.compatible === true,
+    explicit_async_delivery_uses_readiness: staleDelivery === "unavailable",
+    readiness_and_submit_share_configured_endpoint: Boolean(endpointServer) && endpointTool !== null && endpointTool !== void 0 && readiness.tool_path === String(endpointTool),
+    dry_run_ok: dryDirect.status === "ok" && dryDirect.dry_run === true,
+    explicit_async_preview_skips_transport_readiness: explicitAsyncPreview.resolved_delivery === "async-subagent" && (explicitAsyncPreview.delivery_readiness || {}).status === "not_checked" && (explicitAsyncPreview.async_preview || {}).model === resolveFor("general-agent", "general-default").resolved_model,
+    dry_run_no_spawn_hint: !dryDirect.spawn_payload.includes("SUBAGENT_TASK_ID"),
+    dry_run_no_writes: deepEqual(dryDirect.writes_performed, []),
+    dry_run_business_output_visible: Boolean((dryDirect.business_output || {}).expected_report_path),
+    dry_run_write_extra_kept_separate: (outputVisibilityDry.business_output || {}).expected_report_path !== "notes/reports/dispatch-output-visibility-self-test.md" && ((outputVisibilityDry.business_output || {}).extra_write_paths || []).includes("notes/reports/dispatch-output-visibility-self-test.md"),
+    business_output_scope_write_deduped: scopeWriteDedupePaths.filter((item) => item === "notes/general/dispatch-scope-write-dedupe-self-test.md").length === 1,
+    direct_runtime_blocked: directRuntimeBlocked,
+    invalid_task_root_rejected_before_write: invalidRootRejectedBeforeWrite
+  };
+  for (const rid of routesWithCards()) {
+    try {
+      const outcome = prepareDirectPreview(expandSeed(exampleSeed(rid)));
+      if (outcome.task_package_path) tempPaths.push(path24.join(ROOT2, String(outcome.task_package_path)));
+      checks[`card::${rid}`] = outcome.status === "ok";
+    } catch (error) {
+      if (!isPyCaughtError(error, /* @__PURE__ */ new Set(["ToolError", "KeyError", "ValueError"]))) throw error;
+      checks[`card::${rid}`] = false;
+    }
+  }
+  const codeTestingSeed = exampleSeed("verify-agent__code-verification");
+  codeTestingSeed.contract.verify_mode = "testing";
+  for (const key of ["changed_surfaces", "allowed_risk_triggers", "disallowed_topics", "issue_admission_required"]) {
+    delete codeTestingSeed.contract[key];
+  }
+  try {
+    expandSeed(codeTestingSeed);
+    checks.code_testing_omits_verification_only_fields = true;
+  } catch (error) {
+    if (error?.name !== "ToolError") throw error;
+    checks.code_testing_omits_verification_only_fields = false;
+  }
+  const codeVerificationSeed = exampleSeed("verify-agent__code-verification");
+  delete codeVerificationSeed.contract.changed_surfaces;
+  try {
+    expandSeed(codeVerificationSeed);
+    checks.code_verification_requires_changed_surfaces = false;
+  } catch (error) {
+    if (error?.name !== "ToolError") throw error;
+    checks.code_verification_requires_changed_surfaces = String(error.message).includes("contract.changed_surfaces");
+  }
+  const plannerSeed = exampleSeed("planner-agent__plan-authoring");
+  if (!plannerSeed.contract) plannerSeed.contract = {};
+  delete plannerSeed.contract.locked_decisions;
+  plannerSeed.contract.mechanical_schema = { interface_contract_kind_values: ["invented"] };
+  plannerSeed.extensions = {
+    capability_contract: {
+      planner: { mechanical_schema: { source: "caller", interface_contract_kind_values: ["invented"] } }
+    }
+  };
+  const plannerExpanded = expandSeed(plannerSeed);
+  const plannerContract = ((plannerExpanded.extensions || {}).capability_contract || {}).planner || {};
+  checks.planner_empty_locked_decisions_allowed = deepEqual(plannerContract.locked_decisions, []) && deepEqual((plannerExpanded.alignment || {}).decision_refs, []);
+  checks.planner_mechanical_schema_injected_from_checker = (plannerContract.mechanical_schema || {}).source === "ops/tools/planning_manifest_check.py" && !((plannerContract.mechanical_schema || {}).interface_contract_kind_values || []).includes("invented") && ((plannerContract.mechanical_schema || {}).interface_contract_kind_values || []).includes("data_shape");
+  const executorRootSeed = exampleSeed("executor-agent__plan-execution");
+  executorRootSeed.contract.dependency_edges = [];
+  executorRootSeed.contract.resource_locks = [];
+  const executorRootExpanded = expandSeed(executorRootSeed);
+  const executorRootContract = ((executorRootExpanded.extensions || {}).capability_contract || {}).executor || {};
+  checks.executor_root_lane_empty_dependency_edges_allowed = deepEqual(executorRootContract.dependency_edges, []);
+  checks.executor_lane_empty_resource_locks_allowed = deepEqual(executorRootContract.resource_locks, []);
+  try {
+    validatePlannerMechanicalSchema({ source: "ops/tools/planning_manifest_check.py" });
+    checks.planner_mechanical_schema_missing_fields_block = false;
+  } catch (error) {
+    if (error?.name !== "ToolError") throw error;
+    checks.planner_mechanical_schema_missing_fields_block = String(error.message).includes("stop before task material write") && String(error.message).includes("interface_contract_kind_values");
+  }
+  const unknownPlanningPassSeed = exampleSeed("planner-agent__plan-authoring");
+  unknownPlanningPassSeed.contract.planning_pass = "revision";
+  checks.planner_planning_pass_passes_through = JSON.stringify(expandSeed(unknownPlanningPassSeed)).includes('"planning_pass":"revision"');
+  const minimal = {
+    route_id: "explorer-agent__codebase-scan",
+    goal: "self-test: \u6478\u6E05 ops/tools \u7684\u811A\u672C\u7ED3\u6784\u548C\u5165\u53E3",
+    scope: { read: ["ops/tools/"] },
+    contract: { scan_mode: "terrain_map", focus: "structure", question: "\u5DE5\u5177\u76EE\u5F55\u6709\u54EA\u4E9B\u5165\u53E3\u811A\u672C\u548C\u804C\u8D23" },
+    slug: "dispatch-prepare-self-test"
+  };
+  const expanded = expandSeed({ ...minimal });
+  const contract = expanded.extensions.capability_contract.explorer || {};
+  const minimalDirect = prepareDirectPreview(expanded);
+  if (minimalDirect.task_package_path) tempPaths.push(path24.join(ROOT2, String(minimalDirect.task_package_path)));
+  const minimalAsync = prepareDispatch(expanded, "async-subagent", {
+    asyncRunnerPath: fakeRunner,
+    asyncTaskRoot: asyncRoot,
+    asyncSubmitter: isolatedSubmitter
+  });
+  if (minimalAsync.task_package_path) tempPaths.push(path24.join(ROOT2, String(minimalAsync.task_package_path)));
+  const modelSelection = minimalAsync.async_model_selection || {};
+  const explorerDefault = resolveFor("explorer-agent", "codebase-scan");
+  const expectedModel = explorerDefault.resolved_model;
+  const expectedEffort = explorerDefault.resolved_effort;
+  Object.assign(checks, {
+    minimal_expanded_full: Object.hasOwn(expanded, "handoff_contract"),
+    minimal_slot_explorer: contract.scan_mode === "terrain_map",
+    minimal_scope_paths_mirrored: deepEqual(contract.scope_paths, ["ops/tools/"]),
+    minimal_report_in_write: expanded.scope.write.includes("notes/explorer/dispatch-prepare-self-test.md"),
+    minimal_dispatch_ok: minimalDirect.status === "ok",
+    minimal_async_primary_model_from_agent_config: Boolean(expectedModel) && modelSelection.primary_model === expectedModel,
+    minimal_async_primary_effort_from_agent_config: Boolean(expectedEffort) && modelSelection.primary_effort === expectedEffort,
+    minimal_template_renders: renderTemplate("explorer-agent__codebase-scan").includes("scan_mode"),
+    minimal_list_has_card: listCards().some((row) => row.minimal_seed)
+  });
+  const piEnvelopes = [];
+  const piCapturingSubmitter = (operation, args) => {
+    const receipt = isolatedSubmitter(operation, args);
+    piEnvelopes.push(pyJsonLoads(readText(String(args.dispatch_file))));
+    return receipt;
+  };
+  const piMinimal = { ...minimal, slug: "dispatch-prepare-pi-self-test", budget: { max_elapsed_minutes: 45 } };
+  const piAsync = prepareDispatch(expandSeed(piMinimal), "async-subagent", {
+    asyncRunnerPath: fakeRunner,
+    asyncTaskRoot: asyncRoot,
+    asyncSubmitter: piCapturingSubmitter
+  });
+  if (piAsync.task_package_path) tempPaths.push(path24.join(ROOT2, String(piAsync.task_package_path)));
+  const piSelection = piAsync.async_model_selection || {};
+  const piDescriptorSelection = (piAsync.descriptor || {}).model_selection || {};
+  const piEnvelope = piEnvelopes.length ? piEnvelopes[piEnvelopes.length - 1] : {};
+  const expectedPiModel = explorerDefault.resolved_model;
+  const expectedPiEffort = explorerDefault.resolved_effort;
+  Object.assign(checks, {
+    pi_async_ok: piAsync.status === "ok" && piAsync.executor === "pi",
+    pi_async_runner_basename: path24.basename(String(piEnvelope.runner_path || "")) === "run-pi-task.mjs",
+    pi_async_envelope_carries_seed_budget: piEnvelope.budget?.max_elapsed_minutes === 45,
+    pi_async_primary_model_from_pi_config: Boolean(expectedPiModel) && piSelection.primary_model === expectedPiModel,
+    pi_async_primary_effort_from_pi_config: Boolean(expectedPiEffort) && piSelection.primary_effort === expectedPiEffort,
+    pi_envelope_model_matches_selection: piEnvelope.model === piSelection.primary_model,
+    pi_envelope_effort_matches_selection: piEnvelope.effort === piSelection.primary_effort,
+    pi_envelope_has_no_model_fallback: !Object.hasOwn(piEnvelope, "model_fallback"),
+    pi_envelope_freezes_pick_efforts_and_range: piEnvelope.selection?.pick === explorerDefault.pick && deepEqual(piEnvelope.selection?.efforts, explorerDefault.efforts) && deepEqual(piEnvelope.selection?.effort_range, explorerDefault.effort_range),
+    pi_descriptor_freezes_selection_sources: piDescriptorSelection.model === piEnvelope.model && piDescriptorSelection.effort === piEnvelope.effort && piDescriptorSelection.model_source === piSelection.model_source && piDescriptorSelection.effort_source === piSelection.effort_source && deepEqual(piDescriptorSelection.child_model, piSelection.child_model),
+    pi_envelope_has_no_executor_field: !Object.hasOwn(piEnvelope, "executor"),
+    pi_envelope_contract_unchanged: piEnvelope.contract_version === ASYNC_DISPATCH_CONTRACT_VERSION
+  });
+  const batchFile = path24.join(ROOT2, "tmp", "dispatch_prepare", `self-test-batch-${timeNs()}.json`);
+  mkdirSync8(path24.dirname(batchFile), { recursive: true });
+  writeFileSync6(batchFile, JSON.stringify([
+    exampleSeed("explorer-agent__codebase-scan"),
+    exampleSeed("explorer-agent__runtime-env-scan")
+  ]), "utf8");
+  try {
+    const batchSeeds = loadSeeds({ seed: batchFile, seed_stdin: false, sample_route: null });
+    const batchOut = batchSeeds.map((item) => prepareDirectPreview(item));
+    for (const item of batchOut) {
+      if (item.task_package_path) tempPaths.push(path24.join(ROOT2, String(item.task_package_path)));
+    }
+    checks.batch_seeds_two = batchOut.length === 2 && batchOut.every((item) => item.delivery_mode === "direct_message");
+    checks.batch_policy_parallel = batchSeeds.every(
+      (item) => item.concurrency_contract.parallel_policy === "allowed_if_no_conflict"
+    );
+    const metadataSeeds = [
+      {
+        route_id: "explorer-agent__codebase-scan",
+        goal: "scan the first batch scope",
+        scope: { read: ["PROJECT.md"] },
+        contract: { scan_mode: "slice_scan", focus: "structure", question: "what is the first batch scope", depth_limit: 1e3 },
+        slug: "self-test-batch-a"
+      },
+      {
+        route_id: "explorer-agent__codebase-scan",
+        goal: "scan the second batch scope",
+        scope: { read: ["AGENTS.md"] },
+        contract: { scan_mode: "slice_scan", focus: "structure", question: "what is the second batch scope", depth_limit: 1e3 },
+        slug: "self-test-batch-b"
+      }
+    ];
+    const metadataBatch = prepareBatchDispatch(
+      metadataSeeds.map((item) => expandDispatchSeed(item)),
+      "async-subagent",
+      { batchId: "batch-self-test", action: "preview", asyncRunnerPath: fakeRunner, asyncTaskRoot: asyncRoot }
+    );
+    checks.batch_metadata_is_stable = metadataBatch.status === "ok" && metadataBatch.batch_id === "batch-self-test" && deepEqual((metadataBatch.dispatches || []).map((item) => item.slice_id), ["self-test-batch-a", "self-test-batch-b"]) && (metadataBatch.dispatches || []).every((item) => item.batch_id === "batch-self-test");
+  } finally {
+    rmSync4(batchFile, { force: true });
+  }
+  const bomSeedFile = path24.join(ROOT2, "tmp", "dispatch_prepare", `self-test-bom-seed-${timeNs()}.json`);
+  mkdirSync8(path24.dirname(bomSeedFile), { recursive: true });
+  writeFileSync6(bomSeedFile, Buffer.concat([
+    Buffer.from([239, 187, 191]),
+    Buffer.from(JSON.stringify(exampleSeed("explorer-agent__codebase-scan")), "utf8")
+  ]));
+  try {
+    const bomSeeds = loadSeeds({ seed: bomSeedFile, seed_stdin: false, sample_route: null });
+    checks.seed_file_tolerates_bom = bomSeeds.length === 1 && bomSeeds[0].route_id === "explorer-agent__codebase-scan";
+  } finally {
+    rmSync4(bomSeedFile, { force: true });
+  }
+  const nameRoot = mkdtempSync(path24.join(os2.tmpdir(), "dispatch-prepare-server-name-self-test-"));
+  try {
+    const newConfig = path24.join(nameRoot, "new.toml");
+    writeFileSync6(newConfig, `[mcp_servers.${ASYNC_MCP_SERVER_NAME}]
+command = "new"
+`, "utf8");
+    const resolved = _serverFromConfig(newConfig);
+    checks.server_name_resolves_new_registration = resolved !== null && resolved.server_name === ASYNC_MCP_SERVER_NAME && resolved.command === "new";
+  } finally {
+    rmSync4(nameRoot, { recursive: true, force: true });
+  }
+  const sampleGlobalServer = { source: "global", config_path: "global-config" };
+  checks.project_async_mcp_registration_ignored = selectAsyncSubagentServer({ source: "project", config_path: "project-config" }, sampleGlobalServer) === sampleGlobalServer;
+  checks.global_async_mcp_registration_selected = selectAsyncSubagentServer(null, sampleGlobalServer) === sampleGlobalServer;
+  const resolvedServer = asyncSubagentServer();
+  const resolvedScript = resolvedServer ? asyncServerScriptPath(resolvedServer) : null;
+  checks.async_server_script_resolves = resolvedServer === null || resolvedScript !== null && isFile5(resolvedScript);
+  try {
+    expandSeed({ ...minimal, goal: "<\u672C\u6B21\u626B\u63CF\u8981\u56DE\u7B54\u7684\u4E00\u53E5\u8BDD\u95EE\u9898>" });
+    checks.minimal_placeholder_rejected = false;
+  } catch (error) {
+    if (error?.name !== "ToolError") throw error;
+    checks.minimal_placeholder_rejected = true;
+  }
+  const documentScanSeed = expandSeed(exampleSeed("research-agent__document-scan"));
+  const documentScanOk = prepareDirectPreview(documentScanSeed);
+  if (documentScanOk.task_package_path) tempPaths.push(path24.join(ROOT2, String(documentScanOk.task_package_path)));
+  checks.vision_requirement_passes_with_configured_model = documentScanOk.status === "ok";
+  const documentScanOverride = prepareDirectPreview(documentScanSeed, { asyncModel: "no-vision-fixture-model" });
+  checks.vision_requirement_is_task_guidance = documentScanOverride.status === "ok";
+  const readOnlyPackage = {
+    agent: { role: "general-agent", runtime_role: "general-agent", capability: { name: "general-default" } },
+    scope: { read: ["a/"], write: [], delete: [] },
+    runtime_context: { network_needed: "no" },
+    tool_contract: { allowed: ["read", "grep", "find", "ls"], network_allowed: false, install_allowed: false },
+    extensions: {}
+  };
+  const crossRepoTarget = path24.join(asyncRoot, "target-repo");
+  mkdirSync8(crossRepoTarget, { recursive: true });
+  writeFileSync6(path24.join(crossRepoTarget, "marker.txt"), "cross-repo self-test\n", "utf8");
+  const crossRepoSeed = structuredClone(expanded);
+  crossRepoSeed.scope.read = ["marker.txt"];
+  if (crossRepoSeed.inputs && typeof crossRepoSeed.inputs === "object" && !Array.isArray(crossRepoSeed.inputs)) {
+    crossRepoSeed.inputs.files = ["marker.txt"];
+  }
+  if (!crossRepoSeed.extensions) crossRepoSeed.extensions = {};
+  crossRepoSeed.extensions.cross_repo_acceptance = { result_mode: "read_only_audit" };
+  const crossRepoPrepared = prepareDispatch(crossRepoSeed, "async-subagent", {
+    asyncRunnerPath: fakeRunner,
+    asyncTaskRoot: asyncRoot,
+    asyncTargetCwd: crossRepoTarget,
+    asyncSubmitter: isolatedSubmitter
+  });
+  const crossRepoPackagePath = path24.join(ROOT2, String(crossRepoPrepared.task_package_path));
+  const crossRepoPackage = pyJsonLoads(readText(crossRepoPackagePath)).task_package;
+  checks.cross_repo_target_repo_bound_into_task_package = path24.resolve(crossRepoPackage.runtime_context.target_repo) === path24.resolve(crossRepoTarget);
+  tempPaths.push(
+    crossRepoPackagePath,
+    withSuffix(crossRepoPackagePath, ".task.md"),
+    withSuffix(crossRepoPackagePath, ".dispatch.json")
+  );
+  readOnlyPackage.extensions = { cross_repo_acceptance: { result_mode: "read_only_audit" } };
+  const crossRepoOptions = resolveAsyncRuntimeOptions(readOnlyPackage, {
+    runnerPath: fakeRunner,
+    targetCwd: crossRepoTarget
+  });
+  checks.cross_repo_task_root_stays_in_controller_runtime = pyIsRelativeTo(
+    String(crossRepoOptions.task_root),
+    path24.resolve(path24.join(ROOT2, ".runtime"))
+  ) && !pyIsRelativeTo(String(crossRepoOptions.task_root), path24.resolve(path24.join(crossRepoTarget, ".runtime")));
+  const simulationPackage = structuredClone(readOnlyPackage);
+  simulationPackage.extensions.cross_repo_acceptance = {
+    result_mode: "simulated_planning",
+    simulation: { role: "target-reviewer", persona: { instructions: "\u53EA\u8BFB\u68C0\u67E5\u76EE\u6807\u4ED3\u5165\u53E3", boundaries: ["\u4E0D\u5199\u76EE\u6807\u4ED3"] } }
+  };
+  const simulationOptions = resolveAsyncRuntimeOptions(simulationPackage, {
+    runnerPath: fakeRunner,
+    targetCwd: crossRepoTarget
+  });
+  checks.cross_repo_simulation_profile_comes_from_seed = simulationOptions.result_mode === "simulated_planning" && simulationOptions.simulation_profile.role === "target-reviewer" && simulationOptions.simulation_profile.persona.instructions === "\u53EA\u8BFB\u68C0\u67E5\u76EE\u6807\u4ED3\u5165\u53E3";
+  const missingModePackage = structuredClone(readOnlyPackage);
+  missingModePackage.extensions = {};
+  const defaultAudit = resolveAsyncRuntimeOptions(missingModePackage, {
+    runnerPath: fakeRunner,
+    targetCwd: crossRepoTarget
+  });
+  checks.cross_repo_result_mode_defaults_read_only = defaultAudit.result_mode === "read_only_audit" && defaultAudit.warnings.length > 0;
+  const evidencePackage = structuredClone(readOnlyPackage);
+  evidencePackage.scope.write = ["notes/x.md"];
+  evidencePackage.extensions = { review_execution: { profile: PROFILE } };
+  const evidenceOptions = resolveAsyncRuntimeOptions(evidencePackage, {
+    runnerPath: fakeRunner,
+    taskRoot: asyncRoot,
+    targetCwd: ROOT2
+  });
+  checks.evidence_only_resolves_isolated_execution_profile = evidenceOptions.execution_profile === PROFILE && evidenceOptions.context_mode === "isolated";
+  const semanticPackage = structuredClone(readOnlyPackage);
+  semanticPackage.scope.write = ["notes/verify/semantic-self-test.md"];
+  semanticPackage.extensions = { review_execution: { profile: SEMANTIC_PROFILE } };
+  const semanticOptions = resolveAsyncRuntimeOptions(semanticPackage, {
+    runnerPath: fakeRunner,
+    taskRoot: asyncRoot,
+    targetCwd: ROOT2
+  });
+  checks.semantic_review_keeps_standard_project_aware = semanticOptions.execution_profile === "standard" && semanticOptions.context_mode === "project-aware";
+  const semanticNetworkLocalTools = structuredClone(semanticPackage);
+  semanticNetworkLocalTools.runtime_context = { network_needed: "yes" };
+  semanticNetworkLocalTools.tool_contract = { allowed: ["read", "grep", "write"] };
+  const semanticLocalOptions = resolveAsyncRuntimeOptions(semanticNetworkLocalTools, {
+    runnerPath: fakeRunner,
+    taskRoot: asyncRoot,
+    targetCwd: ROOT2
+  });
+  checks.semantic_review_network_needed_preserves_explicit_tools = deepEqual(semanticLocalOptions.tool_allowlist, ["read", "grep", "write"]);
+  const semanticNetworkNoTool = structuredClone(semanticPackage);
+  semanticNetworkNoTool.runtime_context = { network_needed: "yes" };
+  semanticNetworkNoTool.tool_contract = { network_allowed: true, allowed: null };
+  const inheritedNetworkOptions = resolveAsyncRuntimeOptions(semanticNetworkNoTool, {
+    runnerPath: fakeRunner,
+    taskRoot: asyncRoot,
+    targetCwd: ROOT2
+  });
+  checks.semantic_review_network_needed_accepts_inherited_tools = inheritedNetworkOptions.tool_allowlist === null && inheritedNetworkOptions.tool_allowlist_source === "pi_configured_tools";
+  const evidenceNetworkPackage = structuredClone(evidencePackage);
+  evidenceNetworkPackage.runtime_context = { network_needed: "yes" };
+  const assistedOptions = resolveAsyncRuntimeOptions(evidenceNetworkPackage, {
+    runnerPath: fakeRunner,
+    taskRoot: asyncRoot,
+    targetCwd: ROOT2
+  });
+  checks.evidence_network_uses_assisted_profile = assistedOptions.execution_profile === "standard" && assistedOptions.warnings.length > 0;
+  const semanticPreview = prepareDispatch(
+    expandDispatchSeed({
+      route_id: "semantic-review-agent__rule-quality-inspection",
+      goal: "semantic review material self-test",
+      scope: { read: ["AGENTS.md", "ops/skills/rule-authoring/SKILL.md"] },
+      contract: { target_files: ["AGENTS.md"], inspection_focus: ["single_direction"] }
+    }),
+    "async-subagent",
+    { action: "preview", asyncRunnerPath: fakeRunner, asyncTaskRoot: asyncRoot }
+  );
+  checks.semantic_preview_uses_full_review_material = (semanticPreview.review_evidence || {}).profile === SEMANTIC_PROFILE && (semanticPreview.review_evidence || {}).material_mode === "full";
+  const brokenRouteSeed = exampleSeed("explorer-agent__codebase-scan");
+  brokenRouteSeed.route_id = "nonexistent-agent__no-such-capability";
+  const batchPartial = prepareBatchDispatch([seed, brokenRouteSeed], "async-subagent", {
+    asyncRunnerPath: fakeRunner,
+    asyncTaskRoot: asyncRoot,
+    asyncSubmitter: isolatedSubmitter
+  });
+  for (const item of batchPartial.dispatches) {
+    if (item.task_package_path) tempPaths.push(path24.join(ROOT2, String(item.task_package_path)));
+  }
+  checks.batch_partial_status_on_mixed_seeds = batchPartial.status === "partial";
+  checks.batch_partial_keeps_first_task_id = Boolean(batchPartial.committed_task_ids.length);
+  checks.batch_partial_lists_failed_index = deepEqual(batchPartial.failed_seed_indexes, [2]);
+  const batchPartialFailure = batchPartial.dispatches[1];
+  checks.batch_partial_failure_carries_phase = batchPartialFailure.phase === "seed" && String(batchPartialFailure.error || "").startsWith("[seed] ");
+  checks.batch_partial_dispatches_len_matches_seeds = batchPartial.dispatches.length === 2;
+  const conflictSeedA = exampleSeed("explorer-agent__codebase-scan");
+  pushWriteExtra(conflictSeedA, "notes/conflict/self-test.md");
+  const conflictSeedB = exampleSeed("explorer-agent__runtime-env-scan");
+  pushWriteExtra(conflictSeedB, "notes/conflict/self-test.md");
+  const conflictSeedC = exampleSeed("explorer-agent__codebase-scan");
+  conflictSeedC.slug = "independent-conflict-self-test";
+  pushWriteExtra(conflictSeedC, "notes/conflict/independent-self-test.md");
+  const batchConflict = prepareBatchDispatch([conflictSeedA, conflictSeedB, conflictSeedC].map((seed2) => expandDispatchSeed(seed2)), "async-subagent", {
+    asyncRunnerPath: fakeRunner,
+    asyncTaskRoot: asyncRoot,
+    asyncSubmitter: isolatedSubmitter
+  });
+  checks.batch_write_conflict_isolates_participants = batchConflict.status === "partial" && batchConflict.committed_task_ids.length === 1 && deepEqual(batchConflict.dispatches.map((item) => item.status), ["failed", "failed", "ok"]) && deepEqual(batchConflict.failed_seed_indexes, [1, 2]) && deepEqual(batchConflict.not_submitted_seed_indexes, []) && Boolean((batchConflict.batch_write_conflicts || []).length);
+  const resolvedConflictSeedA = exampleSeed("explorer-agent__codebase-scan");
+  resolvedConflictSeedA.expected_output = {
+    mode: "file",
+    resolved_file_path: path24.join(ROOT2, "notes/conflict/resolved-self-test.md")
+  };
+  const resolvedConflictSeedB = exampleSeed("explorer-agent__runtime-env-scan");
+  resolvedConflictSeedB.handoff_contract = {
+    resolved_handoff_file: path24.join(ROOT2, "notes/conflict/resolved-self-test.md")
+  };
+  const resolvedBatchConflict = prepareBatchDispatch([resolvedConflictSeedA, resolvedConflictSeedB], "async-subagent", {
+    asyncRunnerPath: fakeRunner,
+    asyncTaskRoot: asyncRoot,
+    asyncSubmitter: isolatedSubmitter
+  });
+  checks.batch_resolved_write_conflict_blocks_all = resolvedBatchConflict.status === "failed" && deepEqual(resolvedBatchConflict.committed_task_ids, []) && deepEqual(resolvedBatchConflict.failed_seed_indexes, [1, 2]) && deepEqual(resolvedBatchConflict.not_submitted_seed_indexes, []) && Boolean((resolvedBatchConflict.batch_write_conflicts || []).length);
+  checks.scope_preflight_small_scope_no_warning = (dryDirect.scope_preflight || {}).scope_preflight_warning === null && (dryDirect.scope_preflight || {}).scope_file_count === 1;
+  const heavyDir = mkdtempSync(path24.join(os2.tmpdir(), "dispatch-prepare-preflight-self-test-"));
+  try {
+    const initialized = spawnSync6("git", ["init", "-q", heavyDir], { encoding: "utf8", windowsHide: true });
+    if (initialized.status !== 0) throw new Error(`preflight fixture git init failed: ${initialized.stderr}`);
+    for (let index = 0; index < PREFLIGHT_FILE_THRESHOLD + 100; index += 1) {
+      writeFileSync6(path24.join(heavyDir, `f${index}.txt`), "x", "utf8");
+    }
+    const heavyPreflight = computeScopePreflight([heavyDir], { baseRoot: heavyDir });
+    checks.scope_preflight_over_threshold_warns = Boolean(heavyPreflight.scope_preflight_warning);
+    checks.scope_preflight_over_threshold_file_count = heavyPreflight.scope_file_count === PREFLIGHT_FILE_THRESHOLD + 100;
+  } finally {
+    rmSync4(heavyDir, { recursive: true, force: true });
+  }
+  const gitRoot = mkdtempSync(path24.join(os2.tmpdir(), "dispatch-prepare-git-ignore-self-test-"));
+  try {
+    const initialized = spawnSync6("git", ["init", "-q", gitRoot], { encoding: "utf8", windowsHide: true });
+    writeFileSync6(path24.join(gitRoot, ".gitignore"), ".runtime/\nnode_modules/\ntmp/\nops/dist/\n", "utf8");
+    writeFileSync6(path24.join(gitRoot, "kept.txt"), "kept\n", "utf8");
+    for (const relative of [".runtime/tasks", "node_modules/pkg", "tmp/cache", "ops/dist/assets"]) {
+      const ignoredDir = path24.join(gitRoot, relative);
+      mkdirSync8(ignoredDir, { recursive: true });
+      writeFileSync6(path24.join(ignoredDir, "ignored.txt"), "ignored\n", "utf8");
+    }
+    const originalWalk = deps2.walk;
+    deps2.walk = function* poisonWalk() {
+      throw new Error("ignored tree walk");
+    };
+    let ignoredPreflight = null;
+    try {
+      ignoredPreflight = computeScopePreflight(["."], { baseRoot: gitRoot });
+    } catch {
+      ignoredPreflight = null;
+    } finally {
+      deps2.walk = originalWalk;
+    }
+    checks.scope_preflight_respects_git_ignore = ignoredPreflight !== null && initialized.status === 0 && ignoredPreflight.scope_file_count === 2;
+  } finally {
+    rmSync4(gitRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  }
+  const missingPreflight = computeScopePreflight(["notes/does-not-exist-preflight-self-test/"]);
+  checks.scope_preflight_missing_path_is_reported = missingPreflight.scope_file_count === 0 && deepEqual(missingPreflight.scope_missing_paths, ["notes/does-not-exist-preflight-self-test/"]) && deepEqual(missingPreflight.scope_unreadable_paths, []);
+  const urlPreflight = computeScopePreflight(["https://example.com/docs", "ops/tools/dispatch_prepare.mjs"]);
+  checks.scope_preflight_url_entries_skip_stat = urlPreflight.scope_url_count === 1 && deepEqual(urlPreflight.scope_missing_paths, []) && urlPreflight.scope_file_count === 1;
+  try {
+    enforceScopePreflight(urlPreflight);
+    checks.scope_preflight_url_entries_pass_enforcement = true;
+  } catch (error) {
+    if (error?.name !== "ToolError") throw error;
+    checks.scope_preflight_url_entries_pass_enforcement = false;
+  }
+  checks.scope_preflight_missing_path_is_diagnostic = enforceScopePreflight(missingPreflight).length > 0;
+  const layeredSeed = {
+    route_id: "explorer-agent__codebase-scan",
+    goal: "self-test layered read scope",
+    scope: { read: ["ops/tools/", "runs/"] },
+    contract: { scan_mode: "terrain_map", focus: "structure", question: "\u5206\u5C42\u8BFB\u53D6\u81EA\u6D4B" },
+    slug: "dispatch-prepare-layers-self-test",
+    read_scope_layers: {
+      entry: ["ops/tools/seed_minimal.mjs"],
+      index: ["ops/tools/"],
+      deep: [{ path: "notes/", when: "\u547D\u4E2D\u626B\u63CF\u63A5\u7F1D\u65F6" }],
+      deferred: ["runs/"]
+    },
+    budget: { max_tool_calls: 40, max_elapsed_minutes: 10 }
+  };
+  const extractedLayers = readScopeLayersFromSeed(layeredSeed);
+  const layeredPreflightPaths = preflightReadPaths(extractedLayers, layeredSeed.scope.read);
+  const layeredDirective = renderReadScopeLayers(extractedLayers);
+  const extractedBudget = seedBudget(layeredSeed);
+  let nonpositiveBudgetRejected = false;
+  try {
+    seedBudget({ budget: { max_elapsed_minutes: -1 } });
+    nonpositiveBudgetRejected = false;
+  } catch (error) {
+    if (error?.name !== "ToolError") throw error;
+    nonpositiveBudgetRejected = true;
+  }
+  const layeredDry = prepareDispatch(expandSeed({ ...layeredSeed }), "direct", { action: "preview" });
+  checks.read_scope_layers_extracted = extractedLayers !== null && deepEqual(extractedLayers.deferred, ["runs/"]) && deepEqual(extractedLayers.deep, [{ path: "notes/", when: "\u547D\u4E2D\u626B\u63CF\u63A5\u7F1D\u65F6" }]);
+  checks.read_scope_layers_preflight_entry_index_only = deepEqual(layeredPreflightPaths, ["ops/tools/seed_minimal.mjs", "ops/tools/"]) && !layeredPreflightPaths.includes("runs/");
+  checks.read_scope_layers_dry_run_carries_directive = Object.hasOwn(layeredDry, "read_scope_layers_directive") && layeredDry.budget_enforcement?.max_elapsed_minutes === "enforced_per_attempt";
+  checks.seed_budget_rejects_nonpositive = nonpositiveBudgetRejected;
+  checks.seed_budget_ignores_legacy_tool_calls = deepEqual(extractedBudget, { max_elapsed_minutes: 10 }) && deepEqual(layeredDry.budget_enforcement, { max_elapsed_minutes: "enforced_per_attempt" });
+  const ownedPreparationRoots = /* @__PURE__ */ new Set();
+  for (const item of isolatedSubmissions) {
+    if (path24.basename(path24.dirname(item)).startsWith("prep-")) ownedPreparationRoots.add(path24.resolve(path24.dirname(item)));
+  }
+  for (const item of tempPaths) {
+    if (path24.basename(path24.dirname(item)).startsWith("prep-")) ownedPreparationRoots.add(path24.resolve(path24.dirname(item)));
+  }
+  for (const preparation of ownedPreparationRoots) {
+    try {
+      rmSync4(preparation, { recursive: true, force: false, maxRetries: 10, retryDelay: 50 });
+    } catch {
+      checks[`cleanup::${rel(preparation)}`] = false;
+    }
+  }
+  for (const item of tempPaths) {
+    if (path24.basename(path24.dirname(item)).startsWith("prep-")) continue;
+    try {
+      rmSync4(item, { force: true });
+    } catch {
+      checks[`cleanup::${rel(item)}`] = false;
+    }
+  }
+  const registryRoot = process12.env.SUBAGENT_REGISTRY_ROOT || defaultRegistryRoot();
+  if (isDir(registryRoot)) {
+    for (const name of readdirSync7(registryRoot)) {
+      if (!name.endsWith(".json")) continue;
+      const registryFile = path24.join(registryRoot, name);
+      try {
+        const record2 = pyJsonLoads(readText(registryFile));
+        if (path24.resolve(String(record2.task_root || "")) === path24.resolve(asyncRoot)) rmSync4(registryFile, { force: true });
+      } catch {
+        continue;
+      }
+    }
+  }
+  const selfTestRoot = path24.join(ROOT2, ".runtime", "self-tests");
+  if (pyIsRelativeTo(path24.resolve(asyncRoot), path24.resolve(selfTestRoot))) {
+    rmSync4(asyncRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  } else {
+    checks["cleanup::async_root_boundary"] = false;
+  }
+  return {
+    status: Object.values(checks).every(Boolean) ? "ok" : "failed",
+    checks,
+    verification: {
+      readiness_and_submit_share_configured_endpoint: checks.readiness_and_submit_share_configured_endpoint,
+      invalid_input_has_no_evidence_or_material_writes: checks.invalid_task_root_rejected_before_write,
+      auto_submit_returns_task_id: checks.auto_has_task_id,
+      prepared_submit_returns_task_id: checks.async_has_task_id,
+      direct_runtime_is_blocked: checks.direct_runtime_blocked,
+      async_failure_has_no_sync_fallback: checks.direct_runtime_blocked
+    }
+  };
+}
+function withSuffix(target, suffix) {
+  const dir = path24.dirname(target);
+  const base = path24.basename(target);
+  const dot = base.lastIndexOf(".");
+  return path24.join(dir, (dot > 0 ? base.slice(0, dot) : base) + suffix);
+}
+function pushWriteExtra(seed, value) {
+  if (!seed.scope) seed.scope = {};
+  if (!seed.scope.write_extra) seed.scope.write_extra = [];
+  seed.scope.write_extra.push(value);
+}
+var ROOT2, ToolError2, deps2, selectionConfig, configuredModels, SELF_TEST_CHILD_CATALOG;
+var init_dispatch_prepare_selftest = __esm({
+  async "ops/tools/dispatch_prepare.selftest.mjs"() {
+    await init_dispatch_prepare();
+    init_seed_minimal();
+    init_py();
+    init_tool_common();
+    init_model_selection();
+    ({ ROOT: ROOT2, ToolError: ToolError2, deps: deps2 } = dispatch_prepare_exports);
+    selectionConfig = loadSelectionConfig(modelConfigSources());
+    configuredModels = [...new Set([...selectionConfig.roles.values()].flatMap((role) => role.picks.map((pick) => pick.model)))].sort();
+    SELF_TEST_CHILD_CATALOG = {
+      status: "ok",
+      models: configuredModels,
+      model_count: configuredModels.length,
+      source: "dispatch_prepare self-test child catalog",
+      error: null
+    };
+  }
+});
+
+// ops/tools/dispatch-core/dispatch_prepare.mjs
+var dispatch_prepare_exports = {};
+__export(dispatch_prepare_exports, {
+  ACCEPTANCE_SYNTHESIS_PROFILE: () => ACCEPTANCE_SYNTHESIS_PROFILE,
+  ASYNC_DISPATCH_CONTRACT_VERSION: () => ASYNC_DISPATCH_CONTRACT_VERSION,
+  ASYNC_MCP_SERVER_NAME: () => ASYNC_MCP_SERVER_NAME,
+  CROSS_REPO_RESULT_MODES: () => CROSS_REPO_RESULT_MODES,
+  EVIDENCE_ONLY_PROFILE: () => PROFILE,
+  GLOBAL_CONFIG_PATH: () => GLOBAL_CONFIG_PATH,
+  PI_ASYNC_RUNNER_SENTINEL: () => PI_ASYNC_RUNNER_SENTINEL,
+  PREFLIGHT_BINARY_LIKE_EXTENSIONS: () => PREFLIGHT_BINARY_LIKE_EXTENSIONS,
+  PREFLIGHT_BYTES_THRESHOLD: () => PREFLIGHT_BYTES_THRESHOLD,
+  PREFLIGHT_FILE_THRESHOLD: () => PREFLIGHT_FILE_THRESHOLD,
+  PREFLIGHT_GIT_TIMEOUT_SECONDS: () => PREFLIGHT_GIT_TIMEOUT_SECONDS,
+  PREFLIGHT_LARGE_FILE_BYTES: () => PREFLIGHT_LARGE_FILE_BYTES,
+  PREFLIGHT_STAT_FILE_CAP: () => PREFLIGHT_STAT_FILE_CAP,
+  PREFLIGHT_WALK_SKIP_DIRS: () => PREFLIGHT_WALK_SKIP_DIRS,
+  PREFLIGHT_WALK_SKIP_PATHS: () => PREFLIGHT_WALK_SKIP_PATHS,
+  PREPARED_DISPATCH_CONTRACT_VERSION: () => DISPATCH_CONTRACT_VERSION,
+  PROJECT_ASYNC_TASK_ROOT: () => PROJECT_ASYNC_TASK_ROOT,
+  PreparedDispatchError: () => PreparedDispatchError,
+  ROOT: () => ROOT,
+  RUNTIME_ROOT: () => RUNTIME_ROOT,
+  SEMANTIC_REVIEW_PROFILE: () => SEMANTIC_PROFILE,
+  ToolError: () => ToolError,
+  ValidTaskId: () => _validTaskId,
+  _probePiChildModelCatalogUncached: () => _probePiChildModelCatalogUncached,
+  _serverFromConfig: () => _serverFromConfig,
+  _validTaskId: () => _validTaskId,
+  agentConfigEntry: () => agentConfigEntry,
+  agentPanelLaunchText: () => agentPanelLaunchText,
+  applyRoleWorkerResources: () => applyRoleWorkerResources,
+  asyncDispatchContractStatus: () => asyncDispatchContractStatus,
+  asyncServerEnv: () => asyncServerEnv,
+  asyncServerScriptPath: () => asyncServerScriptPath,
+  asyncSubagentEndpoint: () => asyncSubagentEndpoint,
+  asyncSubagentReadiness: () => asyncSubagentReadiness,
+  asyncSubagentServer: () => asyncSubagentServer,
+  attachAgentPanelLaunch: () => attachAgentPanelLaunch,
+  attachReviewEvidence: () => attachReviewEvidence,
+  batchWriteConflicts: () => batchWriteConflicts,
+  buildPackage: () => buildPackage,
+  callAsyncInternalAdapter: () => callAsyncInternalAdapter,
+  cardFor: () => cardFor,
+  checkRouteCard: () => checkRouteCard,
+  clampDisplayTitle: () => clampDisplayTitle,
+  clearCaches: () => clearCaches,
+  clearModelCatalogCache: () => clearModelCatalogCache,
+  compilePreparedDispatch: () => compilePreparedDispatch,
+  computeScopePreflight: () => computeScopePreflight,
+  conditionalRequiredFiles: () => conditionalRequiredFiles,
+  conflictPaths: () => conflictPaths,
+  currentDispatchPhase: () => currentDispatchPhase,
+  defaultRegistryRoot: () => defaultRegistryRoot,
+  deps: () => deps,
+  emit: () => emit,
+  enforceScopePreflight: () => enforceScopePreflight,
+  exampleSeed: () => exampleSeed,
+  expandDispatchSeed: () => expandDispatchSeed,
+  expandSeed: () => expandSeed,
+  isPyCaughtError: () => isPyCaughtError,
+  isStaticReview: () => isStaticReview,
+  jsonDumpsIndent2: () => jsonDumpsIndent2,
+  legacyOriginId: () => legacyOriginId,
+  lintOrFail: () => lintOrFail,
+  lintPackage: () => lintPackage,
+  listCards: () => listCards,
+  loadSeeds: () => loadSeeds,
+  loadToml: () => loadToml,
+  makeBatchId: () => makeBatchId,
+  markDispatchPhase: () => markDispatchPhase,
+  normalizeDispatchAction: () => normalizeDispatchAction,
+  packagePathForTemp: () => packagePathForTemp,
+  parseSeed: () => parseSeed,
+  piChildCatalogCommand: () => piChildCatalogCommand,
+  piChildModelExtensionProfile: () => piChildModelExtensionProfile,
+  preflightReadPaths: () => preflightReadPaths,
+  prepareAsyncSubagent: () => prepareAsyncSubagent,
+  prepareBatchDispatch: () => prepareBatchDispatch,
+  prepareDirect: () => prepareDirect,
+  prepareDirectPreview: () => prepareDirectPreview,
+  prepareDispatch: () => prepareDispatch,
+  prepareDryRun: () => prepareDryRun,
+  probePiChildModelCatalog: () => probePiChildModelCatalog,
+  profileFor: () => profileFor,
+  projectConditionalRequiredFiles: () => projectConditionalRequiredFiles,
+  pyList: () => pyList,
+  pySlice: () => pySlice,
+  readScopeLayersFromSeed: () => readScopeLayersFromSeed,
+  readSeedFileText: () => readSeedFileText,
+  readStdinText: () => readStdinText,
+  rel: () => rel,
+  renderAsyncTaskPayload: () => renderAsyncTaskPayload,
+  renderDirectFileRefPayload: () => renderDirectFileRefPayload,
+  renderReadScopeLayers: () => renderReadScopeLayers,
+  renderTaskMaterialFile: () => renderTaskMaterialFile,
+  renderTemplate: () => renderTemplate,
+  requirePiChildModel: () => requirePiChildModel,
+  resolveAsyncModelSelection: () => resolveAsyncModelSelection,
+  resolveAsyncRuntimeOptions: () => resolveAsyncRuntimeOptions,
+  resolveDelivery: () => resolveDelivery,
+  resolveDeliveryWithReadiness: () => resolveDeliveryWithReadiness,
+  resolveRoleModelSelection: () => resolveRoleModelSelection,
+  reviewExecutionProfile: () => reviewExecutionProfile,
+  routeIdFromAgent: () => routeIdFromAgent,
+  routesWithCards: () => routesWithCards,
+  sampleSeed: () => sampleSeed,
+  seedBudget: () => seedBudget,
+  seedWriteConflictPaths: () => seedWriteConflictPaths,
+  selectAsyncSubagentServer: () => selectAsyncSubagentServer,
+  selfTest: () => selfTest2,
+  shutilWhich: () => shutilWhich,
+  sliceMetadata: () => sliceMetadata,
+  taskPackageOutputSummary: () => taskPackageOutputSummary,
+  taskToolAllowlist: () => taskToolAllowlist,
+  truthyText: () => truthyText,
+  verifyPreparedDispatch: () => verifyPreparedDispatch,
+  walkDir: () => walkDir
+});
+async function selfTest2() {
+  const selftest = await init_dispatch_prepare_selftest().then(() => dispatch_prepare_selftest_exports);
+  return selftest.selfTest();
+}
+var init_dispatch_prepare = __esm({
+  async "ops/tools/dispatch-core/dispatch_prepare.mjs"() {
+    init_agent_panel_launcher();
+    init_prepared_dispatch();
+    init_review_evidence();
+    init_catalog();
+    init_delivery();
+    init_deps();
+    init_server();
+    init_scope();
+    await init_worker();
+    init_task_package_build();
+    init_prepared_dispatch();
+    init_review_evidence();
+    init_tool_common();
+    init_seed_minimal();
+    init_subagent_preload();
     init_task_package_lint();
     init_task_package_profiles();
-    init_pi_model_extension_profile();
-    init_model_selection();
-    await init_pi_worker_resources();
-    PREFLIGHT_FILE_THRESHOLD = 400;
-    PREFLIGHT_BYTES_THRESHOLD = 10 * 1024 * 1024;
-    PREFLIGHT_LARGE_FILE_BYTES = 2 * 1024 * 1024;
-    PREFLIGHT_WALK_SKIP_DIRS = /* @__PURE__ */ new Set([".git", ".runtime", "node_modules", "__pycache__", "tmp"]);
-    PREFLIGHT_WALK_SKIP_PATHS = [["ops", "dist"]];
-    PREFLIGHT_GIT_TIMEOUT_SECONDS = 15;
-    PREFLIGHT_STAT_FILE_CAP = 2e4;
-    PREFLIGHT_BINARY_LIKE_EXTENSIONS = /* @__PURE__ */ new Set([
-      ".png",
-      ".jpg",
-      ".jpeg",
-      ".gif",
-      ".pdf",
-      ".zip",
-      ".7z",
-      ".dwg",
-      ".dxf",
-      ".step",
-      ".stp",
-      ".iges",
-      ".igs",
-      ".exe",
-      ".dll",
-      ".bin",
-      ".dat",
-      ".mp4",
-      ".avi"
-    ]);
-    ASYNC_MCP_SERVER_NAME = "asyncSubagent";
-    ASYNC_DISPATCH_CONTRACT_VERSION = DISPATCH_CONTRACT_VERSION;
-    CROSS_REPO_RESULT_MODES = /* @__PURE__ */ new Set(["read_only_audit", "simulated_planning", "real_rerun"]);
-    ACCEPTANCE_SYNTHESIS_PROFILE = "acceptance_synthesis_v1";
-    PI_ASYNC_RUNNER_SENTINEL = "run-pi-task.mjs";
-    GLOBAL_CONFIG_PATH = null;
-    PROJECT_ASYNC_TASK_ROOT = path16.join(ROOT, ".runtime", "cockpit", "async_tasks");
-    deps2 = {
-      // Python GLOBAL_CONFIG_PATH（Path | None）
+    init_constants();
+    init_state();
+    init_server();
+    init_scope();
+    init_seed();
+    init_delivery();
+    await init_worker();
+    init_catalog();
+    await init_runtime();
+    await init_prepare_async();
+    init_batch_meta();
+    await init_dispatch_run();
+    init_py_utils();
+    Object.assign(deps, {
       globalConfigPath: null,
       ensureAgentPanel,
       walk: walkDir,
@@ -9970,23 +10193,7 @@ var init_dispatch_prepare = __esm({
       compilePreparedDispatch,
       verifyPreparedDispatch,
       attachReviewEvidence
-    };
-    caches = {
-      asyncSubagentServer: /* @__PURE__ */ new Map(),
-      asyncSubagentEndpoint: /* @__PURE__ */ new Map(),
-      asyncSubagentReadiness: /* @__PURE__ */ new Map(),
-      piChildModelExtensionProfile: /* @__PURE__ */ new Map(),
-      childModelCatalog: /* @__PURE__ */ new Map()
-    };
-    PY_SPLIT_RE = new RegExp(`[${PY_SPACE_CLASS}]+`);
-    CHILD_CATALOG_CONFIG_SURFACE = Object.freeze([
-      "models.json",
-      "models-store.json",
-      "settings.json",
-      "npm/package.json"
-    ]);
-    cacheServedCatalogs = /* @__PURE__ */ new WeakSet();
-    dispatchPhaseState = { phase: "seed", seedIndex: 0 };
+    });
   }
 });
 
@@ -9995,16 +10202,16 @@ await init_dispatch_prepare();
 init_tool_common();
 init_model_selection();
 init_model_selection_guidance();
-import process9 from "node:process";
+import process13 from "node:process";
 
 // ops/tools/_dispatch-catalog-text.mjs
-import path17 from "node:path";
+import path25 from "node:path";
 var oneLine = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
 var visionText = (value) => value === true ? "\u662F" : value === false ? "\u5426" : "\u672A\u77E5";
 function configSourceText(source = {}) {
   const roots = [];
   if (source.project_override && source.declaration_path) {
-    roots.push(path17.dirname(path17.dirname(source.declaration_path)));
+    roots.push(path25.dirname(path25.dirname(source.declaration_path)));
   }
   if (source.global_root && !roots.includes(source.global_root)) roots.push(source.global_root);
   const override = source.project_override && source.declared_keys?.length ? `\uFF08\u9879\u76EE\u8986\u76D6 ${source.declared_keys.join("/")}\uFF09` : "";
@@ -10086,10 +10293,10 @@ var USAGE = `usage: ${PROGRAM} [-h] [--seed SEED] [--seed-stdin] [--seed-templat
                           [--async-stall-silence-ms ASYNC_STALL_SILENCE_MS]
                           [--format {text,json}] [--model-scope {recommended,all}] [--self-test]`;
 function argparseError(message) {
-  process9.stderr.write(`${USAGE}
+  process13.stderr.write(`${USAGE}
 ${PROGRAM}: error: ${message}
 `);
-  process9.exit(2);
+  process13.exit(2);
 }
 function parseArgs(argv) {
   const args = { seed_stdin: false, list: false, allow_sample_pending: false, self_test: false };
@@ -10097,11 +10304,11 @@ function parseArgs(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const token = String(argv[index]);
     if (token === "-h" || token === "--help") {
-      process9.stdout.write(`${USAGE}
+      process13.stdout.write(`${USAGE}
 
 \u4ECE package_seed \u6784\u5EFA\u5B50\u4EE3\u7406\u4EFB\u52A1\u5305\u5E76\u751F\u6210\u6D3E\u53D1\u7ED3\u679C\u3002
 `);
-      process9.exit(0);
+      process13.exit(0);
     }
     const eq = token.indexOf("=");
     const name = token.startsWith("--") && eq > 0 ? token.slice(0, eq) : token;
@@ -10132,7 +10339,7 @@ function parseArgs(argv) {
   return args;
 }
 async function main() {
-  const args = parseArgs(process9.argv.slice(2));
+  const args = parseArgs(process13.argv.slice(2));
   if (args.model_scope !== "recommended" && !args.list) throw new ToolError("--model-scope \u4EC5\u7528\u4E8E --list");
   if (args.self_test) {
     const data2 = await selfTest2();
@@ -10140,7 +10347,7 @@ async function main() {
     return emit(data2, args.format, text4);
   }
   if (args.seed_template) {
-    process9.stdout.write(`${renderTemplate(args.seed_template)}
+    process13.stdout.write(`${renderTemplate(args.seed_template)}
 `);
     return 0;
   }
@@ -10183,9 +10390,9 @@ async function main() {
       model_catalog_source: probed.source,
       models: args.model_scope === "all" ? catalog.models : catalog.models.filter((item) => used.has(item.model) || config.notes.has(item.model))
     };
-    if (args.format === "json") process9.stdout.write(`${JSON.stringify(projected)}
+    if (args.format === "json") process13.stdout.write(`${JSON.stringify(projected)}
 `);
-    else process9.stdout.write(`${renderCatalogText(projected).join("\n")}
+    else process13.stdout.write(`${renderCatalogText(projected).join("\n")}
 `);
     return 0;
   }
@@ -10289,24 +10496,24 @@ function pyListRepr(values) {
   return `[${values.map((item) => typeof item === "string" ? `'${item}'` : String(item)).join(", ")}]`;
 }
 function emitCliError(error) {
-  const argv = process9.argv;
+  const argv = process13.argv;
   const jsonRequested = argv.some((arg, index) => arg === "--format=json" || arg === "--format" && index + 1 < argv.length && argv[index + 1] === "json");
   if (jsonRequested) {
-    process9.stdout.write(`${JSON.stringify({
+    process13.stdout.write(`${JSON.stringify({
       status: "error",
       stage: currentDispatchPhase(),
       message: String(error?.message ?? error)
     })}
 `);
   } else {
-    process9.stderr.write(`error: ${String(error?.message ?? error)}
+    process13.stderr.write(`error: ${String(error?.message ?? error)}
 `);
   }
 }
 try {
-  process9.exitCode = await main();
+  process13.exitCode = await main();
 } catch (error) {
   if (!isPyCaughtError(error, /* @__PURE__ */ new Set(["ToolError", "KeyError", "OSError", "ValueError"]))) throw error;
   emitCliError(error);
-  process9.exitCode = 1;
+  process13.exitCode = 1;
 }

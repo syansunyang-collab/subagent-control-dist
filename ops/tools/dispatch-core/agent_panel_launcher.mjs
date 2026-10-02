@@ -375,14 +375,18 @@ function killProcessTree(pid) {
   else process.kill(pid, "SIGTERM");
 }
 
-// 手动启动专用：运行中面板自报的构建与当前发布不同，就结束旧壳进程树（服务随壳退出）并等端口释放。
-// 自报不带构建标识的旧面板无法判定，照旧复用。
-async function stopStalePanel(resolved, health, port) {
-  const previous = health.runtime_build_id;
-  const current = runtimeBuildId({ deps: resolved });
-  if (!previous || !current || previous === current) return null;
+// 手动启动专用：状态文件记录的壳仍在跑，它的服务自报构建与当前发布不同，且自报的 shell_pid 正是这个壳，
+// 才结束壳进程树（服务随壳退出）并等旧端口释放。发布换槽后端口会变，所以按壳记录的 URL 探旧端口。
+// 自报缺构建或壳进程号对不上时无法确认身份，照旧不动。
+async function stopStalePanel(resolved) {
   const shell = resolved.runningShell();
-  if (filled(shell)) resolved.killProcessTree(shell.pid);
+  if (!filled(shell) || !shell.url) return null;
+  const port = Number(new URL(shell.url).port);
+  const health = await resolved.probeHealth(port);
+  const previous = health?.runtime_build_id;
+  const current = runtimeBuildId({ deps: resolved });
+  if (!previous || !current || previous === current || health.shell_pid !== shell.pid) return null;
+  resolved.killProcessTree(shell.pid);
   const deadline = Date.now() + PANEL_STOP_TIMEOUT_MS;
   while (!(await resolved.portIsFree(port))) {
     if (Date.now() > deadline) throw pyError("RuntimeError", `旧面板（构建 ${previous}）未退出，未启动当前构建`);
@@ -398,14 +402,12 @@ export async function ensureAgentPanel({ deps, replaceStaleBuild = false } = {})
       throw pyError("RuntimeError", `Agent Panel shell project is missing: ${resolved.paths.projectFile}`);
     }
     resolved.rememberProject();
+    const replaced = replaceStaleBuild ? await stopStalePanel(resolved) : null;
     const endpoint = await resolved.allocateEndpoint();
     const manifest = resolved.validManifest();
     const health = await resolved.probeHealth(Number(pyGetItem(endpoint, "port")));
-    const ours = resolved.isOurPanel(health, endpoint);
-    const replaced = ours && replaceStaleBuild
-      ? await stopStalePanel(resolved, health, Number(pyGetItem(endpoint, "port"))) : null;
-    if (ours && !replaced) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
-    const shell = replaced ? {} : resolved.runningShell();
+    if (resolved.isOurPanel(health, endpoint)) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
+    const shell = resolved.runningShell();
     if (filled(shell)) return { status: "starting", pid: shell.pid, ...endpoint };
     let launched;
     if (filled(manifest)) launched = resolved.startShell(String(pyGetItem(manifest, "executable")), endpoint);

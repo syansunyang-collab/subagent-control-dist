@@ -62,7 +62,8 @@ export function installFastMode(pi, enabled = () => true) {
   pi.on("message_end", (event, ctx) => {
     if (!priced || event.message?.role !== "assistant") return undefined;
     priced = false;
-    return fastPricedMessage(event.message, ctx.model);
+    // Pi 只认 { message } 形状的返回值，原地替换后再持久化与上报。
+    return { message: fastPricedMessage(event.message, ctx.model) };
   });
 }
 

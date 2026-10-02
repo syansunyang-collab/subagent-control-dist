@@ -161,7 +161,7 @@ def step_addon_units(apply: bool) -> list[dict]:
     """快照里 extensions/、local-packages/、context-prune/ 下的每一项是一个单元，仓库是唯一真源：
     本机缺失或内容不同的文件整份写入，被换掉的旧文件先备份；本机多出的文件不管。"""
     root = ADDONS / "agent"
-    backup = PI_AGENT / "backups" / f"addons-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    backup = None
     results = []
     for unit in sorted(item for container in root.iterdir() for item in container.iterdir()):
         relative = unit.relative_to(root).as_posix()
@@ -173,6 +173,10 @@ def step_addon_units(apply: bool) -> list[dict]:
             continue
         replaced = [target for _, target in stale if target.is_file()]
         if apply:
+            if replaced and backup is None:
+                (PI_AGENT / "backups").mkdir(parents=True, exist_ok=True)
+                # 独占目录：同一秒的两次安装各自备份，不互相覆盖。
+                backup = Path(tempfile.mkdtemp(prefix=f"addons-{datetime.now().strftime('%Y%m%d-%H%M%S')}-", dir=PI_AGENT / "backups"))
             for target in replaced:
                 saved = backup / target.relative_to(PI_AGENT)
                 saved.parent.mkdir(parents=True, exist_ok=True)
@@ -182,7 +186,7 @@ def step_addon_units(apply: bool) -> list[dict]:
                 target.write_bytes(path.read_bytes())
         result = {"step": f"pi-addon:{relative}", "status": "done" if apply else "todo"}
         if replaced:
-            result["detail"] = f"覆盖本机 {len(replaced)} 个不同文件，旧文件备份到 {backup}"
+            result["detail"] = f"覆盖本机 {len(replaced)} 个不同文件，旧文件备份到 {backup or PI_AGENT / 'backups'}"
         results.append(result)
     return results
 

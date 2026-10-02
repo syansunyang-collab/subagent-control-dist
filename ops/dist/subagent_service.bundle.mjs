@@ -29363,7 +29363,7 @@ function isTrustedRunnerPath(options, runnerPath) {
 init_runtime();
 var SERVER_NAME = "async-subagent";
 var SERVER_VERSION = "1.0.0";
-var BUILD_ID = true ? "ff504565ca3e8c85" : "dev";
+var BUILD_ID = true ? "662d838f176b3515" : "dev";
 var PUBLIC_TOOL_NAMES = Object.freeze([
   "subagent_prepare",
   "subagent_dispatch",

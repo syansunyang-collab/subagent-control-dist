@@ -352,6 +352,8 @@ async function routeHandler(projection, projectionWorker, configStore, config, r
       control_repo_path: config.controlRepoPath,
       // 进程启动时读一次发布清单。健康请求本身不读盘，手动启动器用它判断要不要换掉旧面板。
       runtime_build_id: config.runtimeBuildId,
+      // 拉起本服务的桌面壳进程号（--parent-pid）；启动器据此确认要结束的进程就是这个面板的壳。
+      shell_pid: config.shellPid,
     });
     return;
   }
@@ -693,6 +695,7 @@ export async function createPanelServer(options = {}) {
     panelRoot,
     panelStateRoot,
     runtimeBuildId: readPublishedBuildId(runtimeAssetRoot),
+    shellPid: options.parentPid ?? null,
     webRoot,
     controlRepoPath,
     paths,

@@ -522,12 +522,15 @@ function killProcessTree(pid) {
   if (process2.platform === "win32") spawnSync("taskkill", ["/F", "/T", "/PID", String(pid)], { windowsHide: true });
   else process2.kill(pid, "SIGTERM");
 }
-async function stopStalePanel(resolved, health, port) {
-  const previous = health.runtime_build_id;
-  const current = runtimeBuildId({ deps: resolved });
-  if (!previous || !current || previous === current) return null;
+async function stopStalePanel(resolved) {
   const shell = resolved.runningShell();
-  if (filled(shell)) resolved.killProcessTree(shell.pid);
+  if (!filled(shell) || !shell.url) return null;
+  const port = Number(new URL(shell.url).port);
+  const health = await resolved.probeHealth(port);
+  const previous = health?.runtime_build_id;
+  const current = runtimeBuildId({ deps: resolved });
+  if (!previous || !current || previous === current || health.shell_pid !== shell.pid) return null;
+  resolved.killProcessTree(shell.pid);
   const deadline = Date.now() + PANEL_STOP_TIMEOUT_MS;
   while (!await resolved.portIsFree(port)) {
     if (Date.now() > deadline) throw pyError("RuntimeError", `\u65E7\u9762\u677F\uFF08\u6784\u5EFA ${previous}\uFF09\u672A\u9000\u51FA\uFF0C\u672A\u542F\u52A8\u5F53\u524D\u6784\u5EFA`);
@@ -542,13 +545,12 @@ async function ensureAgentPanel({ deps, replaceStaleBuild = false } = {}) {
       throw pyError("RuntimeError", `Agent Panel shell project is missing: ${resolved.paths.projectFile}`);
     }
     resolved.rememberProject();
+    const replaced = replaceStaleBuild ? await stopStalePanel(resolved) : null;
     const endpoint = await resolved.allocateEndpoint();
     const manifest = resolved.validManifest();
     const health = await resolved.probeHealth(Number(pyGetItem(endpoint, "port")));
-    const ours = resolved.isOurPanel(health, endpoint);
-    const replaced = ours && replaceStaleBuild ? await stopStalePanel(resolved, health, Number(pyGetItem(endpoint, "port"))) : null;
-    if (ours && !replaced) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
-    const shell = replaced ? {} : resolved.runningShell();
+    if (resolved.isOurPanel(health, endpoint)) return { status: "already_running", ...endpoint, monitor_root: health.control_repo_path };
+    const shell = resolved.runningShell();
     if (filled(shell)) return { status: "starting", pid: shell.pid, ...endpoint };
     let launched;
     if (filled(manifest)) launched = resolved.startShell(String(pyGetItem(manifest, "executable")), endpoint);

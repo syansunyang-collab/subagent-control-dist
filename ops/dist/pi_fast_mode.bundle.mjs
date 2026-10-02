@@ -52,7 +52,7 @@ function installFastMode(pi, enabled = () => true) {
   pi.on("message_end", (event, ctx) => {
     if (!priced || event.message?.role !== "assistant") return void 0;
     priced = false;
-    return fastPricedMessage(event.message, ctx.model);
+    return { message: fastPricedMessage(event.message, ctx.model) };
   });
 }
 function fastMode(pi) {
