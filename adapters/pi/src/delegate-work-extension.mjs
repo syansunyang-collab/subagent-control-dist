@@ -412,9 +412,16 @@ export function installDelegateWork(pi, { sdk = null, sourceSession = null, core
     startSession,
     get core() { return currentCore; },
     wrapControl(tool) {
-      const method = { subagent_get: "get", subagent_pause: "pause", subagent_resume: "resume", subagent_cancel: "cancel" }[tool.name];
+      // Submitted delegate results live in the source-owned snapshot, not the cockpit registry.
+      const method = {
+        subagent_get: "get", subagent_result: "get", subagent_pause: "pause",
+        subagent_resume: "resume", subagent_cancel: "cancel",
+      }[tool.name];
       if (!method) return tool;
-      return { ...tool, description: `${tool.description}\n也接受 task_id=delegate_work 返回的 work_id；控制动作沿用 expected_revision CAS，待决续跑自动带回来源新增文字。`,
+      const workResult = tool.name === "subagent_result"
+        ? "work_id 返回来源会话持有的工作快照：已提交结果在 results[]，evidence 是分身提交的引用，未做产物存在性检查；未提交时 results 为空。"
+        : "";
+      return { ...tool, description: `${tool.description}\n也接受 task_id=delegate_work 返回的 work_id；控制动作沿用 expected_revision CAS，待决续跑自动带回来源新增文字。${workResult}`,
         async execute(...args) {
           const input = args[1];
           if (!String(input?.task_id ?? "").startsWith("work-")) return tool.execute(...args);
