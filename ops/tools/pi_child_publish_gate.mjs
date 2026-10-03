@@ -14,7 +14,6 @@ export const PI_AGENT_TRUST_FILE = "trust.json";
 export const EXPECTED_SHARED_SETTINGS = Object.freeze({
   "compaction.enabled": false,
   "retry.enabled": true,
-  "retry.maxRetries": 5,
   "retry.baseDelayMs": 2000,
   "retry.provider.maxRetries": 0,
 });
