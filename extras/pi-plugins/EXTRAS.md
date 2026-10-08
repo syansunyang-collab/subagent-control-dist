@@ -370,18 +370,32 @@ Copy-Item artifacts/templates/pi-global-system-tail/APPEND_SYSTEM.md (Join-Path 
 
 **前提**
 
-- `<全局 Pi 目录>` 为未改动的 npm 0.99.1 安装。
-- 补丁载荷三份，放在下列位置时管理器自动使用，并按清单校验 SHA-256：
+- `<全局 Pi 目录>` 为未改动的 npm 安装，版本 0.99.1 或 0.87.1（WS recovery 另支持 0.84.x–0.86.0）；其它版本见下方「版本不是 0.99.1 时」。
+- 补丁载荷五份（0.99.1 三份、0.87.1 两份），放在下列位置时管理器按 Pi 版本自动选用，并按清单校验 SHA-256：
 
 | 载荷 | 路径 | SHA-256 |
 | --- | --- | --- |
 | attribution（含 WS） | `.runtime/pi-codex-attribution/0.99.1/payload.json.gz` | `8726eac13baf770c77003b3643d2f765f953bf561fb3fb7153b8fbef10c85869` |
 | 独立 WS | `.runtime/pi-codex-attribution/0.99.1/ws-payload.json.gz` | `7959ca20c1c470d589b3d4e40aa6e54424be253f516451641f88dd600ae5de06` |
 | prompt-stability 宿主 | `.runtime/pi-prompt-stability/0.99.1/host-payload.json.gz` | `cf147bde5ff012cc0611717dfbf0a3b07882c0d064edb7225829c9ef2f4113f5` |
+| attribution（0.87.1） | `.runtime/pi-codex-attribution/payload.json.gz` | `83d1e5d11b27cf46e0f0cf5315890cb122c8efbec111722c61db3e4b7f7982dc` |
+| prompt-stability 宿主（0.87.1） | `.runtime/pi-prompt-stability/host-payload.json.gz` | `08ec9a9cef6f7e07e9f8723e7b9da43dd4984b4b77df1dd4d623d31a34ff2c93` |
 
-  三份载荷随分发提供，位于上表路径。文件缺失或哈希不符时二选一：向维护者索取后放到上表路径；或按 `tools/pi-codex-attribution/README-0.99.1.md` 重建——需要 Pi 上游 tag `v0.99.1`（提交 `d86654abb8862e201933517d6f1fce9f88dd117f`）的源码放在 `tmp/pi-upstream-review-20260930/pi-0.99.1`、一份全局布局的原版 npm 0.99.1 安装放在 `tmp/pi-0991-upgrade/runtime/node_modules/@earendil-works/pi-coding-agent`（其下须有嵌套的 `node_modules/@earendil-works/pi-ai` 与 `pi-agent-core`），并把文中写死的维护者插件仓绝对路径换成 `<extras 目录>`、`npm-cli.js` 路径换成本机 Node 安装下的对应文件。重建会改写三个 `manifest-0.99.1.json`；产物能否与维护者载荷逐字节一致未验证。
+  五份载荷随分发提供，位于上表路径。文件缺失或哈希不符时二选一：向维护者索取后放到上表路径；或按 `tools/pi-codex-attribution/README-0.99.1.md` 重建——需要 Pi 上游 tag `v0.99.1`（提交 `d86654abb8862e201933517d6f1fce9f88dd117f`）的源码放在 `tmp/pi-upstream-review-20260930/pi-0.99.1`、一份全局布局的原版 npm 0.99.1 安装放在 `tmp/pi-0991-upgrade/runtime/node_modules/@earendil-works/pi-coding-agent`（其下须有嵌套的 `node_modules/@earendil-works/pi-ai` 与 `pi-agent-core`），并把文中写死的维护者插件仓绝对路径换成 `<extras 目录>`、`npm-cli.js` 路径换成本机 Node 安装下的对应文件。重建会改写三个 `manifest-0.99.1.json`；产物能否与维护者载荷逐字节一致未验证。
 
 **适用版本**：attribution 与 prompt-stability 有 0.87.1 与 0.99.1 两套清单；WS 管理器接受 pi-ai 0.84.1、0.84.3、0.84.4、0.85.1、0.86.0、0.87.1、0.99.1 与 bundle 0.84.3–0.99.1 的固定哈希。三者都先核对版本与逐文件哈希，版本不符或哈希未知时拒绝写入。
+
+**版本不是 0.99.1 时**
+
+管理器读取 `<全局 Pi 目录>\package.json` 的版本选清单：没有对应清单时报 `Unsupported Pi version`，文件哈希与清单不符时状态为 `unknown`，两种情况都不写入。这道检查按文件哈希防止把补丁写进不匹配的 Pi 程序文件，不要绕过（不改清单里的哈希，不手工拷贝载荷内的文件）。Pi 本身与控制面不依赖这三个补丁，版本不符时按下列顺序选一条，选不了就跳过，不影响其它单元：
+
+1. 换到 0.99.1（推荐）：`npm i -g @earendil-works/pi-coding-agent@0.99.1`，重启所有 Pi 进程后按下文「安装」执行。0.99.1 也是控制面实测的版本（控制面 `adapters/pi` 的 Pi 依赖钉在 0.99.1）。
+2. 用 0.87.1：attribution 与 prompt-stability 有 0.87.1 的清单和载荷，管理器按版本自动选用，命令与下文相同。0.87.1 上 prompt-stability 除宿主部分外还管理 `pi-hermes-memory@0.9.8` 与全局系统尾注两个扩展（见 `tools/pi-prompt-stability/README.md`），未装这两个扩展时加 `--host-only`。
+3. 只装 WS recovery：0.84.x–0.86.0 上只有 `tools/pi-ws-recovery/manage-pi-ws-recovery.mjs` 可用（接受的固定哈希见上文「适用版本」），attribution 与 prompt-stability 跳过。
+4. 跳过三个补丁：其它版本（含高于 0.99.1 的版本）不装。缺少它们时 Pi 照常工作，只是没有 Codex 请求身份与 turn-state 保持、WS 断线降级与恢复、唤醒运行时提示段稳定这几项改进。
+5. 移植到新版本：按 `tools/pi-codex-attribution/README-0.99.1.md` 的隔离构建流程，把源码 tag、原版安装与清单换成目标版本，生成新的 `manifest-<版本>.json` 与载荷。工作量大，结果先在隔离副本上通过验收再写入全局 Pi。
+
+Pi 升级时 npm 会整体覆盖这些程序文件，补丁随之消失，Pi 不会损坏；升级后先运行 `status` 确认状态，再按新版本从上面重新选择。
 
 **安装**（attribution 在前、prompt-stability 叠加在后）
 

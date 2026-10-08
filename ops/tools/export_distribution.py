@@ -34,6 +34,8 @@ PLUGIN_PRIVATE = ("tools/pi-web/", "tests/pi/pi_web_autostart_contract.test.mjs"
 PLUGIN_FORKS = ("forks/pi-context-prune",)
 # Pi 本体补丁的构建载荷不入插件仓提交（在被忽略的 .runtime/ 下），从插件仓工作目录取；管理脚本应用前按清单校验哈希。
 PLUGIN_PAYLOADS = (
+    ".runtime/pi-codex-attribution/payload.json.gz",
+    ".runtime/pi-prompt-stability/host-payload.json.gz",
     ".runtime/pi-codex-attribution/0.99.1/payload.json.gz",
     ".runtime/pi-codex-attribution/0.99.1/ws-payload.json.gz",
     ".runtime/pi-prompt-stability/0.99.1/host-payload.json.gz",
