@@ -1,0 +1,651 @@
+/**
+ * context-prune — Pi extension entry point
+ *
+ * Wires together all modules:
+ *   config       — load/save ~/.pi/agent/context-prune/settings.json
+ *   batch-capture — serialize turn_end event into CapturedBatch
+ *   summarizer   — call LLM to summarize a CapturedBatch
+ *   indexer      — maintain Map<toolCallId, ToolCallRecord> + session persistence
+ *   pruner       — filter context event messages
+ *   query-tool   — register context_tree_query tool
+ *   commands     — register /pruner command + message renderer
+ *
+ * Usage:  pi -e .
+ */
+
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { loadConfig } from "./src/config.js";
+import { captureBatch, captureUnindexedBatchesFromSession, groupBatchesByMode } from "./src/batch-capture.js";
+import { summarizeBatch, summarizeBatches } from "./src/summarizer.js";
+import { ToolCallIndexer } from "./src/indexer.js";
+import { injectSummaryMessages, pruneMessages } from "./src/pruner.js";
+import { annotateWithUnprunedCount, countUnprunedToolCalls } from "./src/reminder.js";
+import { registerQueryTool } from "./src/query-tool.js";
+import { registerCommands, setPruneStatusWidget } from "./src/commands.js";
+import { formatSummaryToolCallRefs, makeSummaryDetails, wrapSummaryForContext } from "./src/summary-refs.js";
+import type { ContextPruneConfig, CapturedBatch, IndexEntryData, PruneFrontier, FlushOptions } from "./src/types.js";
+import {
+  DEFAULT_CONFIG,
+  CONTEXT_PRUNE_TOOL_NAME,
+  CONTEXT_TAG_TOOL_NAMES,
+  AGENTIC_AUTO_SYSTEM_PROMPT,
+  CUSTOM_TYPE_SUMMARY,
+  CUSTOM_TYPE_INDEX,
+  CUSTOM_TYPE_STATS,
+  CUSTOM_TYPE_FRONTIER,
+} from "./src/types.js";
+import { StatsAccumulator } from "./src/stats.js";
+import { registerContextPruneTool } from "./src/context-prune-tool.js";
+import { PruneFrontierTracker } from "./src/frontier.js";
+
+export default function (pi: ExtensionAPI) {
+  // Shared mutable config reference — updated by /pruner commands
+  const currentConfig: { value: ContextPruneConfig } = {
+    value: { ...DEFAULT_CONFIG, pruneOn: "every-turn" },
+  };
+
+  // Shared indexer — rebuilt from session on every session_start / session_tree
+  const indexer = new ToolCallIndexer();
+
+  // Shared stats accumulator — tracks cumulative token/cost stats for summarizer calls
+  const statsAccum = new StatsAccumulator();
+
+  // Shared prune frontier — tracks the last completed prune attempt boundary
+  const frontier = new PruneFrontierTracker();
+
+  // Whether index/stats/frontier have been rebuilt from the current session branch.
+  // session_start normally does this, but another extension's session_start handler
+  // may trigger an agent turn before ours has run (load order), so the context hook
+  // hydrates on demand as a fallback — otherwise that turn would go out unpruned.
+  let hydrated = false;
+  const hydrateFromSession = (ctx: ExtensionContext) => {
+    indexer.reconstructFromSession(ctx);
+    statsAccum.reconstructFromSession(ctx);
+    frontier.reconstructFromSession(ctx);
+    hydrated = true;
+  };
+
+  // Pending batches — accumulated until the prune trigger fires
+  const pendingBatches: CapturedBatch[] = [];
+  let isFlushing = false;
+
+  type FlushResult =
+    | { ok: true; reason: "flushed" | "skipped-oversized"; batchCount: number; toolCallCount: number; rawCharCount: number; summaryCharCount: number }
+    | { ok: false; reason: "empty" | "already-flushing" | "summarizer-failed" | "stale-context" | "failed" | "aborted"; error?: string };
+
+  type SessionAppender = {
+    appendCustomEntry(customType: string, data?: unknown): string;
+    appendCustomMessageEntry(customType: string, content: string, display: boolean, details?: unknown): string;
+  };
+
+  const isStaleContextError = (err: unknown) =>
+    err instanceof Error && err.message.includes("This extension ctx is stale");
+
+  const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+  const safeNotify = (ctx: any, message: string, type: "info" | "warning" | "error" = "info") => {
+    try {
+      ctx.ui.notify(message, type);
+    } catch (err) {
+      if (!isStaleContextError(err)) throw err;
+    }
+  };
+
+  // The agent's own prose. Only non-empty text blocks count: a thinking-only message says nothing
+  // to the user, and a message that is nothing but tool calls is an intermediate step of the loop.
+  const assistantMessageHasText = (message: any) =>
+    message?.role === "assistant" &&
+    Array.isArray(message.content) &&
+    message.content.some(
+      (block: any) => block?.type === "text" && typeof block.text === "string" && block.text.trim().length > 0,
+    );
+
+  // The agent-message trigger: any successful assistant message that says something, whether or not
+  // it also carries tool calls. Pi streams the prose and the next tool call in one message, and
+  // message_end for it fires while that call is still in flight — before Pi persists the message and
+  // before any result for it exists. The capture path only takes tool calls whose results are
+  // already in the session, so the in-flight call stays out of this flush and is summarized once its
+  // result arrives.
+  // A turn that ended in a provider error or an abort is not a reply: Pi retries it (auto-retry) or the user does,
+  // and the retried request still needs the tool results of the current task. Pruning here replaced those results
+  // with "No result provided" placeholders and left the retry blind.
+  const isAgentMessageTrigger = (message: any) =>
+    assistantMessageHasText(message) &&
+    message.stopReason !== "error" &&
+    message.stopReason !== "aborted";
+
+  // Lifecycle hooks (turn_end / tool_execution_end / message_end) are awaited by Pi, so a summarizer call made
+  // from a hook keeps the run "streaming": Stop cannot complete until the hook returns. Bind every hook flush to
+  // the run's abort signal, and to a deadline so a stalled summarizer stream cannot hold the session forever.
+  // Batches are restored on abort, so nothing is lost; the next trigger retries them.
+  const HOOK_FLUSH_TIMEOUT_MS = 180_000;
+
+  const flushFromHook = async (ctx: any, delivery: "session" | "runtime"): Promise<FlushResult> => {
+    let runSignal: AbortSignal | undefined;
+    try {
+      runSignal = ctx.signal;
+    } catch {
+      // stale ctx: no run to bind to
+    }
+    const deadline = AbortSignal.timeout(HOOK_FLUSH_TIMEOUT_MS);
+    const result = await flushPending(ctx, { delivery, signal: runSignal ? AbortSignal.any([runSignal, deadline]) : deadline });
+    if (!result.ok && result.reason === "aborted" && deadline.aborted && !runSignal?.aborted) {
+      safeNotify(ctx, `pruner: summarizer gave no result within ${HOOK_FLUSH_TIMEOUT_MS / 1000}s; batches kept for the next trigger`, "warning");
+    }
+    return result;
+  };
+
+  const trimBatchToPendingRange = (batch: CapturedBatch): CapturedBatch | null => {
+    const currentFrontier = frontier.get();
+    let toolCalls = batch.toolCalls;
+
+    // The indexer tells us what was successfully summarized earlier.
+    toolCalls = toolCalls.filter((tc) => !indexer.isSummarized(tc.toolCallId));
+    if (toolCalls.length === 0) return null;
+
+    // The frontier tells us the last attempted boundary even when the attempt did
+    // not persist index entries (e.g. skipped-oversized). When the LLM prunes in
+    // the middle of a long tool chain, keep later tool calls from the same turn
+    // instead of dropping the whole batch on the floor.
+    if (!currentFrontier) return { ...batch, toolCalls };
+    if (batch.turnIndex < currentFrontier.lastAttemptedTurnIndex) return null;
+    if (batch.turnIndex > currentFrontier.lastAttemptedTurnIndex) return { ...batch, toolCalls };
+
+    const originalIndex = toolCalls.findIndex((tc) => tc.toolCallId === currentFrontier.lastAttemptedToolCallId);
+    if (originalIndex < 0) return { ...batch, toolCalls };
+
+    const remaining = toolCalls.slice(originalIndex + 1);
+    if (remaining.length === 0) return null;
+    return { ...batch, toolCalls: remaining };
+  };
+
+  // The frontier and the batches captured from the session number every assistant message on
+  // the branch, while Pi restarts event.turnIndex at 0 on every prompt. Comparing the two made
+  // the early turns of each later prompt look already attempted, so trimBatchToPendingRange
+  // dropped them. At turn_end this turn's assistant message is the last one on the branch.
+  const branchTurnIndex = (ctx: any, fallback: number): number => {
+    try {
+      const assistants = ctx.sessionManager
+        .getBranch()
+        .filter((entry: any) => entry.type === "message" && entry.message?.role === "assistant").length;
+      return assistants > 0 ? assistants - 1 : fallback;
+    } catch {
+      // stale ctx: no branch to count
+      return fallback;
+    }
+  };
+
+  const restoreBatches = (batches: CapturedBatch[]) => {
+    pendingBatches.unshift(...batches);
+  };
+
+  const persistBatchIndex = (batch: CapturedBatch, appendEntry: (customType: string, data?: unknown) => void) => {
+    const records = batch.toolCalls.map((tc) => ({
+      toolCallId: tc.toolCallId,
+      toolName: tc.toolName,
+      args: tc.args,
+      resultText: tc.resultText,
+      isError: tc.isError,
+      turnIndex: batch.turnIndex,
+      timestamp: batch.timestamp,
+    }));
+
+    for (const record of records) {
+      indexer.getIndex().set(record.toolCallId, record);
+    }
+
+    appendEntry(CUSTOM_TYPE_INDEX, { toolCalls: records } as IndexEntryData);
+  };
+
+  // ── Helper: capture + trim + group pending batches (no LLM work) ──────────
+  // Exposed to commands.ts via registerCommands so /pruner now can preview the
+  // queue before opening the multi-row progress overlay.
+  const capturePendingBatches = (ctx: any): CapturedBatch[] => {
+    let batches: CapturedBatch[] = [];
+    try {
+      const branch = ctx.sessionManager.getBranch();
+      batches = captureUnindexedBatchesFromSession(
+        branch,
+        indexer,
+        [CONTEXT_PRUNE_TOOL_NAME],
+        ctx.sessionManager.buildContextEntries?.(),
+      );
+    } catch {
+      batches = pendingBatches.slice();
+    }
+    batches = batches
+      .map((batch) => trimBatchToPendingRange(batch))
+      .filter((batch): batch is CapturedBatch => batch !== null);
+    return groupBatchesByMode(batches, currentConfig.value.batchingMode);
+  };
+
+  // Summarizes + indexes all pending batches.
+  // When options.onProgress is provided batches are processed sequentially
+  // (one LLM call each) so the caller can update per-row UI. Otherwise all
+  // batches are summarized in parallel (one summarizeBatches call).
+  // Runtime delivery is used while the agent/tool loop is active so Pi can place
+  // steer messages at protocol-safe boundaries. Session delivery is used only for
+  // agent-message's final-message flush, where print-mode Pi may invalidate pi.*
+  // while the summarizer LLM call is in flight.
+  const flushPending = async (ctx: any, options: FlushOptions = {}): Promise<FlushResult> => {
+    if (isFlushing) return { ok: false, reason: "already-flushing" };
+
+    // Use pre-captured batches if provided (avoids double-capture when the
+    // caller previewed the queue before opening the progress overlay).
+    let batches: CapturedBatch[] = options.previewedBatches ?? capturePendingBatches(ctx);
+
+    if (batches.length === 0) return { ok: false, reason: "empty" };
+
+    // Bail out before we drain pendingBatches so they don't need restoring.
+    if (options.signal?.aborted) return { ok: false, reason: "aborted" };
+
+    // Draining the queue since we've captured the state via session or slice.
+    // We drain BEFORE the await so concurrent calls (though guarded by isFlushing)
+    // or rapid turn-ends don't result in double-summarization.
+    pendingBatches.length = 0;
+
+    isFlushing = true;
+
+    const delivery = options.delivery ?? "runtime";
+    let sessionManager: SessionAppender | undefined;
+    if (delivery === "session") {
+      try {
+        sessionManager = ctx.sessionManager as unknown as SessionAppender;
+      } catch (err) {
+        restoreBatches(batches);
+        isFlushing = false;
+        return { ok: false, reason: isStaleContextError(err) ? "stale-context" : "failed", error: errorMessage(err) };
+      }
+    }
+
+    const appendEntry = (customType: string, data?: unknown) => sessionManager!.appendCustomEntry(customType, data);
+    const appendSummaryMessage = (content: string, details: unknown) =>
+      sessionManager!.appendCustomMessageEntry(CUSTOM_TYPE_SUMMARY, content, false, details);
+
+    try {
+      setPruneStatusWidget(ctx, currentConfig.value, "prune: summarizing…");
+
+      const reportBatchTextProgress = (index: number, total: number, batch: CapturedBatch, receivedChars: number) => {
+        options.onBatchTextProgress?.(index, total, batch, receivedChars);
+      };
+
+      // Summarize batches. When onProgress is provided (i.e. /pruner now with the
+      // multi-row overlay) we process sequentially so each row can be checked off
+      // as its LLM call completes. Otherwise all batches run in parallel.
+      let results: (import("./src/types.js").SummarizeResult | null)[];
+      if (options.onProgress) {
+        results = [];
+        for (let i = 0; i < batches.length; i++) {
+          options.onProgress(i, batches.length, batches[i], "start");
+          const r = await summarizeBatch(batches[i], currentConfig.value, ctx, {
+            signal: options.signal,
+            onTextProgress: (receivedChars) => {
+              reportBatchTextProgress(i, batches.length, batches[i], receivedChars);
+            },
+          });
+          results.push(r);
+          options.onProgress(i, batches.length, batches[i], r ? "done" : "skipped");
+        }
+      } else {
+        // Parallel — one LLM call per batch, all in flight simultaneously.
+        results = await summarizeBatches(batches, currentConfig.value, ctx, {
+          onBatchTextProgress: reportBatchTextProgress,
+          signal: options.signal,
+        });
+      }
+
+      // Process results in order; stop at first null (individual call failure).
+      // Batches before the first failure are persisted; remaining are restored to
+      // pendingBatches so they are retried on the next flush.
+      const processedBatches: CapturedBatch[] = [];
+      let totalRawCharCount = 0;
+      let totalSummaryCharCount = 0;
+      let totalToolCallCount = 0;
+      const oversizedBatches: CapturedBatch[] = [];
+      let firstFailureIndex = -1;
+
+      for (let i = 0; i < batches.length; i++) {
+        const result = results[i];
+        if (!result) {
+          firstFailureIndex = i;
+          break;
+        }
+
+        const batch = batches[i];
+        const batchRawCharCount = batch.toolCalls.reduce((s, tc) => s + tc.resultText.length, 0);
+        const summaryRefs = indexer.allocateSummaryRefs(batch);
+        const summaryText = wrapSummaryForContext(result.summaryText + formatSummaryToolCallRefs(summaryRefs));
+        const shouldSkipOversized = summaryText.length > batchRawCharCount;
+
+        statsAccum.add(result.usage);
+        totalRawCharCount += batchRawCharCount;
+        totalSummaryCharCount += summaryText.length;
+        totalToolCallCount += batch.toolCalls.length;
+
+        const batchDetails = makeSummaryDetails(batch, summaryRefs);
+
+        try {
+          if (!shouldSkipOversized) {
+            // Write one hidden summary message per turn and index its tool calls.
+            // `display: false` keeps the summary in future LLM context and session
+            // history without printing the full markdown block into Pi's main window.
+            if (delivery === "runtime") {
+              pi.sendMessage(
+                { customType: CUSTOM_TYPE_SUMMARY, content: summaryText, display: false, details: batchDetails },
+                { deliverAs: "steer" }
+              );
+              indexer.registerSummaryRefs(summaryRefs);
+              indexer.addBatch(batch, pi);
+            } else {
+              appendSummaryMessage(summaryText, batchDetails);
+              indexer.registerSummaryRefs(summaryRefs);
+              persistBatchIndex(batch, appendEntry);
+            }
+          } else {
+            oversizedBatches.push(batch);
+          }
+        } catch (err) {
+          // Persistence error mid-loop: stop here, restore this and remaining batches.
+          if (isStaleContextError(err)) {
+            restoreBatches(batches.slice(i));
+            // Advance frontier to what we managed to persist before this point
+            break;
+          }
+          throw err;
+        }
+
+        processedBatches.push(batch);
+      }
+
+      // Restore unprocessed batches (those at and after the first failure)
+      if (firstFailureIndex >= 0) {
+        restoreBatches(batches.slice(firstFailureIndex));
+      }
+
+      if (processedBatches.length === 0) {
+        // Nothing was persisted (all calls failed or first call failed)
+        setPruneStatusWidget(ctx, currentConfig.value, statsAccum.getStats());
+        return { ok: false, reason: "summarizer-failed" };
+      }
+
+      // Advance frontier to the last batch we actually processed.
+      const lastBatch = processedBatches[processedBatches.length - 1];
+      const lastTC = lastBatch.toolCalls[lastBatch.toolCalls.length - 1];
+      const allOversized = oversizedBatches.length === processedBatches.length;
+      const frontierSnapshot: PruneFrontier = {
+        lastAttemptedToolCallId: lastTC.toolCallId,
+        lastAttemptedToolName: lastTC.toolName,
+        lastAttemptedTurnIndex: lastBatch.turnIndex,
+        lastAttemptedTimestamp: lastBatch.timestamp,
+        attemptedBatchCount: processedBatches.length,
+        attemptedToolCallCount: totalToolCallCount,
+        rawCharCount: totalRawCharCount,
+        summaryCharCount: totalSummaryCharCount,
+        outcome: allOversized ? "skipped-oversized" : "summarized",
+      };
+
+      try {
+        if (delivery === "runtime") {
+          frontier.advance(frontierSnapshot);
+          frontier.persist(pi);
+          statsAccum.persist(pi);
+        } else {
+          frontier.advance(frontierSnapshot);
+          appendEntry(CUSTOM_TYPE_FRONTIER, frontierSnapshot);
+          try {
+            appendEntry(CUSTOM_TYPE_STATS, statsAccum.getStats());
+          } catch {
+            // Ignore stats persistence failures; the prune result and frontier are the contract.
+          }
+        }
+      } catch (err) {
+        return { ok: false, reason: isStaleContextError(err) ? "stale-context" : "failed", error: errorMessage(err) };
+      }
+
+      setPruneStatusWidget(ctx, currentConfig.value, statsAccum.getStats());
+
+      // Respect notifySkipped for both automatic flushes and /pruner now.
+      if (currentConfig.value.notifySkipped) {
+        for (const batch of oversizedBatches) {
+          const batchRaw = batch.toolCalls.reduce((s, tc) => s + tc.resultText.length, 0);
+          const batchSummaryLen = results[batches.indexOf(batch)]?.summaryText.length ?? 0;
+          safeNotify(
+            ctx,
+            `pruner: skipped pruning turn ${batch.turnIndex} (${batch.toolCalls.length} tool call${batch.toolCalls.length === 1 ? "" : "s"}) — summary was ${batchSummaryLen} chars vs ${batchRaw} raw chars; frontier advanced past this range`,
+            "warning"
+          );
+        }
+      }
+
+      return {
+        ok: true,
+        reason: allOversized ? "skipped-oversized" : "flushed",
+        batchCount: processedBatches.length,
+        toolCallCount: totalToolCallCount,
+        rawCharCount: totalRawCharCount,
+        summaryCharCount: totalSummaryCharCount,
+      };
+    } catch (err) {
+      restoreBatches(batches);
+      // When the abort signal fired, summarizeBatch rethrows rather than
+      // swallowing the error.  Don't show a UI error — the user intended this.
+      if (options.signal?.aborted) {
+        setPruneStatusWidget(ctx, currentConfig.value, statsAccum.getStats());
+        return { ok: false, reason: "aborted" };
+      }
+      if (isStaleContextError(err)) {
+        return { ok: false, reason: "stale-context", error: errorMessage(err) };
+      }
+      safeNotify(ctx, `pruner: summarization failed: ${errorMessage(err)}`, "error");
+      return { ok: false, reason: "failed", error: errorMessage(err) };
+    } finally {
+      isFlushing = false;
+    }
+  };
+
+  // ── Helper: toggle context_prune tool activation based on config ───────────
+  // Uses `pi` (ExtensionRuntime) because getActiveTools/setActiveTools are
+  // runtime methods, NOT part of ExtensionContext/ExtensionCommandContext.
+  const syncToolActivation = () => {
+    const shouldActivate = currentConfig.value.enabled && currentConfig.value.pruneOn === "agentic-auto";
+    const activeTools = pi.getActiveTools();
+    if (shouldActivate) {
+      if (!activeTools.includes(CONTEXT_PRUNE_TOOL_NAME)) {
+        pi.setActiveTools([...activeTools, CONTEXT_PRUNE_TOOL_NAME]);
+      }
+    } else {
+      if (activeTools.includes(CONTEXT_PRUNE_TOOL_NAME)) {
+        pi.setActiveTools(activeTools.filter((t: string) => t !== CONTEXT_PRUNE_TOOL_NAME));
+      }
+    }
+  };
+
+  // ── session_start: restore config + index + stats ────────────────────────────────
+  pi.on("session_start", async (_event, ctx) => {
+    // Load config from ~/.pi/agent/context-prune/settings.json
+    currentConfig.value = await loadConfig();
+
+    // Rebuild in-memory index, stats accumulator and prune frontier from persisted session entries
+    hydrateFromSession(ctx);
+
+    // Clear any batches queued before the session reload
+    pendingBatches.length = 0;
+
+    // Update footer status
+    setPruneStatusWidget(ctx, currentConfig.value, statsAccum.getStats());
+
+    // Toggle context_prune tool activation for agentic-auto mode
+    syncToolActivation();
+
+    if (currentConfig.value.showStartupNotice) {
+      ctx.ui.notify(
+        `pruner loaded — pruning ${currentConfig.value.enabled ? "ON" : "OFF"} | model: ${currentConfig.value.summarizerModel}`,
+        "info"
+      );
+    }
+  });
+
+  // Rebuild index and stats after tree navigation too (branch may have different history)
+  pi.on("session_tree", async (_event, ctx) => {
+    hydrateFromSession(ctx);
+    // Pending batches belong to the old branch — discard them
+    pendingBatches.length = 0;
+  });
+
+  // ── turn_end: capture batch, flush immediately or queue ──────────────────
+  pi.on("turn_end", async (event, ctx) => {
+    if (!currentConfig.value.enabled) return;
+
+    const hasToolResults = event.toolResults && event.toolResults.length > 0;
+
+    if (!hasToolResults) {
+      // Nothing to capture without results. In agent-message mode the flush is driven by
+      // message_end instead (any assistant message that carries text). In print mode, turn_end can
+      // fire after session shutdown, so do not start deferred LLM work from this late lifecycle event.
+      return;
+    }
+
+    const capturedBatch = captureBatch(
+      event.message,
+      event.toolResults,
+      branchTurnIndex(ctx, event.turnIndex),
+      Date.now()
+    );
+    const batch = trimBatchToPendingRange({
+      ...capturedBatch,
+      // Do not summarize the pruner's own housekeeping tool result. Otherwise
+      // agentic-auto mode can queue the context_prune result and try to flush it
+      // during agent_end, when Pi may already have invalidated the extension ctx.
+      toolCalls: capturedBatch.toolCalls.filter((tc) => tc.toolName !== CONTEXT_PRUNE_TOOL_NAME),
+    });
+    if (!batch) return;
+
+    pendingBatches.push(batch);
+
+    if (currentConfig.value.pruneOn === "every-turn") {
+      await flushFromHook(ctx, "session");
+    } else {
+      // Let the user know a batch is queued
+      const n = pendingBatches.length;
+      let trigger: string;
+      switch (currentConfig.value.pruneOn) {
+        case "on-context-tag":
+          trigger = "next context_checkpoint";
+          break;
+        case "agent-message":
+          trigger = "agent's next text response";
+          break;
+        case "agentic-auto":
+          trigger = "agent calling context_prune";
+          break;
+        default:
+          trigger = "/pruner now";
+          break;
+      }
+      if (currentConfig.value.showPruneStatusLine) {
+        setPruneStatusWidget(ctx, currentConfig.value, `prune: ${n} pending`);
+        safeNotify(
+          ctx,
+          `pruner: ${n} turn${n === 1 ? "" : "s"} queued — will summarize on ${trigger}`,
+          "info"
+        );
+      }
+    }
+  });
+
+  // ── tool_execution_end: flush when context_checkpoint (or legacy context_tag) fires ──
+  pi.on("tool_execution_end", async (event, ctx) => {
+    if (!(CONTEXT_TAG_TOOL_NAMES as readonly string[]).includes(event.toolName)) return;
+    if (!currentConfig.value.enabled) return;
+    if (currentConfig.value.pruneOn !== "on-context-tag") return;
+    await flushFromHook(ctx, "runtime");
+  });
+
+  // ── message_end: flush after the agent speaks in agent-message mode ──
+  // The message_end of an assistant message that carries text is the earliest reliable boundary
+  // where the agent has finished using the raw tool results of the batches before it. Tool calls
+  // riding along in that same message are still in flight and have no result in the session yet, so
+  // they cannot enter the captured range. flushPending captures the SessionManager
+  // before awaiting summarization so print-mode shutdown cannot invalidate the
+  // persistence path while the summarizer model is running.
+  pi.on("message_end", async (event, ctx) => {
+    if (!currentConfig.value.enabled) return;
+    if (currentConfig.value.pruneOn !== "agent-message") return;
+    if (!isAgentMessageTrigger(event.message)) return;
+    await flushFromHook(ctx, "session");
+  });
+
+  // ── agent_end: last-chance cleanup only ─────────────────────────────────────
+  // agent-message normally flushes on message_end. By agent_end, print-mode Pi may
+  // already be disposing the session, so avoid starting a best-effort LLM call here.
+  pi.on("agent_end", async (_event, ctx) => {
+    if (!currentConfig.value.enabled) return;
+    if (pendingBatches.length === 0) return;
+    setPruneStatusWidget(ctx, currentConfig.value, `prune: ${pendingBatches.length} pending`);
+  });
+
+  // ── context: prune summarized tool results from next LLM call ─────────────
+  pi.on("context", async (event, ctx) => {
+    if (!currentConfig.value.enabled) return undefined;
+
+    // A turn can start before our session_start handler has run (see hydrateFromSession).
+    if (!hydrated) hydrateFromSession(ctx);
+
+    const indexEmpty = indexer.getIndex().size === 0;
+    let messages = event.messages;
+    let changed = false;
+
+    if (!indexEmpty) {
+      const pruned = pruneMessages(messages, indexer);
+      if (pruned !== messages) {
+        messages = pruned;
+        changed = true;
+      }
+      const withSummaries = injectSummaryMessages(messages, ctx.sessionManager.getBranch());
+      if (withSummaries !== messages) {
+        messages = withSummaries;
+        changed = true;
+      }
+    }
+
+    // Append a small `<pruner-note>` to the last toolResult telling the model
+    // how many unpruned tool calls are sitting in context. Only active in
+    // agentic-auto mode (where the LLM itself decides when to call
+    // context_prune) and only when the user has the reminder enabled.
+    if (
+      currentConfig.value.pruneOn === "agentic-auto" &&
+      currentConfig.value.remindUnprunedCount
+    ) {
+      const count = countUnprunedToolCalls(messages, indexer);
+      if (count > 0) {
+        const annotated = annotateWithUnprunedCount(messages, count);
+        if (annotated !== messages) {
+          messages = annotated;
+          changed = true;
+        }
+      }
+    }
+
+    if (!changed) return undefined;
+    return { messages };
+  });
+
+  // ── before_agent_start: inject system prompt for agentic-auto mode ───────────
+  pi.on("before_agent_start", async (event, _ctx) => {
+    if (!currentConfig.value.enabled || currentConfig.value.pruneOn !== "agentic-auto") return undefined;
+    // Append agentic-auto instructions to the system prompt
+    const appended = AGENTIC_AUTO_SYSTEM_PROMPT;
+    const original = event.systemPrompt ?? "";
+    const newPrompt = original + "\n\n" + appended;
+    return { systemPrompt: newPrompt };
+  });
+
+  // ── Register context_tree_query tool ──────────────────────────────────────
+  registerQueryTool(pi, indexer);
+
+  // ── Register context_prune tool (always registered, activated only in agentic-auto mode) ──
+  registerContextPruneTool(pi, (ctx, options) => flushPending(ctx, { delivery: "runtime", ...options }));
+
+  // ── Register /pruner command + summary message renderer ────────────
+  registerCommands(pi, currentConfig, flushPending, capturePendingBatches, syncToolActivation, () => statsAccum.getStats(), indexer);
+}

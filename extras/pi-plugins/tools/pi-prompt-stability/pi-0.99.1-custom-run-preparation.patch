@@ -1,0 +1,430 @@
+diff --git a/packages/coding-agent/docs/extensions.md b/packages/coding-agent/docs/extensions.md
+index afc6447..4e9b8da 100644
+--- a/packages/coding-agent/docs/extensions.md
++++ b/packages/coding-agent/docs/extensions.md
+@@ -102,6 +102,8 @@ Events cover resource discovery, sessions, agent and message lifecycle, provider
+ 
+ `before_agent_start` exposes both the current prompt and its structured `systemPromptOptions`. Prefer changing prompt sections, selected tools, or guidelines so Pi can append a transcript delta. Returning `systemPrompt`, or setting `forceSystemPrompt`, replaces the whole prompt for that run while the transcript continues recording the structured sections. Providers receive the forced text as their leading system prompt.
+ 
++Every run start emits `before_agent_start`, including an idle custom message sent with `triggerTurn`. `event.trigger` is `prompt` for user input and `custom` for such a message; a custom run does not answer a pending user question.
++
+ `message_end` can replace a finalized message while preserving its role. `tool_call` can mutate input or block execution. `tool_result` handlers compose, with each handler seeing prior changes.
+ 
+ <a id="provider_stream_event"></a>
+diff --git a/packages/coding-agent/src/core/agent-session.ts b/packages/coding-agent/src/core/agent-session.ts
+index a1588ea..32cbe82 100644
+--- a/packages/coding-agent/src/core/agent-session.ts
++++ b/packages/coding-agent/src/core/agent-session.ts
+@@ -82,6 +82,7 @@ import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.
+ import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
+ import {
+ 	type AgentActivityOutcome,
++	type BeforeAgentStartEvent,
+ 	type BoundaryContextPreview,
+ 	type ContextUsage,
+ 	type ExecuteToolOptions,
+@@ -112,7 +113,7 @@ import {
+ 	type TurnStartEvent,
+ 	wrapRegisteredTools,
+ } from "./extensions/index.ts";
+-import { emitSessionShutdownEvent } from "./extensions/runner.ts";
++import { type BeforeAgentStartCombinedResult, emitSessionShutdownEvent } from "./extensions/runner.ts";
+ import { type BashExecutionMessage, type CustomMessage, convertToLlm } from "./messages.ts";
+ import { ModelRegistry } from "./model-registry.ts";
+ import type { ModelRuntime } from "./model-runtime.ts";
+@@ -1740,4 +1741,4 @@ export class AgentSession {
+-	private async _runAgentPrompt(messages: AgentMessage | AgentMessage[]): Promise<void> {
+-		this._agentRunAbortRequested = false;
++	private async _runAgentPrompt(messages: AgentMessage | AgentMessage[], prepared = false): Promise<void> {
++		if (!prepared) this._agentRunAbortRequested = false;
+ 		// Compaction before the prompt may have scheduled a retry; the new prompt replaces it.
+ 		this._failedResponse = undefined;
+@@ -1759,12 +1760,17 @@ export class AgentSession {
+ 		} finally {
+-			if (this._agentRunAbortRequested) this._finishCancelledRetry();
+-			this._failedResponse = undefined;
+-			this._runSystemPromptOptions = undefined;
+-			this._flushPendingBashMessages();
+-			this._flushPendingCustomMessages();
+-			await this._emitAgentSettled();
++			await this._finishAgentRun();
+ 		}
+ 	}
++
++	/** Release run preparation and execution through the same settlement path. */
++	private async _finishAgentRun(): Promise<void> {
++		if (this._agentRunAbortRequested) this._finishCancelledRetry();
++		this._failedResponse = undefined;
++		this._runSystemPromptOptions = undefined;
++		this._flushPendingBashMessages();
++		this._flushPendingCustomMessages();
++		await this._emitAgentSettled();
++	}
+ 
+ 	private async _handlePostAgentRun(): Promise<boolean> {
+ 		const message = this._lastAssistantMessage;
+@@ -1973,19 +1979,7 @@ export class AgentSession {
+ 
+ 		// Emit before_agent_start before normalizing images so extension-driven model
+ 		// selection determines the resize profile used for the request and history.
+-		const selectedToolsBefore = this._baseSystemPromptOptions.selectedTools;
+-		const result = await this._extensionRunner.emitBeforeAgentStart(
+-			expandedText,
+-			currentImages,
+-			this._baseSystemPromptOptions,
+-		);
+-		// Handlers may edit event.systemPromptOptions.selectedTools or call setActiveTools(),
+-		// which updates the live loadout instead. An explicit edit wins; otherwise the live
+-		// loadout is authoritative, so a setActiveTools() call is not undone here.
+-		const handlerEditedTools =
+-			result.systemPromptOptions.selectedTools.length !== selectedToolsBefore.length ||
+-			result.systemPromptOptions.selectedTools.some((name, index) => name !== selectedToolsBefore[index]);
+-		if (!handlerEditedTools) result.systemPromptOptions.selectedTools = this.getActiveToolNames();
++		const result = await this._emitBeforeAgentStart(expandedText, currentImages, "prompt");
+ 
+ 		const normalized = await this._normalizePromptImages(currentImages);
+ 		const userText = normalized.hints.length > 0 ? `${expandedText}\n\n${normalized.hints.join("\n")}` : expandedText;
+@@ -2005,21 +1999,7 @@ export class AgentSession {
+ 			messages.push(msg);
+ 		}
+ 		this._pendingNextTurnMessages = [];
+-
+-		for (const msg of result.messages) {
+-			messages.push({
+-				role: "custom",
+-				customType: msg.customType,
+-				// Untyped extensions can pass null/missing content; normalize at ingestion.
+-				content: msg.content ?? [],
+-				display: msg.display,
+-				details: msg.details,
+-				timestamp: Date.now(),
+-			});
+-		}
+-		const updateMessage = this._preparePromptAndToolLoadout(result.systemPromptOptions);
+-		this._runSystemPromptOptions = result.systemPromptOptions;
+-		if (updateMessage) messages.unshift(updateMessage);
++		this._applyAgentStart(result, messages);
+ 
+ 		preflightResult?.("started");
+ 		await this._runAgentPrompt(messages);
+@@ -2198,7 +2178,7 @@ export class AgentSession {
+ 	 * Handles four cases:
+ 	 * - Streaming: queues message, processed when loop pulls from queue
+ 	 * - Streaming + triggerTurn false: appended to state/session once the current turn ends
+-	 * - Not streaming + triggerTurn: appends to state/session, starts new turn
++	 * - Not streaming + triggerTurn: emits before_agent_start, then appends to state/session and starts a new turn
+ 	 * - Not streaming + no trigger: appends to state/session, no turn
+ 	 *
+ 	 * @param message Custom message with customType, content, display, details
+@@ -2228,10 +2208,10 @@ export class AgentSession {
+ 			}
+ 		} else if (options?.triggerTurn) {
+ 			if (this._isEmittingAgentSettled) {
+-				this._deferredSettledActions.push(async () => await this._runAgentPrompt(appMessage));
++				this._deferredSettledActions.push(async () => await this._runCustomMessageTurn(appMessage));
+ 				return;
+ 			}
+-			await this._runAgentPrompt(appMessage);
++			await this._runCustomMessageTurn(appMessage);
+ 		} else if (this.isStreaming) {
+ 			// Appending now would put the message between an assistant tool call and its
+ 			// result, which providers that validate message order reject on replay. Defer
+@@ -2255,6 +2235,77 @@ export class AgentSession {
+ 		this._emit({ type: "message_end", message: appMessage });
+ 	}
+ 
++	/**
++	 * Start a run from a custom message. It skips user-input processing but not run preparation:
++	 * without before_agent_start the run would fall back to the base prompt options, dropping
++	 * extension sections from the request and recording their removal in the transcript (#5581).
++	 */
++	private async _runCustomMessageTurn(appMessage: CustomMessage): Promise<void> {
++		// Mark the run active before awaiting handlers so a message arriving meanwhile is queued
++		// for this run instead of starting a second one.
++		this._agentRunAbortRequested = false;
++		this._isAgentRunActive = true;
++		let started = false;
++		const messages: AgentMessage[] = [appMessage];
++		try {
++			const images =
++				typeof appMessage.content === "string"
++					? []
++					: appMessage.content.filter((part): part is ImageContent => part.type === "image");
++			const result = await this._emitBeforeAgentStart(
++				contentText(appMessage.content),
++				images.length > 0 ? images : undefined,
++				"custom",
++			);
++			if (this._agentRunAbortRequested) return;
++			this._applyAgentStart(result, messages);
++			started = true;
++			await this._runAgentPrompt(messages, true);
++		} finally {
++			if (!started) await this._finishAgentRun();
++		}
++	}
++
++	private async _emitBeforeAgentStart(
++		prompt: string,
++		images: ImageContent[] | undefined,
++		trigger: BeforeAgentStartEvent["trigger"],
++	): Promise<BeforeAgentStartCombinedResult> {
++		const selectedToolsBefore = this._baseSystemPromptOptions.selectedTools;
++		const result = await this._extensionRunner.emitBeforeAgentStart(
++			prompt,
++			images,
++			this._baseSystemPromptOptions,
++			trigger,
++		);
++		// Handlers may edit event.systemPromptOptions.selectedTools or call setActiveTools(),
++		// which updates the live loadout instead. An explicit edit wins; otherwise the live
++		// loadout is authoritative, so a setActiveTools() call is not undone here.
++		const handlerEditedTools =
++			result.systemPromptOptions.selectedTools.length !== selectedToolsBefore.length ||
++			result.systemPromptOptions.selectedTools.some((name, index) => name !== selectedToolsBefore[index]);
++		if (!handlerEditedTools) result.systemPromptOptions.selectedTools = this.getActiveToolNames();
++		return result;
++	}
++
++	/** Add handler messages and the run's prompt delta to the messages that start the run. */
++	private _applyAgentStart(result: BeforeAgentStartCombinedResult, messages: AgentMessage[]): void {
++		for (const msg of result.messages) {
++			messages.push({
++				role: "custom",
++				customType: msg.customType,
++				// Untyped extensions can pass null/missing content; normalize at ingestion.
++				content: msg.content ?? [],
++				display: msg.display,
++				details: msg.details,
++				timestamp: Date.now(),
++			});
++		}
++		const updateMessage = this._preparePromptAndToolLoadout(result.systemPromptOptions);
++		this._runSystemPromptOptions = result.systemPromptOptions;
++		if (updateMessage) messages.unshift(updateMessage);
++	}
++
+ 	/**
+ 	 * Append custom messages queued while the agent was running.
+ 	 * Called once the current turn's tool results are in agent state and session history.
+diff --git a/packages/coding-agent/src/core/extensions/runner.ts b/packages/coding-agent/src/core/extensions/runner.ts
+index 59e1eb6..cc602c9 100644
+--- a/packages/coding-agent/src/core/extensions/runner.ts
++++ b/packages/coding-agent/src/core/extensions/runner.ts
+@@ -163,7 +163,7 @@ function isUserBashEventResult(value: unknown): value is UserBashEventResult {
+ }
+ 
+ /** Combined result from all before_agent_start handlers. */
+-interface BeforeAgentStartCombinedResult {
++export interface BeforeAgentStartCombinedResult {
+ 	messages: NonNullable<BeforeAgentStartEventResult["message"]>[];
+ 	systemPromptOptions: NormalizedBuildSystemPromptOptions;
+ }
+@@ -1412,6 +1412,7 @@ export class ExtensionRunner {
+ 		prompt: string,
+ 		images: ImageContent[] | undefined,
+ 		systemPromptOptions: BuildSystemPromptOptions,
++		trigger: BeforeAgentStartEvent["trigger"] = "prompt",
+ 	): Promise<BeforeAgentStartCombinedResult> {
+ 		const currentOptions = normalizeBuildSystemPromptOptions(systemPromptOptions);
+ 		const renderCurrentSystemPrompt = (): string => buildSystemPrompt(currentOptions);
+@@ -1430,6 +1431,7 @@ export class ExtensionRunner {
+ 				try {
+ 					const event: BeforeAgentStartEvent = {
+ 						type: "before_agent_start",
++						trigger,
+ 						prompt,
+ 						images,
+ 						get systemPrompt() {
+diff --git a/packages/coding-agent/src/core/extensions/types.ts b/packages/coding-agent/src/core/extensions/types.ts
+index ddbaa84..8454ba1 100644
+--- a/packages/coding-agent/src/core/extensions/types.ts
++++ b/packages/coding-agent/src/core/extensions/types.ts
+@@ -890,10 +890,16 @@ export interface ProviderStreamEvent {
+ 	data: unknown;
+ }
+ 
+-/** Fired after user submits prompt but before agent loop. */
++/** Fired before a user prompt or an idle custom-message run starts. */
+ export interface BeforeAgentStartEvent {
+ 	type: "before_agent_start";
+-	/** The raw user prompt text (after expansion). */
++	/**
++	 * What starts the run: `prompt` for user input (interactive, RPC, or sendUserMessage), `custom` for a
++	 * custom message sent with `triggerTurn`, such as a background completion notice. A `custom` run is not
++	 * a reply from the user.
++	 */
++	trigger: "prompt" | "custom";
++	/** The raw user prompt text (after expansion), or the text of the triggering custom message. */
+ 	prompt: string;
+ 	/** Images attached to the user prompt, if any. */
+ 	images?: ImageContent[];
+diff --git a/packages/coding-agent/test/suite/regressions/5581-custom-message-run-preparation.test.ts b/packages/coding-agent/test/suite/regressions/5581-custom-message-run-preparation.test.ts
+new file mode 100644
+index 0000000..793a533
+--- /dev/null
++++ b/packages/coding-agent/test/suite/regressions/5581-custom-message-run-preparation.test.ts
+@@ -0,0 +0,163 @@
++import {
++	fauxAssistantMessage,
++	getCurrentSystemPrompt,
++	getInitialSystemMessage,
++	getSystemMessageText,
++	type TranscriptContext,
++} from "@earendil-works/pi-ai";
++import { afterEach, describe, expect, it } from "vitest";
++import type { BeforeAgentStartEvent, ExtensionFactory } from "../../../src/index.ts";
++import { createHarness, type Harness } from "../harness.ts";
++
++const POLICY = "Remember the policy.";
++
++// Adds a named section on every run, as memory and date extensions do.
++function sectionExtension(triggers: BeforeAgentStartEvent["trigger"][]): ExtensionFactory {
++	return (pi) => {
++		pi.on("before_agent_start", (event) => {
++			triggers.push(event.trigger);
++			event.systemPromptOptions.sections.policy = POLICY;
++		});
++	};
++}
++
++function recordRequests(harness: Harness, count: number): TranscriptContext[] {
++	const requests: TranscriptContext[] = [];
++	harness.setResponses(
++		Array.from({ length: count }, (_, index) => (context: TranscriptContext) => {
++			requests.push(context);
++			return fauxAssistantMessage(`reply ${index}`);
++		}),
++	);
++	return requests;
++}
++
++function leadingPrompt(context: TranscriptContext): string {
++	const initial = getInitialSystemMessage(context.messages);
++	return initial ? getSystemMessageText(initial) : "";
++}
++
++const notice = { customType: "completion", content: "background task finished", display: true };
++
++describe("#5581 custom-message runs go through run preparation", () => {
++	const harnesses: Harness[] = [];
++
++	afterEach(() => {
++		while (harnesses.length > 0) harnesses.pop()?.cleanup();
++	});
++
++	it("keeps extension sections for an idle wake between user prompts", async () => {
++		const triggers: BeforeAgentStartEvent["trigger"][] = [];
++		const harness = await createHarness({ extensionFactories: [sectionExtension(triggers)] });
++		harnesses.push(harness);
++		const requests = recordRequests(harness, 3);
++
++		await harness.session.prompt("first");
++		await harness.session.sendCustomMessage(notice, { deliverAs: "followUp", triggerTurn: true });
++		await harness.session.prompt("second");
++
++		expect(triggers).toEqual(["prompt", "custom", "prompt"]);
++		expect(requests).toHaveLength(3);
++		for (const request of requests) {
++			expect(getCurrentSystemPrompt(request.messages)).toContain(POLICY);
++			expect(leadingPrompt(request)).toBe(leadingPrompt(requests[0]!));
++		}
++		// Without preparation the wake recorded the section's removal and the next prompt re-added it.
++		const patches = harness.session.messages.flatMap((message) =>
++			message.role === "system" && message.sections ? [message.sections] : [],
++		);
++		expect(patches.some((sections) => sections.policy === null)).toBe(false);
++	});
++
++	it("drops a section its extension stopped writing before an idle wake", async () => {
++		let enabled = true;
++		const harness = await createHarness({
++			extensionFactories: [
++				(pi) => {
++					pi.on("before_agent_start", (event) => {
++						if (enabled) event.systemPromptOptions.sections.plan_mode = "Plan only.";
++					});
++				},
++			],
++		});
++		harnesses.push(harness);
++		const requests = recordRequests(harness, 2);
++
++		await harness.session.prompt("plan");
++		enabled = false;
++		await harness.session.sendCustomMessage(notice, { deliverAs: "followUp", triggerTurn: true });
++
++		expect(getCurrentSystemPrompt(requests[0]!.messages)).toContain("Plan only.");
++		expect(getCurrentSystemPrompt(requests[1]!.messages)).not.toContain("Plan only.");
++	});
++
++	it("prepares the first run of a fresh session when a custom message starts it", async () => {
++		const triggers: BeforeAgentStartEvent["trigger"][] = [];
++		const harness = await createHarness({ extensionFactories: [sectionExtension(triggers)] });
++		harnesses.push(harness);
++		const requests = recordRequests(harness, 1);
++
++		await harness.session.sendCustomMessage(notice, { triggerTurn: true });
++
++		expect(triggers).toEqual(["custom"]);
++		expect(getCurrentSystemPrompt(requests[0]!.messages)).toContain(POLICY);
++		expect(getCurrentSystemPrompt(requests[0]!.messages)).toContain(harness.session.systemPrompt);
++	});
++
++	it("prepares a wake deferred while agent_settled handlers run", async () => {
++		const triggers: BeforeAgentStartEvent["trigger"][] = [];
++		let woke = false;
++		const harness = await createHarness({
++			extensionFactories: [
++				sectionExtension(triggers),
++				(pi) => {
++					pi.on("agent_settled", () => {
++						if (woke) return;
++						woke = true;
++						void pi.sendMessage(notice, { deliverAs: "followUp", triggerTurn: true });
++					});
++				},
++			],
++		});
++		harnesses.push(harness);
++		const requests = recordRequests(harness, 2);
++
++		await harness.session.prompt("first");
++		await harness.session.waitForIdle();
++
++		expect(triggers).toEqual(["prompt", "custom"]);
++		expect(requests).toHaveLength(2);
++		expect(getCurrentSystemPrompt(requests[1]!.messages)).toContain(POLICY);
++	});
++
++	it("queues a second wake that arrives while the first is being prepared", async () => {
++		let release: (() => void) | undefined;
++		const gate = new Promise<void>((resolve) => {
++			release = resolve;
++		});
++		const harness = await createHarness({
++			extensionFactories: [
++				(pi) => {
++					pi.on("before_agent_start", async () => {
++						await gate;
++					});
++				},
++			],
++		});
++		harnesses.push(harness);
++		const requests = recordRequests(harness, 2);
++
++		const first = harness.session.sendCustomMessage(notice, { deliverAs: "followUp", triggerTurn: true });
++		const second = harness.session.sendCustomMessage(
++			{ ...notice, content: "second task finished" },
++			{ deliverAs: "followUp", triggerTurn: true },
++		);
++		release?.();
++		await Promise.all([first, second]);
++		await harness.session.waitForIdle();
++
++		const custom = harness.session.messages.filter((message) => message.role === "custom");
++		expect(custom.map((message) => message.content)).toEqual(["background task finished", "second task finished"]);
++		expect(requests).toHaveLength(2);
++	});
++});

@@ -1,0 +1,69 @@
+diff --git a/src/main.rs b/src/main.rs
+index 2183918..ca8a674 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -449,6 +449,8 @@ fn handle_look(args: &Value) -> Result<Value, ProtocolError> {
+     }
+     if let Some(scope_ref) = scope_ref.as_deref() {
+         outline = scoped_outline_root(outline, scope_ref);
++    } else {
++        bind_outline_root(&root_ref, &look_id, &elements, &mut element_records);
+     }
+     if let Some(base) = base_look.as_ref() {
+         element_records.extend(base.elements.clone());
+@@ -503,6 +505,26 @@ fn handle_look(args: &Value) -> Result<Value, ProtocolError> {
+     Ok(response)
+ }
+ 
++// The outer window node and its real UIA root share an observed identity.
++// Bind after attaching retained UIA objects so raw window input uses the same
++// foreground, visibility and occlusion checks as other observed elements.
++fn bind_outline_root(
++    root_ref: &str,
++    look_id: &str,
++    elements: &[Value],
++    records: &mut HashMap<String, ElementRecord>,
++) {
++    if let Some(element) = elements
++        .first()
++        .and_then(|raw| raw.get("ref"))
++        .and_then(Value::as_str)
++        .and_then(|reference| records.get(&format!("win:{look_id}:{reference}")))
++        .cloned()
++    {
++        records.insert(root_ref.to_owned(), element);
++    }
++}
++
+ #[allow(clippy::too_many_arguments)]
+ fn outline_from_elements(
+     root_ref: &str,
+@@ -1606,6 +1628,28 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn window_outline_root_resolves_to_the_observed_uia_root() {
++        let raw = json!({ "ref": "@e1", "role": "window", "runtimeId": [42, 7],
++            "bounds": { "x": 0, "y": 0, "width": 100, "height": 100 } });
++        let (_, mut records) = outline_from_elements(
++            "@w1", "look-1", "window", &root(1, 1, "Window", true),
++            &[raw.clone()], 0.0, 0.0, 100.0, 100.0, 100.0, 100.0,
++        );
++        bind_outline_root("@w1", "look-1", &[raw], &mut records);
++        let element = records.get("@w1").expect("outer window must be actionable");
++        assert_eq!(element.hwnd, 1);
++        assert_eq!(element.runtime_id, vec![42, 7]);
++        assert!(records.contains_key("win:look-1:@e1"));
++    }
++
++    #[test]
++    fn window_without_observed_uia_root_does_not_invent_an_element() {
++        let mut records = HashMap::new();
++        bind_outline_root("@w1", "look-1", &[], &mut records);
++        assert!(records.is_empty());
++    }
++
+     #[test]
+     fn outline_nesting_uses_native_parentage() {
+         let nodes = vec![

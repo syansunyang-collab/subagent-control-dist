@@ -1,0 +1,117 @@
+diff --git a/src/bridge.ts b/src/bridge.ts
+--- a/src/bridge.ts
++++ b/src/bridge.ts
+@@ -80,6 +80,7 @@
+ 		nativeWindowRef?: string;
+ 	};
+ 	capture: {
++		captureMethod?: NonNullable<LookResponse["image"]>["captureMethod"];
+ 		stateId: string;
+ 		width: number;
+ 		height: number;
+@@ -962,7 +963,7 @@
+ 	};
+ }
+ 
+-async function performLook(target: ResolvedTarget, options: { readText: "auto" | "always" | "never"; baseLookId?: string; scopeRef?: string; maxDimension?: number; includeImage?: boolean }, signal?: AbortSignal): Promise<LookResponse> {
++async function performLook(target: ResolvedTarget, options: { readText: "auto" | "always" | "never"; baseLookId?: string; scopeRef?: string; maxDimension?: number; includeImage?: boolean; includeElements?: boolean }, signal?: AbortSignal): Promise<LookResponse> {
+ 	if ((!Number.isFinite(target.windowId) || target.windowId <= 0) && !target.nativeWindowRef) throw new Error(`Current platform requires a stable root id to observe '${target.windowTitle}'. Call find_roots and select a root with a stable id.`);
+ 	return await currentPlatformBackend.observe({
+ 		target: nativeWindowRequest(target),
+@@ -971,6 +972,7 @@
+ 		scopeRef: options.scopeRef,
+ 		maxDimension: options.maxDimension,
+ 		includeImage: options.includeImage,
++		includeElements: options.includeElements,
+ 	}, { signal, timeoutMs: LOOK_TIMEOUT_MS });
+ }
+ 
+@@ -983,13 +985,13 @@
+ 	};
+ }
+ 
+-async function captureCurrentTarget(signal?: AbortSignal, readText: "auto" | "always" | "never" = "auto", maxDimension = AUTO_IMAGE_MAX_DIMENSION, targetOverride?: ResolvedTarget, includeImage = true): Promise<CaptureResult> {
++async function captureCurrentTarget(signal?: AbortSignal, readText: "auto" | "always" | "never" = "auto", maxDimension = AUTO_IMAGE_MAX_DIMENSION, targetOverride?: ResolvedTarget, includeImage = true, includeElements = true): Promise<CaptureResult> {
+ 	const state = operationState();
+ 	const baseOutline = state.currentOutline;
+ 	const baseTarget = state.currentTarget;
+ 	let target = targetOverride ?? await resolveCurrentTarget(signal);
+ 	target = await ensureTargetWindowId(target, signal);
+-	const look = await performLook(target, { maxDimension, readText, includeImage }, signal);
++	const look = await performLook(target, { maxDimension, readText, includeImage, includeElements }, signal);
+ 	const outline = stabilizeRefs(baseTarget && sameRootIdentity(baseTarget, target) ? baseOutline : undefined, look.parsedOutline!);
+ 	look.parsedOutline = outline;
+ 	look.outline = outline.root;
+@@ -1041,6 +1043,7 @@
+ 			nativeWindowRef: result.target.nativeWindowRef ?? state.currentTarget?.nativeWindowRef,
+ 		},
+ 		capture: {
++			captureMethod: result.look.image?.captureMethod,
+ 			stateId: result.capture.stateId,
+ 			width: result.capture.width,
+ 			height: result.capture.height,
+@@ -1630,7 +1633,7 @@
+ 	const scheduled = await resourceScheduler.read(resourceKey, async (epoch) => {
+ 		state.resourceKey = resourceKey;
+ 		state.epoch = epoch;
+-		return await captureCurrentTarget(signal, readText, imageMode === "always" ? EXPLICIT_IMAGE_MAX_DIMENSION : AUTO_IMAGE_MAX_DIMENSION, requestedTarget, imageMode !== "never");
++		return await captureCurrentTarget(signal, readText, imageMode === "always" ? EXPLICIT_IMAGE_MAX_DIMENSION : AUTO_IMAGE_MAX_DIMENSION, requestedTarget, imageMode !== "never", currentPlatformBackend.name !== "windows" || mode !== "visual");
+ 	});
+ 	const captureResult = scheduled.value;
+ 	// Model @r refs are re-minted on re-resolution, so ref string equality
+@@ -1975,7 +1978,11 @@
+ 			} else {
+ 				await sleep(settleMsForExecution(execution), signal);
+ 			}
+-			const capture = await captureCurrentTarget(signal, "auto", AUTO_IMAGE_MAX_DIMENSION, target);
++			const visualOnly = currentPlatformBackend.name === "windows" && look.parsedOutline!.root.pictureOnly;
++			const maxDimension = visualOnly && look.image
++				? Math.max(look.image.width, look.image.height)
++				: AUTO_IMAGE_MAX_DIMENSION;
++			const capture = await captureCurrentTarget(signal, "auto", maxDimension, target, true, !visualOnly);
+ 			execution.outcome = outcomeAfterObservedValues(execution.outcome ?? "unknown", executedActions, (ref) => nodeByRef(capture.outline, ref)?.value);
+ 			for (const action of executedActions) {
+ 				state.currentNote = noteAfterAct(state.currentNote ?? noteBefore, action.ref, capture.outline, { window: noteWindowForTarget(capture.target, capture.look), rootDelta: execution.rootDelta });
+diff --git a/src/platform/types.ts b/src/platform/types.ts
+--- a/src/platform/types.ts
++++ b/src/platform/types.ts
+@@ -142,6 +142,8 @@
+ 	scopeRef?: string;
+ 	maxDimension?: number;
+ 	includeImage?: boolean;
++	/** Windows visual snapshots omit UIA extraction; other observations default to including it. */
++	includeElements?: boolean;
+ }
+ 
+ export type PlatformActTarget = { ref: string } | { x: number; y: number } | { focus: PlatformPoint };
+diff --git a/src/platform/windows/backend.ts b/src/platform/windows/backend.ts
+--- a/src/platform/windows/backend.ts
++++ b/src/platform/windows/backend.ts
+@@ -119,7 +119,7 @@
+ 		return await windowsHelper.command<PlatformFocusWindowResult>("focusWindow", { ...target }, { signal });
+ 	},
+ 	async observe(request: PlatformObserveRequest, options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<LookResponse> {
+-		return parseLookResponse(await windowsHelper.command("look", { ...request.target, baseLookId: request.baseLookId, maxDimension: request.maxDimension, readText: request.readText, scopeRef: request.scopeRef, includeImage: request.includeImage }, options));
++		return parseLookResponse(await windowsHelper.command("look", { ...request.target, baseLookId: request.baseLookId, maxDimension: request.maxDimension, readText: request.readText, scopeRef: request.scopeRef, includeImage: request.includeImage, includeElements: request.includeElements }, options));
+ 	},
+ 	async act(request: PlatformActRequest, options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<HelperActResult> {
+ 		return await windowsHelper.command<HelperActResult>("act", helperAction(request), options);
+diff --git a/src/outline.ts b/src/outline.ts
+--- a/src/outline.ts
++++ b/src/outline.ts
+@@ -53,6 +53,7 @@
+ }
+ 
+ export interface LookImage {
++	captureMethod?: "window" | "screen-region";
+ 	jpegBase64: string;
+ 	mimeType?: "image/jpeg" | "image/png";
+ 	width: number;
+@@ -231,6 +232,7 @@
+ 			subrole: toString(window.subrole),
+ 		},
+ 		image: image ? {
++			captureMethod: image.captureMethod === "window" || image.captureMethod === "screen-region" ? image.captureMethod : undefined,
+ 			jpegBase64: toString(image.jpegBase64),
+ 			mimeType: image.mimeType === "image/png" ? "image/png" : "image/jpeg",
+ 			width: Math.max(1, Math.trunc(toNumber(image.width, 1))),

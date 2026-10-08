@@ -1,0 +1,20 @@
+diff --git a/src/main.rs b/src/main.rs
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -817,7 +817,15 @@
+                     .get("preserveFocus")
+                     .and_then(Value::as_bool)
+                     .unwrap_or(false);
+-                if !preserve_focus {
++                if preserve_focus {
++                    #[cfg(windows)]
++                    if unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize } != record.hwnd {
++                        return Err(ProtocolError::new(
++                            "The observed window is no longer foreground; focused input was not sent. Make the target foreground and observe it again before retrying.",
++                            ErrorCode::ForegroundRequired,
++                        ));
++                    }
++                } else {
+                     window::ensure_foreground(record.hwnd)?;
+                 }
+                 input::act(&executable)

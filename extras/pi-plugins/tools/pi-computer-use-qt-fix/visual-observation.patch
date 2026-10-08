@@ -1,0 +1,358 @@
+diff --git a/src/main.rs b/src/main.rs
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -351,6 +351,10 @@
+         .to_owned();
+     let kind = root.get("kind").and_then(Value::as_str).unwrap_or("window");
+     let is_outline_only = kind == "menu" || !include_image;
++    let include_elements = is_outline_only || scope_ref.is_some() || args
++        .get("includeElements")
++        .and_then(Value::as_bool)
++        .unwrap_or(true);
+     let frame = root
+         .get("framePoints")
+         .cloned()
+@@ -364,18 +368,22 @@
+     let mut elements = Vec::new();
+     let mut image_w = fw;
+     let mut image_h = fh;
++    let mut gdi_png_ms = 0;
++    let mut uia_ms;
+ 
+     let capture_started = Instant::now();
+     if !is_outline_only {
+         let wref = windows_bridge::refs::WindowRef::parse(&root_ref)
+             .ok_or_else(|| invalid(format!("Invalid root ref '{root_ref}'")))?;
+-        let shot = capture::screenshot(&mut store, &wref, scope_ref.is_none(), max_dimension)?;
++        let shot = capture::screenshot(&mut store, &wref, include_elements && scope_ref.is_none(), max_dimension)?;
++        gdi_png_ms = shot["timings"]["imageMs"].as_u64().unwrap_or(0);
++        uia_ms = shot["timings"]["uiaMs"].as_u64().unwrap_or(0);
+         if let Some(capture) = shot.get("capture") {
+             image_w = number_at(capture, "width", fw).max(1.0);
+             image_h = number_at(capture, "height", fh).max(1.0);
+             if let Some(encoded) = capture.get("imageBase64").and_then(Value::as_str) {
+                 image_payload = Some(
+-                    json!({ "jpegBase64": encoded, "mimeType": "image/png", "width": image_w, "height": image_h }),
++                    json!({ "jpegBase64": encoded, "mimeType": "image/png", "width": image_w, "height": image_h, "captureMethod": capture.get("captureMethod").cloned().unwrap_or(Value::Null) }),
+                 );
+             }
+         }
+@@ -385,6 +393,7 @@
+             .cloned()
+             .unwrap_or_default();
+     } else {
++        let uia_started = Instant::now();
+         #[cfg(windows)]
+         {
+             if let Some(wref) = windows_bridge::refs::WindowRef::parse(&root_ref) {
+@@ -395,6 +404,7 @@
+                 }
+             }
+         }
++        uia_ms = uia_started.elapsed().as_millis() as u64;
+     }
+ 
+     let capture_ms = capture_started.elapsed().as_millis() as u64;
+@@ -414,6 +424,7 @@
+                 ErrorCode::StaleRef,
+             ));
+         }
++        let uia_started = Instant::now();
+         elements = windows_bridge::uia::extract_elements_from(
+             &mut store,
+             scope.hwnd,
+@@ -422,6 +433,7 @@
+             scope.retained.as_ref(),
+         )
+         .map_err(stale_ref_from_uia)?;
++        uia_ms += uia_started.elapsed().as_millis() as u64;
+         base_look = Some(owning_look);
+     }
+ 
+@@ -449,8 +461,10 @@
+     }
+     if let Some(scope_ref) = scope_ref.as_deref() {
+         outline = scoped_outline_root(outline, scope_ref);
++    } else if include_elements {
++        bind_outline_root(&root_ref, &look_id, &elements, &mut element_records);
+     } else {
+-        bind_outline_root(&root_ref, &look_id, &elements, &mut element_records);
++        outline["pictureOnly"] = json!(true);
+     }
+     if let Some(base) = base_look.as_ref() {
+         element_records.extend(base.elements.clone());
+@@ -493,7 +507,7 @@
+             "subrole": root.get("subrole").and_then(Value::as_str).unwrap_or("")
+         },
+         "outline": outline,
+-        "timings": { "captureMs": capture_ms, "describeMs": describe_ms, "readTextMs": 0, "totalMs": started_at.elapsed().as_millis() as u64 },
++        "timings": { "captureMs": capture_ms, "gdiPngMs": gdi_png_ms, "uiaMs": uia_ms, "describeMs": describe_ms, "readTextMs": 0, "totalMs": started_at.elapsed().as_millis() as u64 },
+         "readText": { "requested": read_text, "executed": false }
+     });
+     if let Some(metadata) = root.get("metadata") {
+diff --git a/src/capture.rs b/src/capture.rs
+--- a/src/capture.rs
++++ b/src/capture.rs
+@@ -1,10 +1,10 @@
+ //! GDI screenshot capture for Windows.
+ //!
+-//! Captures window content via GDI (PrintWindow) on Windows.
++//! Captures foreground window regions from the screen and background windows via PrintWindow.
+ //! On non-Windows platforms all entry points return a deterministic
+ //! `unsupported_platform` error.
+ //!
+-//! Selected-window capture only. Desktop capture is not implemented. DXGI and
++//! Selected-window regions only. Whole-desktop capture is not implemented. DXGI and
+ //! Windows Graphics Capture are not used.
+ 
+ use serde_json::Value;
+@@ -92,7 +92,7 @@
+ #[cfg(windows)]
+ use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS};
+ #[cfg(windows)]
+-use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsIconic};
++use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect, IsIconic};
+ 
+ #[cfg(windows)]
+ fn screenshot_impl(
+@@ -155,9 +155,11 @@
+     // SAFETY: All GDI objects are created and destroyed within this
+     // function.  Object lifetimes follow the Acquire → Use → Release
+     // pattern with proper cleanup on every error path.
+-    let (png_base64, output_width, output_height) =
++    let image_started = std::time::Instant::now();
++    let (png_base64, output_width, output_height, capture_method) =
+         unsafe { gdi_capture_to_base64(hwnd, x, y, width, height, max_dimension) }?;
+ 
++    let image_ms = image_started.elapsed().as_millis() as u64;
+     let state_id = StateId::fresh("s");
+ 
+     // Build the base response.
+@@ -171,11 +173,13 @@
+             "height": output_height,
+             "imageFormat": "png",
+             "imageBase64": png_base64,
++            "captureMethod": capture_method,
+         },
+         "warnings": warnings,
+     });
+ 
+     // 5. Optionally extract UIA accessibility elements.
++    let uia_started = std::time::Instant::now();
+     if include_elements {
+         let elements = crate::uia::extract_elements(store, hwnd.0 as isize);
+         if !elements.is_empty() {
+@@ -184,6 +188,10 @@
+             }
+         }
+     }
++    result["timings"] = json!({
++        "imageMs": image_ms,
++        "uiaMs": if include_elements { uia_started.elapsed().as_millis() as u64 } else { 0 },
++    });
+ 
+     Ok(result)
+ }
+@@ -201,7 +209,7 @@
+     width: i32,
+     height: i32,
+     max_dimension: Option<u32>,
+-) -> Result<(String, u32, u32), ProtocolError> {
++) -> Result<(String, u32, u32, &'static str), ProtocolError> {
+     // Acquire the window DC.
+     let hdc_window = GetDC(hwnd);
+     if hdc_window.is_invalid() {
+@@ -232,12 +240,9 @@
+     // Select bitmap into memory DC (save old to restore later).
+     let old_bitmap = SelectObject(hdc_mem, hbitmap);
+ 
+-    // Render the window content using PrintWindow (client area).
+-    let pw_ok = PrintWindow(hwnd, hdc_mem, PRINT_WINDOW_FLAGS(0));
+-    if !pw_ok.as_bool() {
+-        // PrintWindow can fail for various reasons.  We note it but
+-        // continue — the DC might still have partial content.
+-    }
++    // GPU-backed foreground viewports are captured from their actual screen region.
++    // Background observations use only PrintWindow; failure never reads screen pixels.
++    let prefer_screen = GetForegroundWindow() == hwnd;
+ 
+     // Prepare BITMAPINFO for GetDIBits (request 32-bit BGRA top-down).
+     let header = BITMAPINFOHEADER {
+@@ -253,7 +258,7 @@
+         biClrUsed: 0,
+         biClrImportant: 0,
+     };
+-    let mut bmi = BITMAPINFO {
++    let bmi = BITMAPINFO {
+         bmiHeader: header,
+         ..Default::default()
+     };
+@@ -262,45 +267,36 @@
+     let buf_size = (width as usize) * (height as usize) * 4;
+     let mut bits: Vec<u8> = vec![0u8; buf_size];
+ 
+-    let mut dib_ok = GetDIBits(
+-        hdc_mem,
+-        hbitmap,
+-        0,
+-        height as u32,
+-        Some(bits.as_mut_ptr() as *mut std::ffi::c_void),
+-        &mut bmi,
+-        DIB_RGB_COLORS,
++    let captured = capture_selected_pixels(
++        prefer_screen,
++        &mut bits,
++        |bits| {
++            // Recheck before reading the screen in case focus changed during setup.
++            if GetForegroundWindow() != hwnd {
++                return false;
++            }
++            let screen_dc = GetDC(HWND(std::ptr::null_mut()));
++            if screen_dc.is_invalid() {
++                return false;
++            }
++            let mut bmi = bmi;
++            let ok = BitBlt(
++                hdc_mem, 0, 0, width, height, screen_dc, window_x, window_y, SRCCOPY,
++            ).is_ok() && GetDIBits(
++                hdc_mem, hbitmap, 0, height as u32,
++                Some(bits.as_mut_ptr() as *mut std::ffi::c_void), &mut bmi, DIB_RGB_COLORS,
++            ) != 0;
++            ReleaseDC(HWND(std::ptr::null_mut()), screen_dc);
++            ok && GetForegroundWindow() == hwnd
++        },
++        |bits| {
++            let mut bmi = bmi;
++            PrintWindow(hwnd, hdc_mem, PRINT_WINDOW_FLAGS(0)).as_bool() && GetDIBits(
++                hdc_mem, hbitmap, 0, height as u32,
++                Some(bits.as_mut_ptr() as *mut std::ffi::c_void), &mut bmi, DIB_RGB_COLORS,
++            ) != 0
++        },
+     );
+-
+-    // PrintWindow frequently returns a successful but black bitmap for GPU
+-    // surfaces (Chromium/Electron). Fall back to the compositor-visible screen
+-    // pixels only when the semantic capture failed or is effectively blank.
+-    let print_window_blank = bits
+-        .chunks_exact(4)
+-        .step_by(97)
+-        .all(|pixel| pixel[0] < 8 && pixel[1] < 8 && pixel[2] < 8);
+-    if !pw_ok.as_bool() || dib_ok == 0 || print_window_blank {
+-        let screen_dc = GetDC(HWND(std::ptr::null_mut()));
+-        if !screen_dc.is_invalid()
+-            && BitBlt(
+-                hdc_mem, 0, 0, width, height, screen_dc, window_x, window_y, SRCCOPY,
+-            )
+-            .is_ok()
+-        {
+-            dib_ok = GetDIBits(
+-                hdc_mem,
+-                hbitmap,
+-                0,
+-                height as u32,
+-                Some(bits.as_mut_ptr() as *mut std::ffi::c_void),
+-                &mut bmi,
+-                DIB_RGB_COLORS,
+-            );
+-        }
+-        if !screen_dc.is_invalid() {
+-            ReleaseDC(HWND(std::ptr::null_mut()), screen_dc);
+-        }
+-    }
+ 
+     // Restore old bitmap and destroy GDI objects.
+     SelectObject(hdc_mem, old_bitmap);
+@@ -308,16 +304,12 @@
+     let _ = DeleteDC(hdc_mem);
+     ReleaseDC(hwnd, hdc_window);
+ 
+-    if dib_ok == 0 {
+-        return Err(ProtocolError::new(
+-            "GetDIBits failed to retrieve bitmap data",
+-            ErrorCode::CaptureFailed,
+-        ));
+-    }
++    let capture_method = captured?;
+ 
+     // Convert BGRA → RGBA (GDI returns B,G,R,A; PNG expects R,G,B,A).
+     for chunk in bits.chunks_exact_mut(4) {
+         chunk.swap(0, 2);
++        chunk[3] = 255;
+     }
+ 
+     let source_width = width as u32;
+@@ -365,7 +357,35 @@
+     }
+ 
+     // Base64-encode the PNG bytes.
+-    Ok((BASE64.encode(&png_data), output_width, output_height))
++    Ok((BASE64.encode(&png_data), output_width, output_height, capture_method))
++}
++
++// Choose one capture source. Screen pixels cannot substitute for a background window.
++#[cfg(any(windows, test))]
++fn capture_selected_pixels(
++    foreground: bool,
++    bits: &mut [u8],
++    capture_screen: impl FnOnce(&mut [u8]) -> bool,
++    capture_window: impl FnOnce(&mut [u8]) -> bool,
++) -> Result<&'static str, ProtocolError> {
++    if foreground {
++        if capture_screen(bits) {
++            return Ok("screen-region");
++        }
++        return Err(ProtocolError::new(
++            "Foreground screen-region capture failed or target lost focus",
++            ErrorCode::CaptureFailed,
++        ));
++    }
++    if !capture_window(bits) || bits.chunks_exact(4).step_by(97)
++        .all(|pixel| pixel[0] < 8 && pixel[1] < 8 && pixel[2] < 8)
++    {
++        return Err(ProtocolError::new(
++            "Background PrintWindow capture failed or returned a near-black image",
++            ErrorCode::CaptureFailed,
++        ));
++    }
++    Ok("window")
+ }
+ 
+ // ---------------------------------------------------------------------------
+@@ -379,6 +399,37 @@
+     #[cfg(windows)]
+     use crate::refs::NativeHandle;
+     use crate::state::StateId;
++
++    #[test]
++    fn background_failure_never_reads_screen_pixels() {
++        for (print_ok, value) in [(false, 32), (true, 0), (true, 7)] {
++            let mut pixels = vec![value; 400];
++            let result = capture_selected_pixels(false, &mut pixels,
++                |_| panic!("background capture must not read the screen"),
++                |_| print_ok);
++            assert_eq!(result.unwrap_err().code, ErrorCode::CaptureFailed);
++        }
++    }
++
++    #[test]
++    fn background_success_uses_only_print_window() {
++        let mut pixels = vec![0; 400];
++        let result = capture_selected_pixels(false, &mut pixels,
++            |_| panic!("background capture must not read the screen"),
++            |bits| { bits.fill(32); true });
++        assert_eq!(result.unwrap(), "window");
++    }
++
++    #[test]
++    fn foreground_uses_screen_region_without_print_window() {
++        let mut pixels = vec![0; 400];
++        let result = capture_selected_pixels(true, &mut pixels, |_| true,
++            |_| panic!("foreground capture must not invoke PrintWindow"));
++        assert_eq!(result.unwrap(), "screen-region");
++        let result = capture_selected_pixels(true, &mut pixels, |_| false,
++            |_| panic!("failed screen capture must not fall back"));
++        assert_eq!(result.unwrap_err().code, ErrorCode::CaptureFailed);
++    }
+ 
+     // -- Platform support check (non-Windows) -------------------------------
+ 

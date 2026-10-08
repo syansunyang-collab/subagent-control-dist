@@ -1,0 +1,49 @@
+--- a/lib/agy-children.ts
++++ b/lib/agy-children.ts
+@@ -12,3 +12,5 @@
+- * Children are spawned detached (own process group), so one negative-pid
+- * SIGKILL (or taskkill /T on Windows) reaps the whole tree, and exit/SIGHUP
+- * hooks sweep every tracked group synchronously before the process goes away.
++ * POSIX children are spawned detached (own process group), so one negative-pid
++ * SIGKILL reaps the whole tree. Windows children stay attached to the host
++ * process context so PowerShell grandchildren do not open visible windows;
++ * taskkill /T still reaps their whole tree. Exit/SIGHUP hooks sweep every
++ * tracked process synchronously before the host goes away.
+@@ -78 +80 @@
+-/** Send a signal to a detached process tree without removing it from tracking. */
++/** Send a signal to a tracked process tree without removing it from tracking. */
+--- a/lib/agy-client.ts
++++ b/lib/agy-client.ts
+@@ -161,3 +161,5 @@
+-      // Own process group so one negative-pid SIGKILL reaps agy's whole
+-      // tree on timeout/abort instead of leaving grandchildren running.
+-      detached: true,
++      // POSIX needs an independent process group for negative-pid cleanup.
++      // Windows uses taskkill /T and must stay attached to the host process
++      // context so agy's PowerShell grandchildren do not open windows.
++      detached: process.platform !== "win32",
++      windowsHide: true,
+--- a/lib/agy-diagnostics.ts
++++ b/lib/agy-diagnostics.ts
+@@ -229 +229 @@
+-      detached: true,
++      detached: process.platform !== "win32",
+@@ -483 +483 @@
+-      detached: true,
++      detached: process.platform !== "win32",
+--- a/lib/agy-driver.ts
++++ b/lib/agy-driver.ts
+@@ -309 +309 @@
+-          detached: true,
++          detached: process.platform !== "win32",
+--- a/lib/usage.ts
++++ b/lib/usage.ts
+@@ -221,2 +221,2 @@
+-  // Raw spawn (execFile drops `detached`): own process group + tracked, so
+-  // timeout/abort reaps agy's whole tree instead of the direct child only.
++  // POSIX uses an independent process group; Windows uses taskkill /T and
++  // stays attached to the host context so PowerShell grandchildren stay hidden.
+@@ -225 +225,2 @@
+-    detached: true,
++    detached: process.platform !== "win32",
++    windowsHide: true,

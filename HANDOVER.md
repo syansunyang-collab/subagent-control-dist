@@ -79,7 +79,7 @@ Pi 另有 `delegate_work`：带当前会话上下文的后台分身，选型取�
 | --- | --- | --- | --- |
 | Codex 型号别名 `extensions/openai-codex-sol-context-alias.ts` | 请求发出前把 `gpt-5.6-sol-500k`、`gpt-6.1-sol-500k`、`gpt-6-astra-500k`、`gpt-6-luna-fast-700k` 改写为上游型号，普通轮次与压缩等直调路径都覆盖；只有 `gpt-6-luna-fast-700k` 加 `service_tier=priority`。改写表固定为这四条，新增的 `-500k` 型号不会自动改写 | Codex 不接受这些本地型号 ID（源码注释），扩展未加载时报 `model is not supported when using Codex with a ChatGPT account`。设立大窗口本地型号、luna 走 priority 的原因未留档 | 用到别名的是 `delegate-work.toml` 三条推荐行与 `compactionModel`；改成目录内型号后可删扩展 |
 | 搜索档位补丁 `extensions/search-effort-patch/` | 挂在全局 `fetch` 上，只处理发往 Codex responses 且带 `web_search` 工具的请求：把 `openaiSearchModel` 的 `:档位` 后缀拆成型号与 `reasoning.effort`；档位被拒（HTTP 400）时去掉档位重试一次；每次调用记入 `~/.pi/agent/state/search-calls.jsonl` | 不注入时搜索走服务端默认档（实测 `medium`）；补丁同时采集每次调用的档位与用量 | 改 `~/.pi/web-search.json` 的 `openaiSearchModel` 后缀，同型号下次搜索即生效；去掉后缀且不设 `openaiSearchReasoning` 即不注入 |
-| 联网搜索 `npm:pi-web-access@0.21.0` | settings 精确钉 0.21.0；`~/.pi/web-search.json` 写入 `searchRouting`（依次 openai、brave、tavily、exa、xai、duckduckgo，遇配额、临时错误、网络、无效响应换下一家）、`workflow`、`openaiSearchModel`、`pageAnswer`。子代理的 `web_search`、`fetch_content`、`get_search_content` 来自此包 | 钉 0.21.0 的原因未留档。已知关联：维护者本机在该版本上另打了网页问答补丁（未随分发） | 升级时同时改 manifest 与本机 settings 的版本串；搜索档位补丁要求插件走全局 `fetch`，0.21.0 与 0.29.0 已核对满足 |
+| 联网搜索 `npm:pi-web-access@0.21.0` | settings 精确钉 0.21.0；`~/.pi/web-search.json` 写入 `searchRouting`（依次 openai、brave、tavily、exa、xai、duckduckgo，遇配额、临时错误、网络、无效响应换下一家）、`workflow`、`openaiSearchModel`、`pageAnswer`。子代理的 `web_search`、`fetch_content`、`get_search_content` 来自此包 | 钉 0.21.0 的原因未留档。已知关联：维护者本机在该版本上另打了网页问答补丁（在 `extras/pi-plugins/`，可选） | 升级时同时改 manifest 与本机 settings 的版本串；搜索档位补丁要求插件走全局 `fetch`，0.21.0 与 0.29.0 已核对满足 |
 | 中途压缩 `npm:pi-midrun-compact` | 上下文占用 90% 时压缩并自动续跑（`extensions/pi-midrun-compact/config.json`）；设置 `compaction.enabled=false` 关掉 Pi 原生自动压缩，`compaction.reserveTokens=65536` | 2026-09-03 记录时（Pi 0.84.4），原生自动压缩只按 `contextTokens > contextWindow - reserveTokens` 触发，默认 `reserveTokens=16384` 在 500k 窗口约 96.7% 才动手；两者同开形成两个触发源。`reserveTokens=65536` 的取值原因未留档 | 改 `thresholdPercent`；停用插件时把 `compaction.enabled` 改回 `true`，否则没有自动压缩 |
 | 压缩写手 `local-packages/pi-compaction-model-recovery` | 压缩时把摘要交给 `compactionModel`（`openai-codex/gpt-6-luna-fast-700k` @ `xhigh`）；写手失败时退回当前主模型并提示；日志在 `~/.pi/agent/logs/compaction/` | 压缩交给指定型号，不占用当前会话型号；本地包让压缩请求经已注册的 provider 发出，型号别名与 `service_tier` 因此生效，并补上压缩请求身份（源码注释） | 改 `~/.pi/agent/settings.json` 的 `compactionModel.model` |
 | Codex 别名型号登记 | 在 `~/.pi/agent/models.json` 的 `openai-codex` 下登记 `gpt-5.6-sol-500k`、`gpt-6.1-sol-500k`、`gpt-6-astra-500k`（上下文 500000）与 `gpt-6-luna-fast-700k`（上下文 700000），单价与档位映射照搬上游型号 | 型号别名扩展只改写请求，型号本身要在 Pi 目录里存在；分身 `delegate_work` 三个选型与 `compactionModel` 用到这些型号 | 没有 ChatGPT 订阅时无影响；本机已有同 id 不同定义时保留本机并报 `conflict` |
@@ -100,11 +100,15 @@ Pi 另有 `delegate_work`：带当前会话上下文的后台分身，选型取�
 | 主代理规则 `AGENTS.md` | 主代理的任务分流、委派、并发、验收与 Git 收口约定 | 主代理按完整工作块决定亲自做或委派，可在用户目标与授权内裁剪内部流程（2026-09-23）；项目材料按需读取，不设开工必读清单（2026-09-13） | 只约束含该文件的仓，修改后新会话或 reload 生效 |
 | 工作流程 `ops/workflows/` | 对齐 `alignment/`、任务卡 `task-card.md`、跨会话规划 `planning/`、事故止损 `incident-containment.md`，由 `AGENTS.md` §3 的分流表进入 | 范围、验收、技术路线、架构设计、用户可见形态、与已定内容冲突六类必问项逐题交用户拍板，起因是主代理判断空间过大、方案级取舍常在用户不知情时被锁定（2026-09-23）；完整周期对账显示 planner 与大型执行清单产出低，规划链改为只在跨会话交接时使用（2026-09-28） | 改 `AGENTS.md` §3 的分流表或对应 workflow 文件 |
 
-## 4. 未随分发的内容
+## 4. 可选扩展与未随分发的内容
+
+维护者插件仓里的插件、第三方包补丁、Pi 本体补丁、运维脚本与技能随分发放在 `extras/pi-plugins/`（上下文裁剪、缓存诊断、`pi-cursor-host`、`pi-read-symbol`、scheduler、全局系统尾注、`/img`、Codex attribution / prompt stability / WS recovery 三个本体补丁及其构建载荷、网页问答补丁、antigravity、computer-use、Claude provider 补丁等）。bootstrap 不安装其中任何一项；`extras/pi-plugins/EXTRAS.md` 逐项写明作用、前提、适用版本、安装/验证/回滚命令和风险，由使用者按需选装。派发、Fleet、面板、搜索与压缩链不依赖它们；角色卡列出的未装插件（如 `pi-read-symbol`）只记 warning。`~/.pi/web-search.json` 的 `pageAnswer` 要应用 `extras/pi-plugins` 里的网页问答补丁后才生效。
+
+以下内容未随分发：
 
 | 内容 | 说明 | 缺少时 |
 | --- | --- | --- |
-| 维护者本机插件仓管理的插件与补丁 | 上下文裁剪 `pi-context-prune`、缓存诊断 `cache-wire-observer` 与 `payload-cache-diag`、`pi-cursor-host`、`pi-read-symbol`、scheduler、全局系统尾注 `APPEND_SYSTEM.md`、`/img` 粘贴图片；全局 Pi 补丁 Codex attribution、prompt stability、WS recovery；`pi-web-access` 网页问答补丁；antigravity 与 computer-use 补丁；Pi web 自启动与运维 | 派发、Fleet、面板、搜索与压缩链都不依赖它们。角色卡列出的未装插件（如 `pi-read-symbol`、`payload-cache-diag`）只记 warning、不加载；`~/.pi/web-search.json` 的 `pageAnswer` 默认值在未打补丁的 0.21.0 上不生效，网页问答按上游行为运行 |
+| 维护者个人部署的 Pi Web | Pi Web 应用、开机自启动与公网中转 | 无影响；Pi Web 是维护者个人的远程访问入口 |
 | 用户级手动安装的第三方 Pi 包 | `pi-mcp-adapter`、`@narumitw/pi-lsp`、`visual-explainer`、`pi-hermes-memory`、`@alexanderfortin/pi-token-usage`、`@juicesharp/rpiv-ask-user-question` 等 | 角色卡引用的 MCP、LSP、图示等工具缺席，只记 warning；需要时用 `pi install` 自行安装 |
 | 模型凭据与搜索密钥 | Pi 的登录态与 `~/.pi/web-search.json` 中的 key，bootstrap 都不写 | 见第 2 节 |
 | 维护记录与测试 | 决策记录 `docs/`、工作记录 `notes/`、`PROJECT.md`、`STATUS.md`、`ROADMAP.md`、回归测试 `tests/`，以及各项目 `.runtime/cockpit/` 的任务数据 | 运行不受影响；本地改动用 `SETUP.md`「验证」冒烟，需要追溯某项设计时向维护者索取对应记录 |

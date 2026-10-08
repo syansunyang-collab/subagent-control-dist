@@ -1,0 +1,2537 @@
+diff --git a/packages/agent/src/agent-loop.ts b/packages/agent/src/agent-loop.ts
+index e4fd515..d863197 100644
+--- a/packages/agent/src/agent-loop.ts
++++ b/packages/agent/src/agent-loop.ts
+@@ -300,6 +300,10 @@ async function runLoop(
+ 		// Agent would stop here. Check for follow-up messages.
+ 		const followUpMessages = (await config.getFollowUpMessages?.()) || [];
+ 		if (followUpMessages.length > 0) {
++			const requestIdentity = config.createRequestIdentity?.();
++			if (requestIdentity) {
++				config = { ...config, requestIdentity };
++			}
+ 			// Set as pending so inner loop processes them
+ 			explicitContinuation = false;
+ 			pendingMessages = followUpMessages;
+diff --git a/packages/agent/src/agent.ts b/packages/agent/src/agent.ts
+index 92af2c7..988e97b 100644
+--- a/packages/agent/src/agent.ts
++++ b/packages/agent/src/agent.ts
+@@ -1,4 +1,5 @@
+ import {
++	type AgentRequestIdentity,
+ 	createInitialSystemMessage,
+ 	getCurrentSystemMessage,
+ 	getCurrentSystemPrompt,
+@@ -10,6 +11,7 @@ import {
+ 	type ThinkingBudgets,
+ 	type Transport,
+ 	toToolDeclaration,
++	uuidv7,
+ } from "@earendil-works/pi-ai";
+ import { runAgentLoop, runAgentLoopContinue } from "./agent-loop.ts";
+ import { getDefaultStreamFn } from "./stream-fn.ts";
+@@ -35,6 +37,20 @@ import type {
+ 
+ export type { QueueMode } from "./types.ts";
+ 
++export function createAgentRequestIdentity(
++	sessionId: string,
++	requestKind: AgentRequestIdentity["requestKind"] = "turn",
++): AgentRequestIdentity {
++	return {
++		sessionId,
++		threadId: sessionId,
++		turnId: uuidv7(),
++		requestKind,
++		startedAt: Date.now(),
++		windowId: `${sessionId}:0`,
++	};
++}
++
+ function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
+ 	return messages.filter(
+ 		(message) =>
+@@ -214,6 +230,8 @@ export class Agent {
+ 		signal?: AbortSignal,
+ 	) => Promise<AgentLoopTurnUpdate | undefined> | AgentLoopTurnUpdate | undefined;
+ 	private activeRun?: ActiveRun;
++	private readonly attributionSessionId: string;
++	private activeRequestIdentity?: AgentRequestIdentity;
+ 	/** Session identifier forwarded to providers for cache-aware backends. */
+ 	public sessionId?: string;
+ 	/** Optional per-level thinking token budgets forwarded to the stream function. */
+@@ -244,6 +262,7 @@ export class Agent {
+ 		this.steeringQueue = new PendingMessageQueue(runtimeOptions.steeringMode ?? "one-at-a-time");
+ 		this.followUpQueue = new PendingMessageQueue(runtimeOptions.followUpMode ?? "one-at-a-time");
+ 		this.sessionId = runtimeOptions.sessionId;
++		this.attributionSessionId = runtimeOptions.sessionId ?? uuidv7();
+ 		this.thinkingBudgets = runtimeOptions.thinkingBudgets;
+ 		this.transport = runtimeOptions.transport ?? "auto";
+ 		this.maxRetryDelayMs = runtimeOptions.maxRetryDelayMs;
+@@ -362,6 +381,7 @@ export class Agent {
+ 		this._state.errorMessage = undefined;
+ 		this.clearFollowUpQueue();
+ 		this.clearSteeringQueue();
++		this.activeRequestIdentity = undefined;
+ 	}
+ 
+ 	/** Start a new prompt from text, a single message, or a batch of messages. */
+@@ -430,6 +450,7 @@ export class Agent {
+ 		messages: AgentMessage[],
+ 		options: { skipInitialSteeringPoll?: boolean } = {},
+ 	): Promise<void> {
++		this.activeRequestIdentity = this.createRequestIdentity();
+ 		await this.runWithLifecycle(async (signal) => {
+ 			await runAgentLoop(
+ 				messages,
+@@ -443,6 +464,7 @@ export class Agent {
+ 	}
+ 
+ 	private async runContinuation(): Promise<void> {
++		this.activeRequestIdentity ??= this.createRequestIdentity();
+ 		await this.runWithLifecycle(async (signal) => {
+ 			await runAgentLoopContinue(
+ 				this.createContextSnapshot(),
+@@ -465,6 +487,11 @@ export class Agent {
+ 		let skipInitialSteeringPoll = options.skipInitialSteeringPoll === true;
+ 		return {
+ 			model: this._state.model,
++			requestIdentity: this.activeRequestIdentity,
++			createRequestIdentity: () => {
++				this.activeRequestIdentity = this.createRequestIdentity();
++				return this.activeRequestIdentity;
++			},
+ 			reasoning: this._state.thinkingLevel === "off" ? undefined : this._state.thinkingLevel,
+ 			sessionId: this.sessionId,
+ 			onPayload: this.onPayload,
+@@ -500,6 +527,11 @@ export class Agent {
+ 		};
+ 	}
+ 
++	/** Create a provider-neutral identity without changing the active foreground turn. */
++	createRequestIdentity(requestKind: AgentRequestIdentity["requestKind"] = "turn"): AgentRequestIdentity {
++		return createAgentRequestIdentity(this.sessionId ?? this.attributionSessionId, requestKind);
++	}
++
+ 	private async runWithLifecycle(executor: (signal: AbortSignal) => Promise<void>): Promise<void> {
+ 		if (this.activeRun) {
+ 			throw new Error("Agent is already processing.");
+diff --git a/packages/agent/src/proxy.ts b/packages/agent/src/proxy.ts
+index 0a4711c..17da289 100644
+--- a/packages/agent/src/proxy.ts
++++ b/packages/agent/src/proxy.ts
+@@ -66,6 +66,7 @@ type ProxySerializableStreamOptions = Pick<
+ 	| "reasoning"
+ 	| "cacheRetention"
+ 	| "sessionId"
++	| "requestIdentity"
+ 	| "headers"
+ 	| "metadata"
+ 	| "transport"
+@@ -109,6 +110,7 @@ function buildProxyRequestOptions(options: ProxyStreamOptions): ProxySerializabl
+ 		reasoning: options.reasoning,
+ 		cacheRetention: options.cacheRetention,
+ 		sessionId: options.sessionId,
++		requestIdentity: options.requestIdentity,
+ 		headers: options.headers,
+ 		metadata: options.metadata,
+ 		transport: options.transport,
+diff --git a/packages/agent/src/types.ts b/packages/agent/src/types.ts
+index 8da843f..5191b01 100644
+--- a/packages/agent/src/types.ts
++++ b/packages/agent/src/types.ts
+@@ -1,4 +1,5 @@
+ import type {
++	AgentRequestIdentity,
+ 	Api,
+ 	AssistantMessage,
+ 	AssistantMessageEvent,
+@@ -188,6 +189,8 @@ export interface PrepareNextTurnContext extends AgentTurnContext {}
+ 
+ export interface AgentLoopConfig extends SimpleStreamOptions {
+ 	model: Model<any>;
++	/** Creates a new logical identity when the loop consumes independent follow-up work. */
++	createRequestIdentity?: () => AgentRequestIdentity;
+ 
+ 	/**
+ 	 * Converts AgentMessage[] to LLM-compatible Message[] before each LLM call.
+diff --git a/packages/agent/test/proxy-request-identity.test.ts b/packages/agent/test/proxy-request-identity.test.ts
+new file mode 100644
+index 0000000..25a746d
+--- /dev/null
++++ b/packages/agent/test/proxy-request-identity.test.ts
+@@ -0,0 +1,48 @@
++import type { AgentRequestIdentity, Context, Model } from "@earendil-works/pi-ai";
++import { normalizeContext } from "@earendil-works/pi-ai";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import { streamProxy } from "../src/proxy.ts";
++
++afterEach(() => vi.unstubAllGlobals());
++
++describe("streamProxy request identity", () => {
++	it("serializes requestIdentity without modification", async () => {
++		const requestIdentity: AgentRequestIdentity = {
++			sessionId: "session",
++			threadId: "thread",
++			turnId: "turn",
++			requestKind: "turn",
++			startedAt: 123,
++			windowId: "window",
++		};
++		let body: { options?: { requestIdentity?: AgentRequestIdentity } } | undefined;
++		vi.stubGlobal(
++			"fetch",
++			vi.fn(async (_url: string, init?: RequestInit) => {
++				body = JSON.parse(String(init?.body));
++				return new Response("proxy failed", { status: 500, statusText: "Error" });
++			}),
++		);
++		const model = {
++			id: "mock",
++			name: "Mock",
++			api: "custom",
++			provider: "custom",
++			baseUrl: "",
++			reasoning: false,
++			input: ["text"],
++			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
++			contextWindow: 8192,
++			maxTokens: 2048,
++		} satisfies Model<"custom">;
++		const context: Context = { messages: [{ role: "user", content: "hello", timestamp: 1 }] };
++
++		await streamProxy(model, normalizeContext(context), {
++			authToken: "token",
++			proxyUrl: "https://proxy.invalid",
++			requestIdentity,
++		}).result();
++
++		expect(body?.options?.requestIdentity).toEqual(requestIdentity);
++	});
++});
+diff --git a/packages/agent/test/request-identity.test.ts b/packages/agent/test/request-identity.test.ts
+new file mode 100644
+index 0000000..c0d00d3
+--- /dev/null
++++ b/packages/agent/test/request-identity.test.ts
+@@ -0,0 +1,136 @@
++import {
++	type AgentRequestIdentity,
++	type AssistantMessage,
++	type AssistantMessageEvent,
++	EventStream,
++	type Model,
++} from "@earendil-works/pi-ai";
++import { Type } from "typebox";
++import { describe, expect, it } from "vitest";
++import { Agent } from "../src/agent.ts";
++import type { AgentTool } from "../src/types.ts";
++
++class MockAssistantStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
++	constructor(event: Extract<AssistantMessageEvent, { type: "done" | "error" }>) {
++		super(
++			(candidate) => candidate.type === "done" || candidate.type === "error",
++			(candidate) => {
++				if (candidate.type === "done") return candidate.message;
++				if (candidate.type === "error") return candidate.error;
++				throw new Error("Unexpected event type");
++			},
++		);
++		queueMicrotask(() => this.push(event));
++	}
++}
++
++const model: Model<"openai-responses"> = {
++	id: "mock",
++	name: "Mock",
++	api: "openai-responses",
++	provider: "openai",
++	baseUrl: "https://example.invalid",
++	reasoning: false,
++	input: ["text"],
++	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
++	contextWindow: 8192,
++	maxTokens: 2048,
++};
++
++function assistant(
++	content: AssistantMessage["content"],
++	stopReason: AssistantMessage["stopReason"] = "stop",
++	errorMessage?: string,
++): AssistantMessage {
++	return {
++		role: "assistant",
++		content,
++		api: model.api,
++		provider: model.provider,
++		model: model.id,
++		usage: {
++			input: 0,
++			output: 0,
++			cacheRead: 0,
++			cacheWrite: 0,
++			totalTokens: 0,
++			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
++		},
++		stopReason,
++		errorMessage,
++		timestamp: Date.now(),
++	};
++}
++
++describe("Agent request identity", () => {
++	it("reuses identity for tool and steering continuations, then rotates for a follow-up", async () => {
++		const identities: AgentRequestIdentity[] = [];
++		let agent: Agent;
++		const toolSchema = Type.Object({});
++		const tool: AgentTool<typeof toolSchema, Record<string, never>> = {
++			name: "steer",
++			label: "Steer",
++			description: "Queues steering input",
++			parameters: toolSchema,
++			async execute() {
++				agent.steer({ role: "user", content: "steering", timestamp: Date.now() });
++				return { content: [{ type: "text", text: "ok" }], details: {} };
++			},
++		};
++		let request = 0;
++		agent = new Agent({
++			sessionId: "pi-session",
++			initialState: { model, tools: [tool] },
++			streamFn: (_model, _context, options) => {
++				identities.push(options?.requestIdentity as AgentRequestIdentity);
++				if (request++ === 0) {
++					const message = assistant([{ type: "toolCall", id: "tool-1", name: "steer", arguments: {} }], "toolUse");
++					return new MockAssistantStream({ type: "done", reason: "toolUse", message });
++				}
++				if (request === 2) {
++					agent.followUp({ role: "user", content: "follow up", timestamp: Date.now() });
++				}
++				const message = assistant([{ type: "text", text: "done" }]);
++				return new MockAssistantStream({ type: "done", reason: "stop", message });
++			},
++		});
++
++		await agent.prompt("start");
++
++		expect(identities).toHaveLength(3);
++		expect(identities[0]).toMatchObject({
++			sessionId: "pi-session",
++			threadId: "pi-session",
++			requestKind: "turn",
++			windowId: "pi-session:0",
++		});
++		expect(identities[1]).toEqual(identities[0]);
++		expect(identities[2].turnId).not.toBe(identities[0].turnId);
++	});
++
++	it("preserves identity for retry continuation and rotates for the next prompt", async () => {
++		const identities: AgentRequestIdentity[] = [];
++		let request = 0;
++		const agent = new Agent({
++			sessionId: "pi-session",
++			initialState: { model },
++			streamFn: (_model, _context, options) => {
++				identities.push(options?.requestIdentity as AgentRequestIdentity);
++				if (request++ === 0) {
++					const error = assistant([], "error", "retryable");
++					return new MockAssistantStream({ type: "error", reason: "error", error });
++				}
++				const message = assistant([{ type: "text", text: "done" }]);
++				return new MockAssistantStream({ type: "done", reason: "stop", message });
++			},
++		});
++
++		await agent.prompt("first");
++		agent.state.messages = agent.state.messages.slice(0, -1);
++		await agent.continue();
++		await agent.prompt("second");
++
++		expect(identities[1]).toEqual(identities[0]);
++		expect(identities[2].turnId).not.toBe(identities[0].turnId);
++	});
++});
+diff --git a/packages/ai/scripts/generate-models.ts b/packages/ai/scripts/generate-models.ts
+index 0364ca6..158ee6c 100644
+--- a/packages/ai/scripts/generate-models.ts
++++ b/packages/ai/scripts/generate-models.ts
+@@ -2259,11 +2259,15 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
+ 					baseUrl = `${variant.basePath}/v1`;
+ 				}
+ 
+-				if (variant.provider === "opencode" && modelId === "grok-build-0.1") {
++				if (api === "openai-completions" && variant.provider === "opencode" && modelId === "grok-build-0.1") {
+ 					compat = { ...(compat ?? {}), supportsReasoningEffort: false };
+ 				}
+ 
+-				if ((variant.provider === "opencode" || variant.provider === "opencode-go") && modelId === "kimi-k2.6") {
++				if (
++					api === "openai-completions" &&
++					(variant.provider === "opencode" || variant.provider === "opencode-go") &&
++					modelId === "kimi-k2.6"
++				) {
+ 					// OpenCode Kimi K2.6 accepts Anthropic-style thinking objects
+ 					// and rejects string thinking values or combined reasoning_effort.
+ 					compat = { ...(compat ?? {}), thinkingFormat: "deepseek", supportsReasoningEffort: false };
+diff --git a/packages/ai/src/api/codex-request-metadata.ts b/packages/ai/src/api/codex-request-metadata.ts
+new file mode 100644
+index 0000000..e899943
+--- /dev/null
++++ b/packages/ai/src/api/codex-request-metadata.ts
+@@ -0,0 +1,51 @@
++import type { AgentRequestIdentity } from "../types.ts";
++
++export interface CodexRequestMetadata {
++	clientMetadata: Record<string, string>;
++	headers: Record<string, string>;
++}
++
++function stringifyAsciiJson(value: unknown): string {
++	return JSON.stringify(value).replace(
++		/[\u007f-\uffff]/g,
++		(character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
++	);
++}
++
++export function buildCodexRequestMetadata(
++	identity: AgentRequestIdentity | undefined,
++): CodexRequestMetadata | undefined {
++	if (!identity) return undefined;
++
++	const windowId = identity.windowId ?? `${identity.threadId}:0`;
++	const turnMetadata = stringifyAsciiJson({
++		...(identity.installationId ? { installation_id: identity.installationId } : {}),
++		session_id: identity.sessionId,
++		thread_id: identity.threadId,
++		turn_id: identity.turnId,
++		window_id: windowId,
++		request_kind: identity.requestKind,
++		turn_started_at_unix_ms: identity.startedAt,
++	});
++	const clientMetadata: Record<string, string> = {
++		session_id: identity.sessionId,
++		thread_id: identity.threadId,
++		turn_id: identity.turnId,
++		"x-codex-window-id": windowId,
++		"x-codex-turn-metadata": turnMetadata,
++	};
++	const headers: Record<string, string> = {
++		originator: "pi",
++		"session-id": identity.sessionId,
++		"thread-id": identity.threadId,
++		"x-client-request-id": identity.threadId,
++		"x-codex-window-id": windowId,
++		"x-codex-turn-metadata": turnMetadata,
++	};
++	if (identity.installationId) {
++		clientMetadata["x-codex-installation-id"] = identity.installationId;
++		headers["x-codex-installation-id"] = identity.installationId;
++	}
++
++	return { clientMetadata, headers };
++}
+diff --git a/packages/ai/src/api/openai-codex-responses.ts b/packages/ai/src/api/openai-codex-responses.ts
+index 8c0e544..7fb9ea8 100644
+--- a/packages/ai/src/api/openai-codex-responses.ts
++++ b/packages/ai/src/api/openai-codex-responses.ts
+@@ -9,6 +9,7 @@ import type {
+ import { clampThinkingLevel } from "../models.ts";
+ import { registerSessionResourceCleanup } from "../session-resources.ts";
+ import type {
++	AgentRequestIdentity,
+ 	Api,
+ 	AssistantMessage,
+ 	Model,
+@@ -40,6 +41,7 @@ import {
+ 	resolveTranscriptTools,
+ } from "../utils/transcript.ts";
+ import { uuidv7 } from "../utils/uuid.ts";
++import { buildCodexRequestMetadata } from "./codex-request-metadata.ts";
+ import { createGrammarToolInputProperties } from "./constrained-sampling.ts";
+ import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
+ import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.ts";
+@@ -62,6 +64,70 @@ const CODEX_TOOL_CALL_PROVIDERS = new Set(["openai", "openai-codex", "opencode"]
+ const WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE = 1009;
+ const WEBSOCKET_CONNECTION_LIMIT_REACHED_CODE = "websocket_connection_limit_reached";
+ const PREVIOUS_RESPONSE_NOT_FOUND_CODE = "previous_response_not_found";
++const TURN_STATE_HEADER = "x-codex-turn-state";
++
++interface CodexTurnState {
++	sessionId: string;
++	accountId: string;
++	url: string;
++	turnId: string;
++	value?: string;
++}
++
++// Keep only the current foreground and compaction turns per session/thread.
++// Compaction must not displace a foreground turn that will resume afterward.
++// Low-level callers must release session resources when done, just like socket users.
++const codexTurnStates = new Map<string, CodexTurnState>();
++
++function getCodexTurnState(
++	identity: AgentRequestIdentity | undefined,
++	accountId: string,
++	url: string,
++): CodexTurnState | undefined {
++	if (!identity) return undefined;
++	for (const [key, state] of codexTurnStates) {
++		if (state.sessionId === identity.sessionId && (state.accountId !== accountId || state.url !== url)) {
++			codexTurnStates.delete(key);
++		}
++	}
++	const key = JSON.stringify([identity.sessionId, identity.threadId, identity.requestKind]);
++	const previous = codexTurnStates.get(key);
++	const state =
++		previous?.turnId === identity.turnId
++			? previous
++			: { sessionId: identity.sessionId, accountId, url, turnId: identity.turnId };
++	codexTurnStates.set(key, state);
++	return state;
++}
++
++function captureCodexTurnState(state: CodexTurnState | undefined, value: unknown): void {
++	// The server's first value is opaque and must be replayed unchanged, never logged.
++	if (state && state.value === undefined && typeof value === "string" && /^[\x21-\x7e]+$/.test(value)) {
++		state.value = value;
++	}
++}
++
++function applyCodexTurnState(
++	headers: Headers,
++	state: CodexTurnState | undefined,
++	modelHeaders: Record<string, string> | undefined,
++	callerHeaders: ProviderHeaders | undefined,
++): void {
++	let value: string | null | undefined = state?.value;
++	for (const source of [modelHeaders, callerHeaders]) {
++		for (const [key, override] of Object.entries(source ?? {})) {
++			if (key.toLowerCase() === TURN_STATE_HEADER) value = override;
++		}
++	}
++	if (value != null) headers.set(TURN_STATE_HEADER, value);
++	else headers.delete(TURN_STATE_HEADER);
++}
++
++registerSessionResourceCleanup((sessionId) => {
++	for (const [key, state] of codexTurnStates) {
++		if (sessionId === undefined || state.sessionId === sessionId) codexTurnStates.delete(key);
++	}
++});
+ 
+ const CODEX_RESPONSE_STATUSES = new Set<CodexResponseStatus>([
+ 	"completed",
+@@ -102,6 +168,7 @@ interface RequestBody {
+ 	text?: { verbosity?: string };
+ 	include?: string[];
+ 	prompt_cache_key?: string;
++	client_metadata?: Record<string, string>;
+ 	[key: string]: unknown;
+ }
+ 
+@@ -268,6 +335,17 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
+ 			}
+ 
+ 			const accountId = extractAccountId(apiKey);
++			const socketSessionId = options?.sessionId ?? options?.requestIdentity?.sessionId;
++			const socketOwner = socketSessionId ? websocketSessionCache.get(socketSessionId) : undefined;
++			if (
++				socketSessionId &&
++				socketOwner &&
++				(socketOwner.accountId !== accountId || socketOwner.url !== resolveCodexWebSocketUrl(model.baseUrl))
++			) {
++				// A temporary SSE request can also change ownership of an existing socket.
++				closeOpenAICodexWebSocketSessions(socketSessionId);
++			}
++			const turnState = getCodexTurnState(options?.requestIdentity, accountId, resolveCodexUrl(model.baseUrl));
+ 			const grammarToolInputProperties = createGrammarToolInputProperties(
+ 				getDeclaredTools(normalizedContext.messages),
+ 				model.compat?.supportsOpenAIGrammarTools ?? false,
+@@ -279,14 +357,24 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
+ 			if (nextBody !== undefined) {
+ 				body = nextBody as RequestBody;
+ 			}
+-			const websocketRequestId = codexSessionId || uuidv7();
+-			const sseHeaders = buildSSEHeaders(model.headers, options?.headers, accountId, apiKey, codexSessionId);
++			const requestMetadata = buildCodexRequestMetadata(options?.requestIdentity);
++			if (requestMetadata) body.client_metadata = requestMetadata.clientMetadata;
++			const websocketRequestId = options?.requestIdentity?.threadId || codexSessionId || uuidv7();
++			const sseHeaders = buildSSEHeaders(
++				model.headers,
++				options?.headers,
++				accountId,
++				apiKey,
++				codexSessionId,
++				options?.requestIdentity,
++			);
+ 			const websocketHeaders = buildWebSocketHeaders(
+ 				model.headers,
+ 				options?.headers,
+ 				accountId,
+ 				apiKey,
+ 				websocketRequestId,
++				options?.requestIdentity,
+ 			);
+ 			const bodyJson = JSON.stringify(body);
+ 			const httpTimeoutMs = normalizeTimeoutMs(options?.timeoutMs);
+@@ -324,6 +412,7 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
+ 							cacheSessionId,
+ 							accountId,
+ 							grammarToolInputProperties,
++							turnState,
+ 							options,
+ 						);
+ 
+@@ -393,6 +482,7 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
+ 				}
+ 
+ 				try {
++					applyCodexTurnState(sseHeaders, turnState, model.headers, options?.headers);
+ 					const headerTimeoutSignal =
+ 						httpTimeoutMs !== undefined && httpTimeoutMs > 0 ? AbortSignal.timeout(httpTimeoutMs) : undefined;
+ 					const combinedSignal = combineAbortSignals([options?.signal, headerTimeoutSignal]);
+@@ -411,6 +501,7 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
+ 					} finally {
+ 						combinedSignal.cleanup();
+ 					}
++					captureCodexTurnState(turnState, response.headers.get(TURN_STATE_HEADER));
+ 					await options?.onResponse?.(
+ 						{ status: response.status, headers: headersToRecord(response.headers) },
+ 						model,
+@@ -472,7 +563,7 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
+ 				startEmitted = true;
+ 				stream.push({ type: "start", partial: output });
+ 			}
+-			await processStream(response, output, stream, model, grammarToolInputProperties, options);
++			await processStream(response, output, stream, model, grammarToolInputProperties, turnState, options);
+ 
+ 			if (options?.signal?.aborted) {
+ 				throw new Error("Request was aborted");
+@@ -562,7 +653,6 @@ function buildRequestBody(
+ 		tool_choice: options?.toolChoice ?? "auto",
+ 		parallel_tool_calls: true,
+ 	};
+-
+ 	if (options?.temperature !== undefined) {
+ 		body.temperature = options.temperature;
+ 	}
+@@ -663,14 +753,21 @@ async function processStream(
+ 	stream: AssistantMessageEventStream,
+ 	model: Model<"openai-codex-responses">,
+ 	grammarToolInputProperties: ReadonlyMap<string, string>,
++	turnState: CodexTurnState | undefined,
+ 	options?: OpenAICodexResponsesOptions,
+ ): Promise<void> {
+-	await processResponsesStream(mapCodexEvents(parseSSE(response, options?.signal), output), output, stream, model, {
+-		serviceTier: options?.serviceTier,
+-		grammarToolInputProperties,
+-		resolveServiceTier: resolveCodexServiceTier,
+-		applyServiceTierPricing: (usage, serviceTier) => applyServiceTierPricing(usage, serviceTier, model),
+-	});
++	await processResponsesStream(
++		mapCodexEvents(parseSSE(response, options?.signal), output, turnState),
++		output,
++		stream,
++		model,
++		{
++			serviceTier: options?.serviceTier,
++			grammarToolInputProperties,
++			resolveServiceTier: resolveCodexServiceTier,
++			applyServiceTierPricing: (usage, serviceTier) => applyServiceTierPricing(usage, serviceTier, model),
++		},
++	);
+ }
+ 
+ class CodexApiError extends Error {
+@@ -697,8 +794,12 @@ class CodexProtocolError extends Error {
+ 	}
+ }
+ 
++class CodexSessionChangedError extends Error {}
++
+ function isCodexNonTransportError(error: unknown): boolean {
+-	return error instanceof CodexApiError || error instanceof CodexProtocolError;
++	return (
++		error instanceof CodexApiError || error instanceof CodexProtocolError || error instanceof CodexSessionChangedError
++	);
+ }
+ 
+ function isWebSocketConnectionLimitReachedError(error: unknown): boolean {
+@@ -725,10 +826,17 @@ function extractCodexEventError(event: Record<string, unknown>): { code?: string
+ async function* mapCodexEvents(
+ 	events: AsyncIterable<Record<string, unknown>>,
+ 	output: AssistantMessage,
++	turnState: CodexTurnState | undefined,
+ ): AsyncGenerator<ResponseStreamEvent> {
+ 	for await (const event of events) {
+ 		const type = typeof event.type === "string" ? event.type : undefined;
+ 		if (!type) continue;
++		if (type === "codex.response.metadata" || type === "response.metadata") {
++			if (event.headers && typeof event.headers === "object") {
++				captureCodexTurnState(turnState, (event.headers as Record<string, unknown>)[TURN_STATE_HEADER]);
++			}
++			continue;
++		}
+ 
+ 		if (type === "error") {
+ 			const { code, message } = extractCodexEventError(event);
+@@ -881,7 +989,14 @@ export interface OpenAICodexWebSocketDebugStats {
+ 	lastWebSocketError?: string;
+ }
+ 
+-const websocketSessionCache = new Map<string, Map<string, CachedWebSocketConnection>>();
++interface WebSocketSession {
++	accountId: string;
++	url: string;
++	connection?: CachedWebSocketConnection;
++}
++
++// Record ownership before awaiting the handshake so late connections cannot restore old state.
++const websocketSessionCache = new Map<string, WebSocketSession>();
+ const websocketDebugStats = new Map<string, OpenAICodexWebSocketDebugStats>();
+ const websocketSseFallbackSessions = new Set<string>();
+ 
+@@ -926,12 +1041,13 @@ export function closeOpenAICodexWebSocketSessions(sessionId?: string): void {
+ 		closeWebSocketSilently(entry.socket, 1000, "debug_close");
+ 	};
+ 	if (sessionId) {
+-		for (const entry of websocketSessionCache.get(sessionId)?.values() ?? []) closeEntry(entry);
++		const entry = websocketSessionCache.get(sessionId)?.connection;
++		if (entry) closeEntry(entry);
+ 		websocketSessionCache.delete(sessionId);
+ 		return;
+ 	}
+-	for (const accountEntries of websocketSessionCache.values()) {
+-		for (const entry of accountEntries.values()) closeEntry(entry);
++	for (const session of websocketSessionCache.values()) {
++		if (session.connection) closeEntry(session.connection);
+ 	}
+ 	websocketSessionCache.clear();
+ }
+@@ -1033,16 +1149,14 @@ function closeWebSocketSilently(socket: WebSocketLike, code = 1000, reason = "do
+ 	} catch {}
+ }
+ 
+-function scheduleSessionWebSocketExpiry(sessionId: string, accountId: string, entry: CachedWebSocketConnection): void {
++function scheduleSessionWebSocketExpiry(session: WebSocketSession, entry: CachedWebSocketConnection): void {
+ 	if (entry.idleTimer) {
+ 		clearTimeout(entry.idleTimer);
+ 	}
+ 	entry.idleTimer = setTimeout(() => {
+ 		if (entry.busy) return;
+ 		closeWebSocketSilently(entry.socket, 1000, "idle_timeout");
+-		const accountEntries = websocketSessionCache.get(sessionId);
+-		if (accountEntries?.get(accountId) === entry) accountEntries.delete(accountId);
+-		if (accountEntries?.size === 0) websocketSessionCache.delete(sessionId);
++		if (session.connection === entry) session.connection = undefined;
+ 	}, SESSION_WEBSOCKET_CACHE_TTL_MS);
+ }
+ 
+@@ -1147,8 +1261,14 @@ async function acquireWebSocket(
+ 		};
+ 	}
+ 
+-	let accountEntries = websocketSessionCache.get(sessionId);
+-	const cached = accountEntries?.get(accountId);
++	let session = websocketSessionCache.get(sessionId);
++	if (!session || session.accountId !== accountId || session.url !== url) {
++		closeOpenAICodexWebSocketSessions(sessionId);
++		session = { accountId, url };
++		websocketSessionCache.set(sessionId, session);
++	}
++	const cached = session.connection;
++	let entry: CachedWebSocketConnection | undefined;
+ 	if (cached) {
+ 		if (cached.idleTimer) {
+ 			clearTimeout(cached.idleTimer);
+@@ -1156,67 +1276,54 @@ async function acquireWebSocket(
+ 		}
+ 		if (!cached.busy && isWebSocketSessionExpired(cached)) {
+ 			closeWebSocketSilently(cached.socket, 1000, "connection_age_limit");
+-			accountEntries?.delete(accountId);
+-			if (accountEntries?.size === 0) websocketSessionCache.delete(sessionId);
++			session.connection = undefined;
+ 		} else if (!cached.busy && isWebSocketReusable(cached.socket)) {
+-			cached.busy = true;
+-			return {
+-				socket: cached.socket,
+-				entry: cached,
+-				reused: true,
+-				release: ({ keep } = {}) => {
+-					if (!keep || !isWebSocketReusable(cached.socket)) {
+-						closeWebSocketSilently(cached.socket);
+-						const currentEntries = websocketSessionCache.get(sessionId);
+-						if (currentEntries?.get(accountId) === cached) currentEntries.delete(accountId);
+-						if (currentEntries?.size === 0) websocketSessionCache.delete(sessionId);
+-						return;
+-					}
+-					cached.busy = false;
+-					scheduleSessionWebSocketExpiry(sessionId, accountId, cached);
+-				},
+-			};
+-		}
+-		if (cached.busy) {
+-			const socket = await connectWebSocket(url, headers, signal, connectTimeoutMs, env);
+-			return {
+-				socket,
+-				reused: false,
+-				release: () => {
+-					closeWebSocketSilently(socket);
+-				},
+-			};
+-		}
+-		if (!isWebSocketReusable(cached.socket)) {
++			entry = cached;
++		} else if (!cached.busy && !isWebSocketReusable(cached.socket)) {
+ 			closeWebSocketSilently(cached.socket);
+-			accountEntries?.delete(accountId);
+-			if (accountEntries?.size === 0) websocketSessionCache.delete(sessionId);
++			session.connection = undefined;
+ 		}
+ 	}
+ 
+-	const socket = await connectWebSocket(url, headers, signal, connectTimeoutMs, env);
+-	const entry: CachedWebSocketConnection = { socket, busy: true, createdAt: Date.now() };
+-	accountEntries = websocketSessionCache.get(sessionId);
+-	if (!accountEntries) {
+-		accountEntries = new Map();
+-		websocketSessionCache.set(sessionId, accountEntries);
++	const reused = entry !== undefined;
++	if (!entry) {
++		let socket: WebSocketLike;
++		try {
++			socket = await connectWebSocket(url, headers, signal, connectTimeoutMs, env);
++		} catch (error) {
++			// A stale failure must not disable WebSockets or trigger SSE for the new owner.
++			if (websocketSessionCache.get(sessionId) !== session) {
++				throw new CodexSessionChangedError("WebSocket session changed during connection");
++			}
++			throw error;
++		}
++		if (websocketSessionCache.get(sessionId) !== session) {
++			closeWebSocketSilently(socket);
++			throw new CodexSessionChangedError("WebSocket session changed during connection");
++		}
++		// Another request may already own the cached connection, including one
++		// whose handshake completed while this request was connecting.
++		if (session.connection) {
++			return { socket, reused: false, release: () => closeWebSocketSilently(socket) };
++		}
++		entry = { socket, busy: true, createdAt: Date.now() };
++		session.connection = entry;
+ 	}
+-	accountEntries.set(accountId, entry);
++	const connection = entry;
++	connection.busy = true;
+ 	return {
+-		socket,
+-		entry,
+-		reused: false,
++		socket: connection.socket,
++		entry: connection,
++		reused,
+ 		release: ({ keep } = {}) => {
+-			if (!keep || !isWebSocketReusable(entry.socket)) {
+-				closeWebSocketSilently(entry.socket);
+-				if (entry.idleTimer) clearTimeout(entry.idleTimer);
+-				const currentEntries = websocketSessionCache.get(sessionId);
+-				if (currentEntries?.get(accountId) === entry) currentEntries.delete(accountId);
+-				if (currentEntries?.size === 0) websocketSessionCache.delete(sessionId);
++			if (!keep || websocketSessionCache.get(sessionId) !== session || !isWebSocketReusable(connection.socket)) {
++				closeWebSocketSilently(connection.socket);
++				if (connection.idleTimer) clearTimeout(connection.idleTimer);
++				if (session.connection === connection) session.connection = undefined;
+ 				return;
+ 			}
+-			entry.busy = false;
+-			scheduleSessionWebSocketExpiry(sessionId, accountId, entry);
++			connection.busy = false;
++			scheduleSessionWebSocketExpiry(session, connection);
+ 		},
+ 	};
+ }
+@@ -1396,8 +1503,10 @@ async function* parseWebSocket(
+ 	}
+ }
+ 
+-function requestBodyWithoutInput(body: RequestBody): RequestBody {
+-	const { input: _input, previous_response_id: _previousResponseId, ...rest } = body;
++function requestBodyForComparison(body: RequestBody): RequestBody {
++	// Attribution describes this request, not the context referenced by previous_response_id.
++	// Compare without it, but keep the current metadata on every response.create frame.
++	const { input: _input, previous_response_id: _previousResponseId, client_metadata: _clientMetadata, ...rest } = body;
+ 	return rest;
+ }
+ 
+@@ -1405,15 +1514,14 @@ function responseInputsEqual(a: ResponseInput | undefined, b: ResponseInput | un
+ 	return JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
+ }
+ 
+-function requestBodiesMatchExceptInput(a: RequestBody, b: RequestBody): boolean {
+-	return JSON.stringify(requestBodyWithoutInput(a)) === JSON.stringify(requestBodyWithoutInput(b));
+-}
+-
+ function getCachedWebSocketInputDelta(
+ 	body: RequestBody,
+ 	continuation: CachedWebSocketContinuationState,
+ ): ResponseInput | undefined {
+-	if (!requestBodiesMatchExceptInput(body, continuation.lastRequestBody)) {
++	if (
++		JSON.stringify(requestBodyForComparison(body)) !==
++		JSON.stringify(requestBodyForComparison(continuation.lastRequestBody))
++	) {
+ 		return undefined;
+ 	}
+ 
+@@ -1477,6 +1585,7 @@ async function processWebSocketStream(
+ 	cacheSessionId: string | undefined,
+ 	accountId: string,
+ 	grammarToolInputProperties: ReadonlyMap<string, string>,
++	turnState: CodexTurnState | undefined,
+ 	options?: OpenAICodexResponsesOptions,
+ ): Promise<void> {
+ 	const { socket, entry, reused, release } = await acquireWebSocket(
+@@ -1513,10 +1622,23 @@ async function processWebSocketStream(
+ 		}
+ 	}
+ 	try {
+-		socket.send(JSON.stringify({ type: "response.create", ...requestBody }));
++		// A socket can span turns. Keep automatic routing out of its handshake;
++		// otherwise the handshake's old state can leak into later request frames.
++		const requestHeaders = new Headers(headers);
++		applyCodexTurnState(requestHeaders, turnState, model.headers, options?.headers);
++		const routingState = requestHeaders.get(TURN_STATE_HEADER);
++		socket.send(
++			JSON.stringify({
++				type: "response.create",
++				...requestBody,
++				...(routingState
++					? { client_metadata: { ...requestBody.client_metadata, [TURN_STATE_HEADER]: routingState } }
++					: {}),
++			}),
++		);
+ 		await processResponsesStream(
+ 			startWebSocketOutputOnFirstEvent(
+-				mapCodexEvents(parseWebSocket(socket, options?.signal, idleTimeoutMs), output),
++				mapCodexEvents(parseWebSocket(socket, options?.signal, idleTimeoutMs), output, turnState),
+ 				onStart,
+ 			),
+ 			output,
+@@ -1611,8 +1733,12 @@ function buildBaseCodexHeaders(
+ 	additionalHeaders: ProviderHeaders | undefined,
+ 	accountId: string,
+ 	token: string,
++	requestIdentity?: AgentRequestIdentity,
+ ): Headers {
+ 	const headers = new Headers(initHeaders);
++	headers.set("originator", "pi");
++	const metadata = buildCodexRequestMetadata(requestIdentity);
++	for (const [key, value] of Object.entries(metadata?.headers ?? {})) headers.set(key, value);
+ 	for (const [key, value] of Object.entries(additionalHeaders || {})) {
+ 		if (value === null) {
+ 			headers.delete(key);
+@@ -1622,7 +1748,6 @@ function buildBaseCodexHeaders(
+ 	}
+ 	headers.set("Authorization", `Bearer ${token}`);
+ 	headers.set("chatgpt-account-id", accountId);
+-	headers.set("originator", "pi");
+ 	headers.set("User-Agent", getPiUserAgent());
+ 	return headers;
+ }
+@@ -1633,13 +1758,14 @@ function buildSSEHeaders(
+ 	accountId: string,
+ 	token: string,
+ 	sessionId?: string,
++	requestIdentity?: AgentRequestIdentity,
+ ): Headers {
+-	const headers = buildBaseCodexHeaders(initHeaders, additionalHeaders, accountId, token);
++	const headers = buildBaseCodexHeaders(initHeaders, additionalHeaders, accountId, token, requestIdentity);
+ 	headers.set("OpenAI-Beta", "responses=experimental");
+ 	headers.set("accept", "text/event-stream");
+ 	headers.set("content-type", "application/json");
+ 
+-	if (sessionId) {
++	if (sessionId && !requestIdentity) {
+ 		headers.set("session-id", sessionId);
+ 		headers.set("x-client-request-id", sessionId);
+ 	}
+@@ -1653,14 +1779,17 @@ function buildWebSocketHeaders(
+ 	accountId: string,
+ 	token: string,
+ 	requestId: string,
++	requestIdentity?: AgentRequestIdentity,
+ ): Headers {
+-	const headers = buildBaseCodexHeaders(initHeaders, additionalHeaders, accountId, token);
++	const headers = buildBaseCodexHeaders(initHeaders, additionalHeaders, accountId, token, requestIdentity);
+ 	headers.delete("accept");
+ 	headers.delete("content-type");
+ 	headers.delete("OpenAI-Beta");
+ 	headers.delete("openai-beta");
+ 	headers.set("OpenAI-Beta", OPENAI_BETA_RESPONSES_WEBSOCKETS);
+-	headers.set("x-client-request-id", requestId);
+-	headers.set("session-id", requestId);
++	if (!requestIdentity) {
++		headers.set("x-client-request-id", requestId);
++		headers.set("session-id", requestId);
++	}
+ 	return headers;
+ }
+diff --git a/packages/ai/src/api/openai-completions.ts b/packages/ai/src/api/openai-completions.ts
+index f5a1bc6..240cc76 100644
+--- a/packages/ai/src/api/openai-completions.ts
++++ b/packages/ai/src/api/openai-completions.ts
+@@ -51,6 +51,7 @@ import {
+ 	resolveTranscriptTools,
+ 	type TranscriptContext,
+ } from "../utils/transcript.ts";
++import { buildCodexRequestMetadata } from "./codex-request-metadata.ts";
+ import {
+ 	appendGrammarToolInputJsonDelta,
+ 	createGrammarToolInputProperties,
+@@ -165,6 +166,7 @@ interface OpenAICompatCacheControl {
+ type ResolvedOpenAICompletionsCompat = Omit<
+ 	Required<OpenAICompletionsCompat>,
+ 	| "cacheControlFormat"
++	| "codexAttribution"
+ 	| "supportsThinkingTokenBudget"
+ 	| "thinkingTokenBudgetField"
+ 	| "supportsMidConvoSystemMessages"
+@@ -172,6 +174,7 @@ type ResolvedOpenAICompletionsCompat = Omit<
+ 	| "vllmPriority"
+ > & {
+ 	cacheControlFormat?: OpenAICompletionsCompat["cacheControlFormat"];
++	codexAttribution?: OpenAICompletionsCompat["codexAttribution"];
+ 	supportsThinkingTokenBudget?: OpenAICompletionsCompat["supportsThinkingTokenBudget"];
+ 	thinkingTokenBudgetField?: OpenAICompletionsCompat["thinkingTokenBudgetField"];
+ 	supportsMidConvoSystemMessages?: OpenAICompletionsCompat["supportsMidConvoSystemMessages"];
+@@ -349,6 +352,7 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
+ 				options?.fetch,
+ 				cacheSessionId,
+ 				compat,
++				options?.requestIdentity,
+ 			);
+ 			let params = buildParams(
+ 				model,
+@@ -756,8 +760,11 @@ function createClient(
+ 	fetch?: typeof globalThis.fetch,
+ 	sessionId?: string,
+ 	compat: ResolvedOpenAICompletionsCompat = getCompat(model),
++	requestIdentity?: StreamOptions["requestIdentity"],
+ ) {
+-	const headers: ProviderHeaders = { "User-Agent": getPiUserAgent(), ...model.headers };
++	const codexMetadata =
++		compat.codexAttribution === "official" ? buildCodexRequestMetadata(requestIdentity) : undefined;
++	const headers: ProviderHeaders = { ...codexMetadata?.headers, "User-Agent": getPiUserAgent(), ...model.headers };
+ 	if (model.provider === "github-copilot") {
+ 		const hasImages = hasCopilotVisionInput(context.messages);
+ 		const copilotHeaders = buildCopilotDynamicHeaders({
+@@ -771,10 +778,10 @@ function createClient(
+ 		if (compat.sessionAffinityFormat === "openrouter") {
+ 			headers["x-session-id"] = sessionId;
+ 		} else {
+-			if (compat.sessionAffinityFormat === "openai") {
++			if (compat.sessionAffinityFormat === "openai" && !codexMetadata) {
+ 				headers.session_id = sessionId;
+ 			}
+-			headers["x-client-request-id"] = sessionId;
++			if (!codexMetadata) headers["x-client-request-id"] = sessionId;
+ 			headers["x-session-affinity"] = sessionId;
+ 		}
+ 	}
+@@ -1718,6 +1725,7 @@ function getCompat(model: Model<"openai-completions">): ResolvedOpenAICompletion
+ 		supportsMidConvoToolAdditions:
+ 			model.compat.supportsMidConvoToolAdditions ?? detected.supportsMidConvoToolAdditions,
+ 		cacheControlFormat: model.compat.cacheControlFormat ?? detected.cacheControlFormat,
++		codexAttribution: model.compat.codexAttribution,
+ 		sendSessionAffinityHeaders: model.compat.sendSessionAffinityHeaders ?? detected.sendSessionAffinityHeaders,
+ 		sessionAffinityFormat: model.compat.sessionAffinityFormat ?? detected.sessionAffinityFormat,
+ 		supportsLongCacheRetention: model.compat.supportsLongCacheRetention ?? detected.supportsLongCacheRetention,
+diff --git a/packages/ai/src/api/openai-responses.ts b/packages/ai/src/api/openai-responses.ts
+index f7a0c60..c303ce0 100644
+--- a/packages/ai/src/api/openai-responses.ts
++++ b/packages/ai/src/api/openai-responses.ts
+@@ -22,6 +22,7 @@ import { getPiUserAgent } from "../utils/pi-user-agent.ts";
+ import { getProviderEnvValue } from "../utils/provider-env.ts";
+ import { retryProviderRequest } from "../utils/provider-retry.ts";
+ import { getDeclaredTools, resolveTranscript, resolveTranscriptTools } from "../utils/transcript.ts";
++import { buildCodexRequestMetadata } from "./codex-request-metadata.ts";
+ import { createGrammarToolInputProperties } from "./constrained-sampling.ts";
+ import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
+ import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
+@@ -65,8 +66,13 @@ function resolveCacheRetention(cacheRetention?: CacheRetention, env?: ProviderEn
+ 	return "short";
+ }
+ 
+-function getCompat(model: Model<"openai-responses">): Required<OpenAIResponsesCompat> {
++type ResolvedOpenAIResponsesCompat = Omit<Required<OpenAIResponsesCompat>, "codexAttribution"> & {
++	codexAttribution?: OpenAIResponsesCompat["codexAttribution"];
++};
++
++function getCompat(model: Model<"openai-responses">): ResolvedOpenAIResponsesCompat {
+ 	return {
++		codexAttribution: model.compat?.codexAttribution,
+ 		supportsDeveloperRole: model.compat?.supportsDeveloperRole ?? true,
+ 		supportsMidConvoSystemMessages: model.compat?.supportsMidConvoSystemMessages ?? false,
+ 		sessionAffinityFormat: model.compat?.sessionAffinityFormat ?? detectSessionAffinityFormat(model),
+@@ -81,7 +87,7 @@ function getCompat(model: Model<"openai-responses">): Required<OpenAIResponsesCo
+ }
+ 
+ function getPromptCacheRetention(
+-	compat: Required<OpenAIResponsesCompat>,
++	compat: ResolvedOpenAIResponsesCompat,
+ 	cacheRetention: CacheRetention,
+ ): "24h" | undefined {
+ 	return cacheRetention === "long" && compat.supportsLongCacheRetention && !compat.supportsExplicitPromptCacheMode
+@@ -90,7 +96,7 @@ function getPromptCacheRetention(
+ }
+ 
+ function getPromptCacheOptions(
+-	compat: Required<OpenAIResponsesCompat>,
++	compat: ResolvedOpenAIResponsesCompat,
+ 	cacheRetention: CacheRetention,
+ ): { mode?: "explicit"; ttl?: "30m" } | undefined {
+ 	if (!compat.supportsExplicitPromptCacheMode) return undefined;
+@@ -155,6 +161,7 @@ export const stream: StreamFunction<"openai-responses", OpenAIResponsesOptions>
+ 				options?.headers,
+ 				options?.fetch,
+ 				cacheSessionId,
++				options?.requestIdentity,
+ 			);
+ 			let params = buildParams(model, normalizedContext, options, compat, grammarToolInputProperties);
+ 			const nextParams = await options?.onPayload?.(params, model);
+@@ -243,9 +250,12 @@ function createClient(
+ 	optionsHeaders?: ProviderHeaders,
+ 	fetch?: typeof globalThis.fetch,
+ 	sessionId?: string,
++	requestIdentity?: StreamOptions["requestIdentity"],
+ ) {
+ 	const compat = getCompat(model);
+-	const headers: ProviderHeaders = { "User-Agent": getPiUserAgent(), ...model.headers };
++	const codexMetadata =
++		compat.codexAttribution === "official" ? buildCodexRequestMetadata(requestIdentity) : undefined;
++	const headers: ProviderHeaders = { ...codexMetadata?.headers, "User-Agent": getPiUserAgent(), ...model.headers };
+ 	if (model.provider === "github-copilot") {
+ 		const hasImages = hasCopilotVisionInput(context.messages);
+ 		const copilotHeaders = buildCopilotDynamicHeaders({
+@@ -259,10 +269,10 @@ function createClient(
+ 		if (compat.sessionAffinityFormat === "openrouter") {
+ 			headers["x-session-id"] = sessionId;
+ 		} else {
+-			if (compat.sessionAffinityFormat === "openai") {
++			if (compat.sessionAffinityFormat === "openai" && !codexMetadata) {
+ 				headers.session_id = sessionId;
+ 			}
+-			headers["x-client-request-id"] = sessionId;
++			if (!codexMetadata) headers["x-client-request-id"] = sessionId;
+ 		}
+ 	}
+ 
+@@ -284,7 +294,7 @@ function buildParams(
+ 	model: Model<"openai-responses">,
+ 	context: TranscriptContext,
+ 	options: OpenAIResponsesOptions | undefined,
+-	compat: Required<OpenAIResponsesCompat> = getCompat(model),
++	compat: ResolvedOpenAIResponsesCompat = getCompat(model),
+ 	grammarToolInputProperties: ReadonlyMap<string, string> = createGrammarToolInputProperties(
+ 		getDeclaredTools(context.messages),
+ 		compat.supportsOpenAIGrammarTools,
+@@ -306,8 +316,11 @@ function buildParams(
+ 	});
+ 
+ 	const cacheRetention = resolveCacheRetention(options?.cacheRetention, options?.env);
++	const codexMetadata =
++		compat.codexAttribution === "official" ? buildCodexRequestMetadata(options?.requestIdentity) : undefined;
+ 	const params: ResponseCreateParamsStreaming & {
+ 		prompt_cache_options?: { mode?: "explicit"; ttl?: "30m" };
++		client_metadata?: Record<string, string>;
+ 	} = {
+ 		model: model.id,
+ 		input: messages,
+@@ -316,6 +329,7 @@ function buildParams(
+ 		prompt_cache_retention: getPromptCacheRetention(compat, cacheRetention),
+ 		prompt_cache_options: getPromptCacheOptions(compat, cacheRetention),
+ 		store: false,
++		client_metadata: codexMetadata?.clientMetadata,
+ 	};
+ 
+ 	if (options?.maxTokens && compat.supportsMaxOutputTokens) {
+diff --git a/packages/ai/src/api/simple-options.ts b/packages/ai/src/api/simple-options.ts
+index 63e34f3..1a9e7b5 100644
+--- a/packages/ai/src/api/simple-options.ts
++++ b/packages/ai/src/api/simple-options.ts
+@@ -39,6 +39,7 @@ export function buildBaseOptions(
+ 		transport: options?.transport,
+ 		cacheRetention: options?.cacheRetention,
+ 		sessionId: options?.sessionId,
++		requestIdentity: options?.requestIdentity,
+ 		headers: options?.headers,
+ 		onPayload: options?.onPayload,
+ 		onResponse: options?.onResponse,
+diff --git a/packages/ai/src/types.ts b/packages/ai/src/types.ts
+index 7646a9c..6c3259c 100644
+--- a/packages/ai/src/types.ts
++++ b/packages/ai/src/types.ts
+@@ -127,6 +127,17 @@ export interface ProviderResponse {
+ 	headers: Record<string, string>;
+ }
+ 
++/** Logical identity for one top-level agent request and its provider continuations. */
++export interface AgentRequestIdentity {
++	sessionId: string;
++	threadId: string;
++	turnId: string;
++	requestKind: "turn" | "compaction";
++	startedAt: number;
++	installationId?: string;
++	windowId?: string;
++}
++
+ /** Authentication, HTTP transport, and lifecycle callbacks shared by provider requests. */
+ export interface ProviderRequestOptions<TModel = Model<Api>> {
+ 	signal?: AbortSignal;
+@@ -215,6 +226,8 @@ export interface StreamOptions extends ProviderRequestOptions<Model<Api>> {
+ 	 * session-aware features. Ignored by providers that don't support it.
+ 	 */
+ 	sessionId?: string;
++	/** Logical request identity for provider attribution, independent of cache identity. */
++	requestIdentity?: AgentRequestIdentity;
+ 	/**
+ 	 * WebSocket connect timeout in milliseconds for providers that support
+ 	 * WebSocket transports. This covers the connection/open handshake only;
+@@ -672,6 +685,8 @@ export type AssistantMessageEvent =
+  * Use this to override URL-based auto-detection for custom providers.
+  */
+ export interface OpenAICompletionsCompat {
++	/** Emit official Codex attribution headers from `requestIdentity`. Disabled when unset. */
++	codexAttribution?: "official";
+ 	/** Whether the provider supports the `store` field. Default: auto-detected from URL. */
+ 	supportsStore?: boolean;
+ 	/** Whether the provider supports the `developer` role (vs `system`). Default: auto-detected from URL. */
+@@ -752,6 +767,8 @@ export interface OpenAICompletionsCompat {
+ 
+ /** Compatibility settings for OpenAI Responses APIs. */
+ export interface OpenAIResponsesCompat {
++	/** Emit official Codex attribution headers and client metadata from `requestIdentity`. Disabled when unset. */
++	codexAttribution?: "official";
+ 	/** Whether the provider supports the `developer` role (vs `system`). Default: true. */
+ 	supportsDeveloperRole?: boolean;
+ 	/** Whether the exact model accepts developer or system messages after the conversation has started. When false, later system messages are folded into the leading system message. Default: false; the generated model catalog enables it for verified models. */
+diff --git a/packages/ai/test/google-stop-reason.test.ts b/packages/ai/test/google-stop-reason.test.ts
+new file mode 100644
+index 0000000..489be2b
+--- /dev/null
++++ b/packages/ai/test/google-stop-reason.test.ts
+@@ -0,0 +1,10 @@
++import { FinishReason } from "@google/genai";
++import { describe, expect, it } from "vitest";
++import { mapStopReason, mapStopReasonString } from "../src/api/google-shared.ts";
++
++describe("Google stop reasons", () => {
++	// #9488: the merged branch must handle all finish reasons in the pinned SDK.
++	it.each(Object.values(FinishReason))("maps SDK finish reason %s consistently with raw responses", (reason) => {
++		expect(mapStopReason(reason)).toBe(mapStopReasonString(reason));
++	});
++});
+diff --git a/packages/ai/test/openai-codex-attribution.test.ts b/packages/ai/test/openai-codex-attribution.test.ts
+new file mode 100644
+index 0000000..c9d18db
+--- /dev/null
++++ b/packages/ai/test/openai-codex-attribution.test.ts
+@@ -0,0 +1,702 @@
++import { zstdDecompressSync } from "node:zlib";
++import { Type } from "typebox";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import {
++	closeOpenAICodexWebSocketSessions,
++	stream as rawStream,
++	streamSimple as rawStreamSimple,
++	resetOpenAICodexWebSocketDebugStats,
++} from "../src/api/openai-codex-responses.ts";
++import { cleanupSessionResources } from "../src/session-resources.ts";
++import type { AgentRequestIdentity, Context, Model } from "../src/types.ts";
++
++import { normalizeContext } from "../src/utils/transcript.ts";
++
++const streamOpenAICodexResponses = (
++	model: Parameters<typeof rawStream>[0],
++	context: Context,
++	options: Parameters<typeof rawStream>[2],
++) => rawStream(model, normalizeContext(context), options);
++const streamSimpleOpenAICodexResponses = (
++	model: Parameters<typeof rawStreamSimple>[0],
++	context: Context,
++	options: Parameters<typeof rawStreamSimple>[2],
++) => rawStreamSimple(model, normalizeContext(context), options);
++
++afterEach(() => {
++	cleanupSessionResources();
++	resetOpenAICodexWebSocketDebugStats();
++	vi.unstubAllGlobals();
++	vi.restoreAllMocks();
++});
++
++const model: Model<"openai-codex-responses"> = {
++	id: "gpt-5.1-codex",
++	name: "GPT-5.1 Codex",
++	api: "openai-codex-responses",
++	provider: "openai-codex",
++	baseUrl: "https://chatgpt.com/backend-api",
++	reasoning: true,
++	input: ["text"],
++	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
++	contextWindow: 400000,
++	maxTokens: 128000,
++};
++
++const context: Context = {
++	systemPrompt: "You are helpful.",
++	messages: [{ role: "user", content: "hello", timestamp: 1 }],
++};
++
++const identity: AgentRequestIdentity = {
++	sessionId: "session-1",
++	threadId: "thread-1",
++	turnId: "turn-1",
++	requestKind: "turn",
++	startedAt: 123456789,
++	installationId: "installation-é",
++	windowId: "thread-1:0",
++};
++
++function token(accountId = "account-1"): string {
++	const payload = Buffer.from(
++		JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: accountId } }),
++	).toString("base64");
++	return `header.${payload}.signature`;
++}
++
++function completedEvents(responseId = "response-1"): Array<Record<string, unknown>> {
++	return [
++		{
++			type: "response.output_item.added",
++			item: { type: "message", id: `msg_${responseId}`, role: "assistant", status: "in_progress", content: [] },
++		},
++		{ type: "response.content_part.added", part: { type: "output_text", text: "" } },
++		{ type: "response.output_text.delta", delta: "Hello" },
++		{
++			type: "response.output_item.done",
++			item: {
++				type: "message",
++				id: `msg_${responseId}`,
++				role: "assistant",
++				status: "completed",
++				content: [{ type: "output_text", text: "Hello" }],
++			},
++		},
++		{
++			type: "response.completed",
++			response: {
++				id: responseId,
++				status: "completed",
++				usage: {
++					input_tokens: 1,
++					output_tokens: 1,
++					total_tokens: 2,
++					input_tokens_details: { cached_tokens: 0 },
++				},
++			},
++		},
++	];
++}
++
++function captureWebSocketRequests(
++	eventsForRequest = (index: number) => completedEvents(`response-${index}`),
++	openConnection: (open: () => void, fail: () => void) => void = queueMicrotask,
++) {
++	const handshakes: Array<Record<string, string> | undefined> = [];
++	const urls: string[] = [];
++	const sockets: MockWebSocket[] = [];
++	const frames: Array<{
++		input: Array<Record<string, unknown>>;
++		previous_response_id?: string;
++		client_metadata?: Record<string, string>;
++	}> = [];
++	class MockWebSocket {
++		readyState = 1;
++		private listeners = new Map<string, Set<(event: unknown) => void>>();
++		constructor(_url: string, options?: { headers?: Record<string, string> }) {
++			sockets.push(this);
++			urls.push(_url);
++			handshakes.push(options?.headers);
++			openConnection(
++				() => this.dispatch("open", {}),
++				() => this.dispatch("error", { message: "Handshake failed" }),
++			);
++		}
++		addEventListener(type: string, listener: (event: unknown) => void): void {
++			const listeners = this.listeners.get(type) ?? new Set();
++			listeners.add(listener);
++			this.listeners.set(type, listeners);
++		}
++		removeEventListener(type: string, listener: (event: unknown) => void): void {
++			this.listeners.get(type)?.delete(listener);
++		}
++		send(data: string): void {
++			frames.push(JSON.parse(data));
++			const events = eventsForRequest(frames.length);
++			queueMicrotask(() => {
++				for (const event of events) {
++					if (event.type === "test.close") this.close();
++					else this.dispatch("message", { data: JSON.stringify(event) });
++				}
++			});
++		}
++		close(): void {
++			this.readyState = 3;
++			this.dispatch("close", { code: 1006 });
++		}
++		private dispatch(type: string, event: unknown): void {
++			for (const listener of this.listeners.get(type) ?? []) listener(event);
++		}
++	}
++	vi.stubGlobal("WebSocket", MockWebSocket);
++	vi.stubGlobal(
++		"fetch",
++		vi.fn(() => {
++			throw new Error("Unexpected HTTP fallback");
++		}),
++	);
++	return { handshakes, frames, urls, sockets };
++}
++
++function parseTurnMetadata(clientMetadata: Record<string, string>): Record<string, unknown> {
++	return JSON.parse(clientMetadata["x-codex-turn-metadata"]);
++}
++
++function decodeRequestBody(body: RequestInit["body"] | undefined): Record<string, unknown> | undefined {
++	if (typeof body === "string") return JSON.parse(body) as Record<string, unknown>;
++	if (body instanceof Uint8Array) {
++		return JSON.parse(Buffer.from(zstdDecompressSync(body)).toString("utf8")) as Record<string, unknown>;
++	}
++	return undefined;
++}
++
++describe("OpenAI Codex attribution", () => {
++	it("sends canonical identity in SSE headers and client_metadata independently of caching", async () => {
++		let capturedHeaders: Headers | undefined;
++		let capturedBody: Record<string, unknown> | undefined;
++		const sse = `${completedEvents()
++			.map((event) => `data: ${JSON.stringify(event)}`)
++			.join("\n\n")}\n\n`;
++		vi.stubGlobal(
++			"fetch",
++			vi.fn(async (_url: string | URL, init?: RequestInit) => {
++				capturedHeaders = init?.headers as Headers;
++				capturedBody = decodeRequestBody(init?.body);
++				return new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } });
++			}),
++		);
++
++		await streamSimpleOpenAICodexResponses(model, context, {
++			apiKey: token(),
++			transport: "sse",
++			cacheRetention: "none",
++			sessionId: "cache-session",
++			requestIdentity: identity,
++		}).result();
++
++		expect(capturedHeaders?.get("originator")).toBe("pi");
++		expect(capturedHeaders?.get("session-id")).toBe(identity.sessionId);
++		expect(capturedHeaders?.get("thread-id")).toBe(identity.threadId);
++		expect(capturedHeaders?.get("x-client-request-id")).toBe(identity.threadId);
++		expect(capturedHeaders?.get("x-codex-window-id")).toBe(identity.windowId);
++		expect(capturedHeaders?.get("x-codex-installation-id")).toBe(identity.installationId);
++		expect(capturedBody?.prompt_cache_key).toBeUndefined();
++
++		const clientMetadata = capturedBody?.client_metadata as Record<string, string>;
++		expect(clientMetadata).toMatchObject({
++			"x-codex-installation-id": identity.installationId,
++			session_id: identity.sessionId,
++			thread_id: identity.threadId,
++			turn_id: identity.turnId,
++			"x-codex-window-id": identity.windowId,
++		});
++		expect(parseTurnMetadata(clientMetadata)).toEqual({
++			installation_id: identity.installationId,
++			session_id: identity.sessionId,
++			thread_id: identity.threadId,
++			turn_id: identity.turnId,
++			window_id: identity.windowId,
++			request_kind: "turn",
++			turn_started_at_unix_ms: identity.startedAt,
++		});
++		expect([...clientMetadata["x-codex-turn-metadata"]].every((character) => character.charCodeAt(0) < 128)).toBe(
++			true,
++		);
++		expect(capturedHeaders?.get("x-codex-turn-metadata")).toBe(clientMetadata["x-codex-turn-metadata"]);
++	});
++
++	// #9481: new-turn attribution must not discard an otherwise valid input delta.
++	it.each(["auto", "websocket-cached", "websocket"] as const)(
++		"sends current metadata on reused %s frames without invalidating cached input",
++		async (transport) => {
++			const { handshakes, frames } = captureWebSocketRequests();
++			const nextIdentity = { ...identity, turnId: "turn-2", startedAt: identity.startedAt + 1000 };
++			const messages = [...context.messages];
++			for (const requestIdentity of [identity, nextIdentity, undefined]) {
++				const result = await streamOpenAICodexResponses(
++					model,
++					{ ...context, messages },
++					{
++						apiKey: token(),
++						transport,
++						sessionId: identity.sessionId,
++						requestIdentity,
++					},
++				).result();
++				expect(result.stopReason).toBe("stop");
++				expect(result.content).toMatchObject([{ type: "text", text: "Hello" }]);
++				messages.push(result, { role: "user", content: "next", timestamp: 2 });
++			}
++			expect(handshakes).toHaveLength(1);
++			expect(handshakes[0]?.["session-id"]).toBe(identity.sessionId);
++			expect(handshakes[0]?.["thread-id"]).toBe(identity.threadId);
++			expect(handshakes[0]?.["x-client-request-id"]).toBe(identity.threadId);
++			expect(JSON.parse(handshakes[0]!["x-codex-turn-metadata"]).turn_id).toBe(identity.turnId);
++			expect(frames.map((frame) => frame.client_metadata?.turn_id)).toEqual([
++				identity.turnId,
++				nextIdentity.turnId,
++				undefined,
++			]);
++			expect(parseTurnMetadata(frames[1].client_metadata!)).toMatchObject({
++				turn_id: nextIdentity.turnId,
++				turn_started_at_unix_ms: nextIdentity.startedAt,
++				request_kind: "turn",
++			});
++			expect(frames[2].client_metadata).toBeUndefined();
++			expect(frames.map((frame) => frame.previous_response_id)).toEqual(
++				transport === "websocket" ? [undefined, undefined, undefined] : [undefined, "response-1", "response-2"],
++			);
++			expect(frames.map((frame) => frame.input.length)).toEqual(transport === "websocket" ? [1, 3, 5] : [1, 1, 1]);
++			expect(frames[1].input.at(-1)).toMatchObject({
++				role: "user",
++				content: [{ type: "input_text", text: "next" }],
++			});
++		},
++	);
++
++	it.each(["instructions", "tools", "reasoning", "prefix", "shorter context"])(
++		"still resends full input when metadata and %s change",
++		async (change) => {
++			const { frames } = captureWebSocketRequests();
++			const options = {
++				apiKey: token(),
++				transport: "auto" as const,
++				sessionId: identity.sessionId,
++				requestIdentity: identity,
++			};
++			const first = await streamOpenAICodexResponses(model, context, options).result();
++			expect(first.stopReason).toBe("stop");
++			const nextContext: Context = {
++				...context,
++				messages: [...context.messages, first, { role: "user", content: "next", timestamp: 2 }],
++			};
++			if (change === "instructions") nextContext.systemPrompt = "Different instructions.";
++			if (change === "tools")
++				nextContext.tools = [{ name: "probe", description: "A new tool", parameters: Type.Object({}) }];
++			if (change === "prefix") nextContext.messages[0] = { role: "user", content: "changed", timestamp: 1 };
++			if (change === "shorter context") nextContext.messages = [{ role: "user", content: "next", timestamp: 2 }];
++			const second = await streamOpenAICodexResponses(model, nextContext, {
++				...options,
++				requestIdentity: { ...identity, turnId: "turn-2", startedAt: 987654321 },
++				...(change === "reasoning" ? { reasoningEffort: "high" as const } : {}),
++			}).result();
++			expect(second.stopReason).toBe("stop");
++			expect(frames).toHaveLength(2);
++			expect(frames[1].previous_response_id).toBeUndefined();
++			expect(frames[1].input).toHaveLength(change === "shorter context" ? 1 : 3);
++			expect(frames[1].client_metadata?.turn_id).toBe("turn-2");
++		},
++	);
++
++	it("lets explicit headers override generated compatibility defaults", async () => {
++		let capturedHeaders: Headers | undefined;
++		const sse = `${completedEvents()
++			.map((event) => `data: ${JSON.stringify(event)}`)
++			.join("\n\n")}\n\n`;
++		vi.stubGlobal(
++			"fetch",
++			vi.fn(async (_url: string | URL, init?: RequestInit) => {
++				capturedHeaders = init?.headers as Headers;
++				return new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } });
++			}),
++		);
++
++		await streamOpenAICodexResponses(model, context, {
++			apiKey: token(),
++			transport: "sse",
++			requestIdentity: identity,
++			headers: { originator: "custom", "thread-id": "custom-thread" },
++		}).result();
++
++		expect(capturedHeaders?.get("originator")).toBe("custom");
++		expect(capturedHeaders?.get("thread-id")).toBe("custom-thread");
++	});
++});
++
++// #9481: routing state belongs to a logical turn, not a socket or prompt-cache key.
++describe("OpenAI Codex turn routing", () => {
++	const options = {
++		apiKey: token(),
++		transport: "sse" as const,
++		requestIdentity: identity,
++		cacheRetention: "none" as const,
++	};
++	function captureSSE(responseForRequest: (index: number) => Response = () => sseResponse()) {
++		const headers: Headers[] = [];
++		vi.stubGlobal(
++			"fetch",
++			vi.fn(async (_url: string | URL, init?: RequestInit) => {
++				headers.push(new Headers(init?.headers));
++				return responseForRequest(headers.length);
++			}),
++		);
++		return headers;
++	}
++	function sseResponse(state = "first", events = completedEvents()): Response {
++		return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {
++			headers: { "content-type": "text/event-stream", "x-codex-turn-state": state },
++		});
++	}
++	const metadata = (state: unknown, type = "codex.response.metadata") => ({
++		type,
++		headers: { "x-codex-turn-state": state },
++	});
++
++	it("keeps the first HTTP state through continuations and intervening compaction, but not new turns", async () => {
++		const headers = captureSSE((index) => sseResponse(`state-${index}`));
++		for (const requestIdentity of [
++			identity,
++			identity,
++			{ ...identity, turnId: "summary", requestKind: "compaction" as const },
++			{ ...identity, windowId: "thread-1:1" },
++			{ ...identity, turnId: "next" },
++		]) {
++			expect(
++				(await streamOpenAICodexResponses(model, context, { ...options, requestIdentity }).result()).stopReason,
++			).toBe("stop");
++		}
++		expect(headers.map((h) => h.get("x-codex-turn-state"))).toEqual([null, "state-1", null, "state-1", null]);
++	});
++
++	it("captures state on a retryable HTTP failure before the internal retry", async () => {
++		const headers = captureSSE((index) =>
++			index === 1
++				? new Response("overloaded", {
++						status: 503,
++						headers: { "retry-after-ms": "0", "x-codex-turn-state": "retry-state" },
++					})
++				: sseResponse(),
++		);
++		expect(
++			(await streamOpenAICodexResponses(model, context, { ...options, maxRetries: 1 }).result()).stopReason,
++		).toBe("stop");
++		expect(headers.map((h) => h.get("x-codex-turn-state"))).toEqual([null, "retry-state"]);
++	});
++
++	it.each(["codex.response.metadata", "response.metadata"])(
++		"captures %s and replays it on frames and reconnects",
++		async (type) => {
++			const { frames, handshakes } = captureWebSocketRequests((index) => [
++				metadata(`state-${index}`, type),
++				...completedEvents(`response-${index}`),
++			]);
++			const wsOptions = {
++				...options,
++				transport: "auto" as const,
++				cacheRetention: "short" as const,
++				sessionId: identity.sessionId,
++			};
++			const messages = [...context.messages];
++			for (let index = 0; index < 4; index++) {
++				if (index === 2) closeOpenAICodexWebSocketSessions(identity.sessionId);
++				const result = await streamOpenAICodexResponses(
++					model,
++					{ ...context, messages },
++					{ ...wsOptions, requestIdentity: index === 3 ? { ...identity, turnId: "next" } : identity },
++				).result();
++				expect(result.stopReason).toBe("stop");
++				messages.push(result, { role: "user", content: "next", timestamp: 2 });
++			}
++			expect(frames.map((f) => f.client_metadata?.["x-codex-turn-state"])).toEqual([
++				undefined,
++				"state-1",
++				"state-1",
++				undefined,
++			]);
++			expect(handshakes.map((h) => h?.["x-codex-turn-state"])).toEqual([undefined, undefined]);
++			expect(frames[1].previous_response_id).toBe("response-1");
++		},
++	);
++
++	it("preserves metadata received before a transport failure for immediate SSE fallback", async () => {
++		captureWebSocketRequests(() => [metadata("before-close"), { type: "test.close" }]);
++		const headers = captureSSE();
++		expect(
++			(
++				await streamOpenAICodexResponses(model, context, {
++					...options,
++					transport: "auto",
++					sessionId: identity.sessionId,
++				}).result()
++			).stopReason,
++		).toBe("stop");
++		expect(headers[0].get("x-codex-turn-state")).toBe("before-close");
++	});
++
++	it("preserves state after streamed output fails, without silently retrying partial output", async () => {
++		captureWebSocketRequests(() => [metadata("partial"), ...completedEvents().slice(0, 3), { type: "test.close" }]);
++		const headers = captureSSE();
++		const retryOptions = {
++			...options,
++			transport: "auto" as const,
++			cacheRetention: "short" as const,
++			sessionId: identity.sessionId,
++		};
++		expect((await streamOpenAICodexResponses(model, context, retryOptions).result()).stopReason).toBe("error");
++		expect(headers).toHaveLength(0);
++		expect((await streamOpenAICodexResponses(model, context, retryOptions).result()).stopReason).toBe("stop");
++		expect(headers[0].get("x-codex-turn-state")).toBe("partial");
++	});
++
++	it.each(["account", "endpoint", "cleanup", "thread", "session"])(
++		"isolates routing after %s changes",
++		async (change) => {
++			const headers = captureSSE();
++			await streamOpenAICodexResponses(model, context, options).result();
++			if (change === "cleanup") cleanupSessionResources(identity.sessionId);
++			await streamOpenAICodexResponses(
++				change === "endpoint" ? { ...model, baseUrl: "https://example.test" } : model,
++				context,
++				{
++					...options,
++					apiKey: change === "account" ? token("account-2") : token(),
++					requestIdentity: {
++						...identity,
++						...(change === "thread" ? { threadId: "other" } : change === "session" ? { sessionId: "other" } : {}),
++					},
++				},
++			).result();
++			expect(headers[1].get("x-codex-turn-state")).toBeNull();
++			if (change === "account" || change === "endpoint") {
++				await streamOpenAICodexResponses(model, context, options).result();
++				expect(headers[2].get("x-codex-turn-state")).toBeNull();
++			}
++		},
++	);
++
++	it.each(["custom", null])("honors a case-insensitive explicit routing override: %s", async (override) => {
++		const { frames, handshakes } = captureWebSocketRequests((index) => [
++			metadata("server"),
++			...completedEvents(`response-${index}`),
++		]);
++		await streamOpenAICodexResponses(model, context, { ...options, transport: "websocket" }).result();
++		await streamOpenAICodexResponses({ ...model, headers: { "X-Codex-Turn-State": "model" } }, context, {
++			...options,
++			transport: "websocket",
++			headers: { "X-CODEX-TURN-STATE": override },
++		}).result();
++		expect(handshakes[1]?.["x-codex-turn-state"]).toBe(override ?? undefined);
++		expect(frames[1].client_metadata?.["x-codex-turn-state"]).toBe(override ?? undefined);
++	});
++
++	it("does not infer a logical turn from cache identity", async () => {
++		const headers = captureSSE();
++		for (let i = 0; i < 2; i++)
++			await streamOpenAICodexResponses(model, context, {
++				...options,
++				requestIdentity: undefined,
++				sessionId: "cache",
++			}).result();
++		expect(headers.map((h) => h.get("x-codex-turn-state"))).toEqual([null, null]);
++	});
++
++	it("captures SSE metadata when no response header carries state", async () => {
++		const headers = captureSSE(() => sseResponse("", [metadata("event-state"), ...completedEvents()]));
++		for (let i = 0; i < 2; i++) {
++			expect((await streamOpenAICodexResponses(model, context, options).result()).stopReason).toBe("stop");
++		}
++		expect(headers.map((h) => h.get("x-codex-turn-state"))).toEqual([null, "event-state"]);
++	});
++
++	it("does not restore cleaned-up state when an in-flight request completes", async () => {
++		const headers = captureSSE(() => {
++			cleanupSessionResources(identity.sessionId);
++			return sseResponse("late-state");
++		});
++		for (let i = 0; i < 2; i++) await streamOpenAICodexResponses(model, context, options).result();
++		expect(headers.map((h) => h.get("x-codex-turn-state"))).toEqual([null, null]);
++	});
++
++	it("replays state on the internal WebSocket connection-limit retry, never its handshake", async () => {
++		const { frames, handshakes } = captureWebSocketRequests((index) =>
++			index === 1
++				? [
++						metadata("retry-state"),
++						{ type: "error", code: "websocket_connection_limit_reached", message: "reconnect" },
++					]
++				: completedEvents(),
++		);
++		expect(
++			(await streamOpenAICodexResponses(model, context, { ...options, transport: "auto" }).result()).stopReason,
++		).toBe("stop");
++		expect(frames.map((f) => f.client_metadata?.["x-codex-turn-state"])).toEqual([undefined, "retry-state"]);
++		expect(handshakes.map((h) => h?.["x-codex-turn-state"])).toEqual([undefined, undefined]);
++	});
++
++	it("ignores invalid event values without blocking later valid state", async () => {
++		const { frames } = captureWebSocketRequests((index) => [
++			metadata({ bad: true }),
++			metadata("invalid\r\nheader"),
++			metadata("valid"),
++			...completedEvents(`response-${index}`),
++		]);
++		for (let i = 0; i < 2; i++)
++			expect(
++				(await streamOpenAICodexResponses(model, context, { ...options, transport: "websocket" }).result())
++					.stopReason,
++			).toBe("stop");
++		expect(frames[1].client_metadata?.["x-codex-turn-state"]).toBe("valid");
++	});
++
++	it("does not let unrelated sessions evict a foreground turn", async () => {
++		const headers = captureSSE();
++		await streamOpenAICodexResponses(model, context, options).result();
++		for (let i = 0; i < 257; i++)
++			await streamOpenAICodexResponses(model, context, {
++				...options,
++				requestIdentity: { ...identity, sessionId: `session-${i}`, threadId: `thread-${i}`, turnId: `turn-${i}` },
++			}).result();
++		await streamOpenAICodexResponses(model, context, options).result();
++		expect(headers.at(-1)?.get("x-codex-turn-state")).toBe("first");
++	});
++
++	it.each([
++		["account", "open"],
++		["account", "fail"],
++		["endpoint", "open"],
++		["endpoint", "fail"],
++		["cleanup", "open"],
++		["cleanup", "fail"],
++	])("isolates a stale handshake after %s changes when it settles with %s", async (change, outcome) => {
++		const opens: Array<() => void> = [];
++		const failures: Array<() => void> = [];
++		const { frames, handshakes } = captureWebSocketRequests(undefined, (open, fail) => {
++			opens.push(open);
++			failures.push(fail);
++		});
++		const wsOptions = {
++			...options,
++			transport: "auto" as const,
++			cacheRetention: "short" as const,
++			sessionId: identity.sessionId,
++		};
++		const pending = streamOpenAICodexResponses(model, context, wsOptions).result();
++		await vi.waitFor(() => expect(opens).toHaveLength(1));
++		if (change === "cleanup") cleanupSessionResources(identity.sessionId);
++		const currentOptions = { ...wsOptions, apiKey: change === "account" ? token("account-2") : token() };
++		const currentModel = change === "endpoint" ? { ...model, baseUrl: "https://other.test" } : model;
++		const current = streamOpenAICodexResponses(currentModel, context, currentOptions).result();
++		await vi.waitFor(() => expect(opens).toHaveLength(2));
++		opens[1]();
++		expect((await current).stopReason).toBe("stop");
++		if (outcome === "open") opens[0]();
++		else failures[0]();
++		expect((await pending).stopReason).toBe("error");
++		expect(globalThis.fetch).not.toHaveBeenCalled();
++		expect((await streamOpenAICodexResponses(currentModel, context, currentOptions).result()).stopReason).toBe(
++			"stop",
++		);
++		expect(frames).toHaveLength(2);
++		expect(handshakes).toHaveLength(2);
++	});
++
++	it("keeps only one cached connection when concurrent handshakes complete", async () => {
++		const opens: Array<() => void> = [];
++		const { sockets, handshakes } = captureWebSocketRequests(undefined, (open) => opens.push(open));
++		const wsOptions = {
++			...options,
++			transport: "auto" as const,
++			cacheRetention: "short" as const,
++			sessionId: identity.sessionId,
++		};
++		const first = streamOpenAICodexResponses(model, context, wsOptions).result();
++		const second = streamOpenAICodexResponses(model, context, wsOptions).result();
++		await vi.waitFor(() => expect(opens).toHaveLength(2));
++		opens[0]();
++		expect((await first).stopReason).toBe("stop");
++		opens[1]();
++		expect((await second).stopReason).toBe("stop");
++		expect(sockets.map((socket) => socket.readyState)).toEqual([1, 3]);
++		expect((await streamOpenAICodexResponses(model, context, wsOptions).result()).stopReason).toBe("stop");
++		expect(handshakes).toHaveLength(2);
++		cleanupSessionResources(identity.sessionId);
++		expect(sockets.map((socket) => socket.readyState)).toEqual([3, 3]);
++	});
++
++	it("invalidates a cached socket when an intervening SSE request changes account", async () => {
++		const { handshakes, frames } = captureWebSocketRequests();
++		const wsOptions = {
++			...options,
++			transport: "auto" as const,
++			cacheRetention: "short" as const,
++			sessionId: identity.sessionId,
++		};
++		await streamOpenAICodexResponses(model, context, wsOptions).result();
++		captureSSE();
++		await streamOpenAICodexResponses(model, context, {
++			...wsOptions,
++			transport: "sse",
++			apiKey: token("account-2"),
++		}).result();
++		await streamOpenAICodexResponses(model, context, wsOptions).result();
++		expect(handshakes).toHaveLength(2);
++		expect(frames.map((f) => f.previous_response_id)).toEqual([undefined, undefined]);
++	});
++
++	it("discards the previous foreground turn when a new one starts", async () => {
++		const headers = captureSSE();
++		for (const turnId of ["old", "new", "old"]) {
++			await streamOpenAICodexResponses(model, context, {
++				...options,
++				requestIdentity: { ...identity, turnId },
++			}).result();
++		}
++		expect(headers.map((h) => h.get("x-codex-turn-state"))).toEqual([null, null, null]);
++	});
++
++	it.each(["account", "endpoint"])(
++		"reconnects and drops continuation state on %s changes and return",
++		async (change) => {
++			const { frames, handshakes, urls } = captureWebSocketRequests((index) => [
++				metadata(`state-${index}`),
++				...completedEvents(`response-${index}`),
++			]);
++			const messages = [...context.messages];
++			for (let index = 0; index < 3; index++) {
++				const result = await streamOpenAICodexResponses(
++					index === 1 && change === "endpoint" ? { ...model, baseUrl: "https://other.test" } : model,
++					{ ...context, messages },
++					{
++						...options,
++						transport: "auto",
++						cacheRetention: "short",
++						sessionId: identity.sessionId,
++						apiKey: index === 1 && change === "account" ? token("account-2") : token(),
++					},
++				).result();
++				expect(result.stopReason).toBe("stop");
++				messages.push(result, { role: "user", content: "next", timestamp: 2 });
++			}
++			expect(handshakes).toHaveLength(3);
++			expect(frames.map((f) => f.previous_response_id)).toEqual([undefined, undefined, undefined]);
++			expect(frames.map((f) => f.client_metadata?.["x-codex-turn-state"])).toEqual([
++				undefined,
++				undefined,
++				undefined,
++			]);
++			if (change === "endpoint") expect(urls[1]).toBe("wss://other.test/codex/responses");
++			else expect(handshakes[1]?.["chatgpt-account-id"]).toBe("account-2");
++		},
++	);
++});
+diff --git a/packages/ai/test/openai-codex-stream.test.ts b/packages/ai/test/openai-codex-stream.test.ts
+index b756a14..8aa0b8d 100644
+--- a/packages/ai/test/openai-codex-stream.test.ts
++++ b/packages/ai/test/openai-codex-stream.test.ts
+@@ -1471,15 +1471,21 @@ describe("openai-codex streaming", () => {
+ 			apiKey: mockToken("account-a"),
+ 		}).result();
+ 
+-		expect(connectedHeaders.map((headers) => headers["chatgpt-account-id"])).toEqual(["account-a", "account-b"]);
++		// #9481: returning to an account starts with fresh routing and continuation state.
++		expect(connectedHeaders.map((headers) => headers["chatgpt-account-id"])).toEqual([
++			"account-a",
++			"account-b",
++			"account-a",
++		]);
+ 		expect(connectedHeaders.map((headers) => headers.authorization)).toEqual([
+ 			`Bearer ${mockToken("account-a")}`,
+ 			`Bearer ${mockToken("account-b")}`,
++			`Bearer ${mockToken("account-a")}`,
+ 		]);
+ 		expect(global.fetch).not.toHaveBeenCalled();
+ 		expect(getOpenAICodexWebSocketDebugStats("shared-session")).toMatchObject({
+-			connectionsCreated: 2,
+-			connectionsReused: 1,
++			connectionsCreated: 3,
++			connectionsReused: 0,
+ 		});
+ 	});
+ 
+diff --git a/packages/ai/test/openai-compatible-codex-attribution.test.ts b/packages/ai/test/openai-compatible-codex-attribution.test.ts
+new file mode 100644
+index 0000000..30f633c
+--- /dev/null
++++ b/packages/ai/test/openai-compatible-codex-attribution.test.ts
+@@ -0,0 +1,137 @@
++import { afterEach, describe, expect, it, vi } from "vitest";
++import { stream as streamOpenAICompletions } from "../src/api/openai-completions.ts";
++import { stream as streamOpenAIResponses } from "../src/api/openai-responses.ts";
++import type { AgentRequestIdentity, Context, Model } from "../src/types.ts";
++import { normalizeContext } from "../src/utils/transcript.ts";
++
++const identity: AgentRequestIdentity = {
++	sessionId: "session-1",
++	threadId: "thread-1",
++	turnId: "turn-1",
++	requestKind: "turn",
++	startedAt: 123456789,
++	windowId: "thread-1:0",
++};
++
++const context: Context = {
++	messages: [{ role: "user", content: "hello", timestamp: 1 }],
++};
++
++afterEach(() => {
++	vi.unstubAllGlobals();
++});
++
++function createModel<TApi extends "openai-completions" | "openai-responses">(
++	api: TApi,
++	codexAttribution?: "official",
++): Model<TApi> {
++	return {
++		id: "test-model",
++		name: "Test Model",
++		api,
++		provider: "test-proxy",
++		baseUrl: "https://proxy.example.com/v1",
++		compat: codexAttribution ? ({ codexAttribution } as Model<TApi>["compat"]) : undefined,
++		reasoning: false,
++		input: ["text"],
++		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
++		contextWindow: 128000,
++		maxTokens: 4096,
++	};
++}
++
++function chatCompletionSse(): string {
++	return 'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1}}\n\ndata: [DONE]\n\n';
++}
++
++function responsesSse(): string {
++	return 'data: {"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2,"input_tokens_details":{"cached_tokens":0}}}}\n\n';
++}
++
++describe("OpenAI-compatible Codex attribution", () => {
++	it("emits official headers for opted-in Chat Completions proxies", async () => {
++		let headers: Headers | undefined;
++		let body: Record<string, unknown> | undefined;
++		vi.stubGlobal(
++			"fetch",
++			vi.fn(async (_url: string | URL, init?: RequestInit) => {
++				headers = new Headers(init?.headers);
++				body = JSON.parse(String(init?.body));
++				return new Response(chatCompletionSse(), {
++					status: 200,
++					headers: { "content-type": "text/event-stream" },
++				});
++			}),
++		);
++
++		await streamOpenAICompletions(createModel("openai-completions", "official"), normalizeContext(context), {
++			apiKey: "test-key",
++			requestIdentity: identity,
++		}).result();
++
++		expect(headers?.get("originator")).toBe("pi");
++		expect(headers?.get("session-id")).toBe(identity.sessionId);
++		expect(headers?.get("thread-id")).toBe(identity.threadId);
++		expect(headers?.get("x-client-request-id")).toBe(identity.threadId);
++		expect(headers?.get("x-codex-window-id")).toBe(identity.windowId);
++		expect(JSON.parse(headers?.get("x-codex-turn-metadata") ?? "{}")).toMatchObject({
++			turn_id: identity.turnId,
++			request_kind: identity.requestKind,
++		});
++		expect(body?.client_metadata).toBeUndefined();
++	});
++
++	it("emits headers and client_metadata for opted-in Responses proxies", async () => {
++		let headers: Headers | undefined;
++		let body: Record<string, unknown> | undefined;
++		vi.stubGlobal(
++			"fetch",
++			vi.fn(async (_url: string | URL, init?: RequestInit) => {
++				headers = new Headers(init?.headers);
++				body = JSON.parse(String(init?.body));
++				return new Response(responsesSse(), {
++					status: 200,
++					headers: { "content-type": "text/event-stream" },
++				});
++			}),
++		);
++
++		await streamOpenAIResponses(createModel("openai-responses", "official"), normalizeContext(context), {
++			apiKey: "test-key",
++			requestIdentity: identity,
++		}).result();
++
++		expect(headers?.get("originator")).toBe("pi");
++		expect(headers?.get("thread-id")).toBe(identity.threadId);
++		const clientMetadata = body?.client_metadata as Record<string, string>;
++		expect(clientMetadata).toMatchObject({
++			session_id: identity.sessionId,
++			thread_id: identity.threadId,
++			turn_id: identity.turnId,
++			"x-codex-window-id": identity.windowId,
++		});
++		expect(headers?.get("x-codex-turn-metadata")).toBe(clientMetadata["x-codex-turn-metadata"]);
++	});
++
++	it("does not emit Codex metadata without the compatibility opt-in", async () => {
++		let headers: Headers | undefined;
++		vi.stubGlobal(
++			"fetch",
++			vi.fn(async (_url: string | URL, init?: RequestInit) => {
++				headers = new Headers(init?.headers);
++				return new Response(chatCompletionSse(), {
++					status: 200,
++					headers: { "content-type": "text/event-stream" },
++				});
++			}),
++		);
++
++		await streamOpenAICompletions(createModel("openai-completions"), normalizeContext(context), {
++			apiKey: "test-key",
++			requestIdentity: identity,
++		}).result();
++
++		expect(headers?.get("originator")).toBeNull();
++		expect(headers?.get("x-codex-turn-metadata")).toBeNull();
++	});
++});
+diff --git a/packages/ai/test/openai-completions-thinking-as-text.test.ts b/packages/ai/test/openai-completions-thinking-as-text.test.ts
+index e609b14..cadeaa0 100644
+--- a/packages/ai/test/openai-completions-thinking-as-text.test.ts
++++ b/packages/ai/test/openai-completions-thinking-as-text.test.ts
+@@ -51,9 +51,10 @@ const compat = {
+ 	supportsLongCacheRetention: true,
+ } satisfies Omit<
+ 	Required<OpenAICompletionsCompat>,
+-	"cacheControlFormat" | "thinkingTokenBudgetField" | "vllmPriority"
++	"cacheControlFormat" | "codexAttribution" | "thinkingTokenBudgetField" | "vllmPriority"
+ > & {
+ 	cacheControlFormat?: OpenAICompletionsCompat["cacheControlFormat"];
++	codexAttribution?: OpenAICompletionsCompat["codexAttribution"];
+ 	thinkingTokenBudgetField?: OpenAICompletionsCompat["thinkingTokenBudgetField"];
+ };
+ 
+diff --git a/packages/ai/test/openai-completions-tool-result-images.test.ts b/packages/ai/test/openai-completions-tool-result-images.test.ts
+index 4d30386..d26e2d2 100644
+--- a/packages/ai/test/openai-completions-tool-result-images.test.ts
++++ b/packages/ai/test/openai-completions-tool-result-images.test.ts
+@@ -12,7 +12,11 @@ const emptyUsage: Usage = {
+ 	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+ };
+ 
+-const compat: Omit<Required<OpenAICompletionsCompat>, "thinkingTokenBudgetField" | "vllmPriority"> & {
++const compat: Omit<
++	Required<OpenAICompletionsCompat>,
++	"codexAttribution" | "thinkingTokenBudgetField" | "vllmPriority"
++> & {
++	codexAttribution?: OpenAICompletionsCompat["codexAttribution"];
+ 	thinkingTokenBudgetField?: OpenAICompletionsCompat["thinkingTokenBudgetField"];
+ } = {
+ 	supportsStore: true,
+diff --git a/packages/coding-agent/src/core/agent-session.ts b/packages/coding-agent/src/core/agent-session.ts
+index 338d0e0..55b2a49 100644
+--- a/packages/coding-agent/src/core/agent-session.ts
++++ b/packages/coding-agent/src/core/agent-session.ts
+@@ -2380,6 +2380,7 @@ export class AgentSession {
+ 			this.settingsManager.getRetrySettings(),
+ 			this._summarizationRetryCallbacks({ source: "compaction", reason }),
+ 			undefined, // sessionId
++			this.agent.createRequestIdentity("compaction"),
+ 		);
+ 	}
+ 
+@@ -3687,6 +3688,7 @@ export class AgentSession {
+ 					streamFn: this.agent.streamFunction,
+ 					retry: this.settingsManager.getRetrySettings(),
+ 					callbacks: this._summarizationRetryCallbacks({ source: "branchSummary" }),
++					requestIdentity: this.agent.createRequestIdentity("compaction"),
+ 				});
+ 				if (result.aborted) {
+ 					return { cancelled: true, aborted: true };
+diff --git a/packages/coding-agent/src/core/compaction/branch-summarization.ts b/packages/coding-agent/src/core/compaction/branch-summarization.ts
+index 0e0408b..c947593 100644
+--- a/packages/coding-agent/src/core/compaction/branch-summarization.ts
++++ b/packages/coding-agent/src/core/compaction/branch-summarization.ts
+@@ -6,7 +6,7 @@
+  */
+ 
+ import type { AgentMessage, StreamFn } from "@earendil-works/pi-agent-core";
+-import type { RetryCallbacks, RetryPolicy } from "@earendil-works/pi-ai";
++import type { AgentRequestIdentity, RetryCallbacks, RetryPolicy } from "@earendil-works/pi-ai";
+ import { contentText, normalizeContext } from "@earendil-works/pi-ai";
+ import type { Model, SimpleStreamOptions, Usage } from "@earendil-works/pi-ai/compat";
+ import {
+@@ -87,6 +87,8 @@ export interface GenerateBranchSummaryOptions {
+ 	retry?: RetryPolicy;
+ 	/** Optional callbacks for retry reporting (e.g. TUI retry indicators). */
+ 	callbacks?: RetryCallbacks;
++	/** Logical identity identifying this request as compaction rather than foreground work. */
++	requestIdentity?: AgentRequestIdentity;
+ }
+ 
+ // ============================================================================
+@@ -306,6 +308,7 @@ export async function generateBranchSummary(
+ 		streamFn,
+ 		retry,
+ 		callbacks,
++		requestIdentity,
+ 	} = options;
+ 
+ 	// Token budget = context window minus reserved space for prompt + response
+@@ -349,7 +352,7 @@ export async function generateBranchSummary(
+ 	// without running through agent state/events. Retried via completeSummarization
+ 	// so transient stream drops reuse the configured retry policy.
+ 	const context = normalizeContext({ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages });
+-	const requestOptions: SimpleStreamOptions = { apiKey, headers, env, signal, maxTokens };
++	const requestOptions: SimpleStreamOptions = { apiKey, headers, env, signal, maxTokens, requestIdentity };
+ 	const response = await completeSummarization(model, context, requestOptions, streamFn, retry, callbacks);
+ 
+ 	// Check if aborted or errored
+diff --git a/packages/coding-agent/src/core/compaction/compaction.ts b/packages/coding-agent/src/core/compaction/compaction.ts
+index 1757c53..cc062d7 100644
+--- a/packages/coding-agent/src/core/compaction/compaction.ts
++++ b/packages/coding-agent/src/core/compaction/compaction.ts
+@@ -7,6 +7,7 @@
+ 
+ import type { AgentMessage, StreamFn, ThinkingLevel } from "@earendil-works/pi-agent-core";
+ import {
++	type AgentRequestIdentity,
+ 	contentText,
+ 	getCurrentSystemMessage,
+ 	normalizeContext,
+@@ -623,8 +624,9 @@ function createSummarizationOptions(
+ 	signal: AbortSignal | undefined,
+ 	thinkingLevel: ThinkingLevel | undefined,
+ 	sessionId: string | undefined,
++	requestIdentity?: AgentRequestIdentity,
+ ): SimpleStreamOptions {
+-	const options: SimpleStreamOptions = { maxTokens, signal, apiKey, headers, env, sessionId };
++	const options: SimpleStreamOptions = { maxTokens, signal, apiKey, headers, env, sessionId, requestIdentity };
+ 	if (model.reasoning && thinkingLevel && thinkingLevel !== "off") {
+ 		options.reasoning = thinkingLevel;
+ 	}
+@@ -679,6 +681,7 @@ export async function generateSummary(
+ 	retry?: RetryPolicy,
+ 	callbacks?: RetryCallbacks,
+ 	sessionId?: string,
++	requestIdentity?: AgentRequestIdentity,
+ ): Promise<string> {
+ 	return (
+ 		await generateSummaryWithUsage(
+@@ -696,6 +699,7 @@ export async function generateSummary(
+ 			retry,
+ 			callbacks,
+ 			sessionId,
++			requestIdentity,
+ 		)
+ 	).text;
+ }
+@@ -730,6 +734,7 @@ export async function generateSummaryWithUsage(
+ 	retry?: RetryPolicy,
+ 	callbacks?: RetryCallbacks,
+ 	sessionId?: string,
++	requestIdentity?: AgentRequestIdentity,
+ ): Promise<{ text: string; usage: Usage }> {
+ 	const maxTokens = Math.min(
+ 		Math.floor(0.8 * reserveTokens),
+@@ -763,6 +768,7 @@ export async function generateSummaryWithUsage(
+ 		signal,
+ 		thinkingLevel,
+ 		sessionId,
++		requestIdentity,
+ 	);
+ 
+ 	const response = await completeSummarization(
+@@ -997,6 +1003,7 @@ export async function compact(
+ 	retry?: RetryPolicy,
+ 	callbacks?: RetryCallbacks,
+ 	sessionId?: string,
++	requestIdentity?: AgentRequestIdentity,
+ ): Promise<CompactionResult> {
+ 	const {
+ 		firstKeptEntryId,
+@@ -1032,6 +1039,7 @@ export async function compact(
+ 				retry,
+ 				callbacks,
+ 				sessionId,
++				requestIdentity,
+ 			);
+ 			historyText = historyResult.text;
+ 			historyUsage = historyResult.usage;
+@@ -1049,6 +1057,7 @@ export async function compact(
+ 			retry,
+ 			callbacks,
+ 			sessionId,
++			requestIdentity,
+ 		);
+ 		// Merge into single summary
+ 		summary = `${historyText}\n\n---\n\n**Turn Context (split turn):**\n\n${turnPrefixResult.text}`;
+@@ -1070,6 +1079,7 @@ export async function compact(
+ 			retry,
+ 			callbacks,
+ 			sessionId,
++			requestIdentity,
+ 		);
+ 		summary = result.text;
+ 		summaryUsage = result.usage;
+@@ -1108,6 +1118,7 @@ async function generateTurnPrefixSummary(
+ 	retry?: RetryPolicy,
+ 	callbacks?: RetryCallbacks,
+ 	sessionId?: string,
++	requestIdentity?: AgentRequestIdentity,
+ ): Promise<{ text: string; usage: Usage }> {
+ 	const maxTokens = Math.min(
+ 		Math.floor(0.5 * reserveTokens),
+@@ -1120,7 +1131,17 @@ async function generateTurnPrefixSummary(
+ 	const response = await completeSummarization(
+ 		model,
+ 		buildSummarizationContext(promptText),
+-		createSummarizationOptions(model, maxTokens, apiKey, headers, env, signal, thinkingLevel, sessionId),
++		createSummarizationOptions(
++			model,
++			maxTokens,
++			apiKey,
++			headers,
++			env,
++			signal,
++			thinkingLevel,
++			sessionId,
++			requestIdentity,
++		),
+ 		streamFn,
+ 		retry,
+ 		callbacks,
+diff --git a/packages/coding-agent/src/core/model-config.ts b/packages/coding-agent/src/core/model-config.ts
+index e0df347..01d7a8a 100644
+--- a/packages/coding-agent/src/core/model-config.ts
++++ b/packages/coding-agent/src/core/model-config.ts
+@@ -71,6 +71,7 @@ const ChatTemplateKwargVariableSchema = Type.Object({
+ const ChatTemplateKwargSchema = Type.Union([ChatTemplateKwargScalarSchema, ChatTemplateKwargVariableSchema]);
+ 
+ const OpenAICompletionsCompatSchema = Type.Object({
++	codexAttribution: Type.Optional(Type.Literal("official")),
+ 	supportsStore: Type.Optional(Type.Boolean()),
+ 	supportsDeveloperRole: Type.Optional(Type.Boolean()),
+ 	supportsReasoningEffort: Type.Optional(Type.Boolean()),
+@@ -112,6 +113,7 @@ const OpenAICompletionsCompatSchema = Type.Object({
+ });
+ 
+ const OpenAIResponsesCompatSchema = Type.Object({
++	codexAttribution: Type.Optional(Type.Literal("official")),
+ 	supportsDeveloperRole: Type.Optional(Type.Boolean()),
+ 	sessionAffinityFormat: Type.Optional(
+ 		Type.Union([Type.Literal("openai"), Type.Literal("openai-nosession"), Type.Literal("openrouter")]),
+diff --git a/packages/coding-agent/src/core/sdk.ts b/packages/coding-agent/src/core/sdk.ts
+index 2ab8525..6bb7ee6 100644
+--- a/packages/coding-agent/src/core/sdk.ts
++++ b/packages/coding-agent/src/core/sdk.ts
+@@ -373,7 +373,15 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
+ 		},
+ 		convertToLlm: convertToLlmWithBlockImages,
+ 		streamFn: async (model, context, options) => {
+-			const requestOptions = buildRequestOptions(model, options);
++			// Derive the window from committed history so retries, resume, and tree navigation
++			// use the active branch's context without a separate persistent counter.
++			const requestIdentity = options?.requestIdentity
++				? {
++						...options.requestIdentity,
++						windowId: `${options.requestIdentity.threadId}:${sessionManager.getBranch().filter((entry) => entry.type === "compaction").length}`,
++					}
++				: undefined;
++			const requestOptions = buildRequestOptions(model, { ...options, requestIdentity });
+ 			// Compaction and summaries use their own routing ids; only session requests
+ 			// replace the cache entry, so warming restarts from them. Keep warming while
+ 			// the current transcript still extends the request's prefix. Agent state may
+diff --git a/packages/coding-agent/test/suite/regressions/9481-context-window-attribution.test.ts b/packages/coding-agent/test/suite/regressions/9481-context-window-attribution.test.ts
+new file mode 100644
+index 0000000..32fba01
+--- /dev/null
++++ b/packages/coding-agent/test/suite/regressions/9481-context-window-attribution.test.ts
+@@ -0,0 +1,169 @@
++import { join } from "node:path";
++import {
++	type AgentRequestIdentity,
++	fauxAssistantMessage,
++	normalizeContext,
++	streamSimple,
++} from "@earendil-works/pi-ai/compat";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import type { AgentSession } from "../../../src/core/agent-session.ts";
++import { createAgentSession } from "../../../src/core/sdk.ts";
++import { SessionManager } from "../../../src/core/session-manager.ts";
++import { createTestExtensionsResult, createTestResourceLoader } from "../../utilities.ts";
++import { createHarness, type Harness } from "../harness.ts";
++
++// #9481: context windows follow committed compactions on the active branch, not summary requests.
++describe("context-window attribution", () => {
++	let harness: Harness;
++	const sessions: AgentSession[] = [];
++	const identities: AgentRequestIdentity[] = [];
++
++	afterEach(() => {
++		for (const session of sessions.splice(0)) session.dispose();
++		harness?.cleanup();
++		identities.length = 0;
++		vi.restoreAllMocks();
++	});
++
++	async function setup() {
++		harness = await createHarness({
++			settings: { retry: { enabled: false }, compaction: { enabled: false, keepRecentTokens: 1 } },
++		});
++		vi.spyOn(harness.session.modelRuntime, "streamSimple").mockImplementation((model, context, options) => {
++			if (options?.requestIdentity) identities.push(options.requestIdentity);
++			return streamSimple(model, context, options);
++		});
++	}
++
++	async function openSession(manager: SessionManager, cancelCompaction = false) {
++		const extensionsResult = await createTestExtensionsResult([
++			(pi) => {
++				pi.on("session_before_compact", () => (cancelCompaction ? { cancel: true } : undefined));
++			},
++		]);
++		const { session } = await createAgentSession({
++			cwd: harness.tempDir,
++			agentDir: harness.tempDir,
++			model: harness.getModel(),
++			modelRuntime: harness.session.modelRuntime,
++			sessionManager: manager,
++			settingsManager: harness.settingsManager,
++			resourceLoader: createTestResourceLoader({ extensionsResult }),
++			tools: [],
++		});
++		sessions.push(session);
++		return session;
++	}
++
++	it("reconstructs windows after resume, tree navigation, and a fork without changing retry identity", async () => {
++		await setup();
++		const manager = SessionManager.create(harness.tempDir, join(harness.tempDir, "sessions"));
++		const session = await openSession(manager);
++		harness.setResponses(Array.from({ length: 9 }, () => fauxAssistantMessage("ok")));
++		await session.prompt("start");
++		const rootLeaf = manager.getLeafId()!;
++		const firstMessageId = manager.getBranch().find((entry) => entry.type === "message")!.id;
++		const retryIdentity = session.agent.createRequestIdentity();
++		const firstCompaction = manager.appendCompaction("summary one", firstMessageId, 100);
++		await (
++			await session.agent.streamFunction(harness.getModel(), normalizeContext({ messages: [] }), {
++				requestIdentity: retryIdentity,
++			})
++		).result();
++		const secondCompaction = manager.appendCompaction("summary two", firstMessageId, 100);
++		await (
++			await session.agent.streamFunction(harness.getModel(), normalizeContext({ messages: [] }), {
++				requestIdentity: retryIdentity,
++			})
++		).result();
++		expect(identities.slice(1, 3).map((identity) => identity.turnId)).toEqual([
++			retryIdentity.turnId,
++			retryIdentity.turnId,
++		]);
++		expect(identities.slice(1, 3).map((identity) => identity.startedAt)).toEqual([
++			retryIdentity.startedAt,
++			retryIdentity.startedAt,
++		]);
++		expect(retryIdentity.windowId).toBe(`${manager.getSessionId()}:0`);
++
++		const resumedManager = SessionManager.open(manager.getSessionFile()!);
++		const resumed = await openSession(resumedManager);
++		await resumed.prompt("resume");
++		for (const leaf of [rootLeaf, firstCompaction, secondCompaction]) {
++			resumedManager.branch(leaf);
++			resumed.agent.state.messages = resumedManager.buildSessionContext().messages;
++			await resumed.prompt("branch");
++		}
++		expect(identities.map((identity) => identity.windowId)).toEqual(
++			[0, 1, 2, 2, 0, 1, 2].map((number) => `${manager.getSessionId()}:${number}`),
++		);
++
++		const forkPath = resumedManager.createBranchedSession(secondCompaction)!;
++		const forkManager = SessionManager.open(forkPath);
++		const fork = await openSession(forkManager);
++		await fork.prompt("fork");
++		expect(forkManager.getSessionId()).not.toBe(manager.getSessionId());
++		expect(identities.at(-1)).toMatchObject({
++			threadId: forkManager.getSessionId(),
++			windowId: `${forkManager.getSessionId()}:2`,
++		});
++	});
++
++	it.each(["success", "failure", "cancel"] as const)(
++		"advances only after committed compaction: %s",
++		async (outcome) => {
++			await setup();
++			const manager = harness.sessionManager;
++			const session = await openSession(manager, outcome === "cancel");
++			harness.setResponses([fauxAssistantMessage("first answer"), fauxAssistantMessage("second answer")]);
++			await session.prompt("first");
++			await session.prompt("second");
++			harness.setResponses(
++				outcome === "failure"
++					? [fauxAssistantMessage("", { stopReason: "error", errorMessage: "invalid summary request" })]
++					: [fauxAssistantMessage("history summary"), fauxAssistantMessage("turn prefix summary")],
++			);
++			if (outcome === "success") await session.compact();
++			else
++				await expect(session.compact()).rejects.toThrow(
++					outcome === "cancel" ? "Compaction cancelled" : "invalid summary request",
++				);
++			const summaryIdentities = identities.filter((identity) => identity.requestKind === "compaction");
++			expect(summaryIdentities).toHaveLength(outcome === "success" ? 2 : outcome === "failure" ? 1 : 0);
++			for (const identity of identities) expect(identity.windowId).toBe(`${manager.getSessionId()}:0`);
++			if (outcome === "success") expect(summaryIdentities[0].turnId).toBe(summaryIdentities[1].turnId);
++			expect(manager.getBranch().filter((entry) => entry.type === "compaction")).toHaveLength(
++				outcome === "success" ? 1 : 0,
++			);
++			harness.setResponses([fauxAssistantMessage("after")]);
++			await session.prompt("after compaction attempt");
++			expect(identities.at(-1)?.windowId).toBe(`${manager.getSessionId()}:${outcome === "success" ? 1 : 0}`);
++		},
++	);
++
++	it("advances the window but preserves the active turn during overflow recovery", async () => {
++		await setup();
++		const manager = harness.sessionManager;
++		const session = await openSession(manager);
++		harness.setResponses([fauxAssistantMessage("first answer"), fauxAssistantMessage("second answer")]);
++		await session.prompt("first");
++		await session.prompt("second");
++		harness.settingsManager.applyOverrides({ compaction: { enabled: true } });
++		identities.length = 0;
++		harness.setResponses([
++			fauxAssistantMessage("", { stopReason: "error", errorMessage: "prompt is too long" }),
++			fauxAssistantMessage("history summary"),
++			fauxAssistantMessage("turn prefix summary"),
++			fauxAssistantMessage("recovered"),
++		]);
++		await session.prompt("trigger overflow");
++		expect(manager.getBranch().filter((entry) => entry.type === "compaction")).toHaveLength(1);
++		const foreground = identities.filter((identity) => identity.requestKind === "turn");
++		expect(foreground).toHaveLength(2);
++		expect(foreground[1]).toEqual({ ...foreground[0], windowId: `${manager.getSessionId()}:1` });
++		expect(foreground[0].windowId).toBe(`${manager.getSessionId()}:0`);
++		for (const identity of identities.filter((candidate) => candidate.requestKind === "compaction")) {
++			expect(identity.windowId).toBe(`${manager.getSessionId()}:0`);
++		}
++	});
++});

@@ -1,0 +1,129 @@
+{
+  "id": "swe-milestone-ripgrep-v1.0.2",
+  "repository": "BurntSushi/ripgrep",
+  "dataRevision": "3500478e740d42583277c2658aa7729eb36e10f4",
+  "harnessRevision": "17a8f1593e172e26b36cea15e2b30fb9536c93f5",
+  "steps": [
+    {
+      "index": 1,
+      "id": "maintenance_fixes_1_sub-01",
+      "graded": true,
+      "requires": [],
+      "promptFile": "E:/Pi_Coding_Agent/tmp/cf-ripgrep-work/data/srs/maintenance_fixes_1_sub-01/SRS.md",
+      "promptSha256": "57655bafaa9b2e10cef09e6fcd16efb3024b4a0ef9285d1825127c43ecebcd26"
+    },
+    {
+      "index": 2,
+      "id": "maintenance_fixes_1_sub-02",
+      "graded": true,
+      "requires": [],
+      "promptFile": "E:/Pi_Coding_Agent/tmp/cf-ripgrep-work/data/srs/maintenance_fixes_1_sub-02/SRS.md",
+      "promptSha256": "3a186d0957f2aa852e11c156647c648d8ca831ea41130ad2bc0f347c787880bf"
+    },
+    {
+      "index": 3,
+      "id": "milestone_seed_119407d_1_sub-01",
+      "graded": false,
+      "requires": [],
+      "promptFile": "E:/Pi_Coding_Agent/tmp/cf-ripgrep-work/data/srs/milestone_seed_119407d_1_sub-01/SRS.md",
+      "promptSha256": "b74f65ecc9fa1eb804c574bacaeaaf47da9b2e807a08467c390c26b886e82c8f"
+    },
+    {
+      "index": 4,
+      "id": "milestone_seed_2924d0c_1",
+      "graded": true,
+      "requires": [],
+      "promptFile": "E:/Pi_Coding_Agent/tmp/cf-ripgrep-work/data/srs/milestone_seed_2924d0c_1/SRS.md",
+      "promptSha256": "60bc8097c80ec2e1c411ede64adf6b37341b341c20b95fff2159ee610240a118"
+    },
+    {
+      "index": 5,
+      "id": "milestone_seed_292bc54_1",
+      "graded": true,
+      "requires": [],
+      "promptFile": "E:/Pi_Coding_Agent/tmp/cf-ripgrep-work/data/srs/milestone_seed_292bc54_1/SRS.md",
+      "promptSha256": "e716f2921728e9c1ca5970b28edfab6129d7ca51c5c101c29ab834642be96a4d"
+    },
+    {
+      "index": 6,
+      "id": "maintenance_style_1",
+      "graded": false,
+      "requires": [],
+      "promptFile": "E:/Pi_Coding_Agent/tmp/cf-ripgrep-work/data/srs/maintenance_style_1/SRS.md",
+      "promptSha256": "3d193764de0b55bd8bbeeee3a0a94c6dafc180a19fd50745dc5ab64aae4cb2b2"
+    },
+    {
+      "index": 7,
+      "id": "milestone_seed_5f5da48_1_sub-01",
+      "graded": true,
+      "requires": [],
+      "promptFile": "E:/Pi_Coding_Agent/tmp/cf-ripgrep-work/data/srs/milestone_seed_5f5da48_1_sub-01/SRS.md",
+      "promptSha256": "b0168116b388f8e0377118e9a95ce86dc6c6546d1ee35fe9b6090e8710afb861"
+    },
+    {
+      "index": 8,
+      "id": "milestone_seed_5f5da48_1_sub-02",
+      "graded": true,
+      "requires": [
+        "milestone_seed_5f5da48_1_sub-01"
+      ],
+      "promptFile": "E:/Pi_Coding_Agent/tmp/cf-ripgrep-work/data/srs/milestone_seed_5f5da48_1_sub-02/SRS.md",
+      "promptSha256": "6fdf6128b4d7d00901d35c426bf371d30d199e174877e35d9606096fb6c50786"
+    },
+    {
+      "index": 9,
+      "id": "milestone_seed_a6e0be3_1_sub-01",
+      "graded": true,
+      "requires": [],
+      "promptFile": "E:/Pi_Coding_Agent/tmp/cf-ripgrep-work/data/srs/milestone_seed_a6e0be3_1_sub-01/SRS.md",
+      "promptSha256": "4f26d1b7f75f2fbae72bda5b53dd66779c5343f35ce885d3d47ad9594d2439fc"
+    },
+    {
+      "index": 10,
+      "id": "milestone_seed_8c6595c_1",
+      "graded": true,
+      "requires": [],
+      "promptFile": "E:/Pi_Coding_Agent/tmp/cf-ripgrep-work/data/srs/milestone_seed_8c6595c_1/SRS.md",
+      "promptSha256": "ef9fe8ff5f184baa5a07a9064bbfd7a35189b786b387c2973a0e9bbe2db1534a"
+    },
+    {
+      "index": 11,
+      "id": "milestone_seed_a6e0be3_1_sub-02",
+      "graded": true,
+      "requires": [
+        "milestone_seed_292bc54_1",
+        "milestone_seed_a6e0be3_1_sub-01"
+      ],
+      "promptFile": "E:/Pi_Coding_Agent/tmp/cf-ripgrep-work/data/srs/milestone_seed_a6e0be3_1_sub-02/SRS.md",
+      "promptSha256": "b1108e6bcbf486ef4628c1e4b7ba764aa8e8581294b4cdbc6789c7ba7ebf690a"
+    },
+    {
+      "index": 12,
+      "id": "milestone_seed_119407d_1_sub-02",
+      "graded": true,
+      "requires": [
+        "maintenance_fixes_1_sub-02",
+        "milestone_seed_119407d_1_sub-01",
+        "milestone_seed_2924d0c_1",
+        "milestone_seed_5f5da48_1_sub-02",
+        "milestone_seed_8c6595c_1",
+        "milestone_seed_a6e0be3_1_sub-02"
+      ],
+      "promptFile": "E:/Pi_Coding_Agent/tmp/cf-ripgrep-work/data/srs/milestone_seed_119407d_1_sub-02/SRS.md",
+      "promptSha256": "1bff3b1236e75b71b8087c4d508b88f1c4de86e3fb54416e7d184afe282c46cb"
+    },
+    {
+      "index": 13,
+      "id": "milestone_seed_b610d1c_1",
+      "graded": true,
+      "requires": [
+        "milestone_seed_2924d0c_1"
+      ],
+      "promptFile": "E:/Pi_Coding_Agent/tmp/cf-ripgrep-work/data/srs/milestone_seed_b610d1c_1/SRS.md",
+      "promptSha256": "c1be6103fc9c796f8ae4418900f4b53d124aaa80e7d391f38f5686082e271f7f"
+    }
+  ],
+  "gradedCount": 11,
+  "ordering": "official topological_order as tie-breaker; all Strong and additional dependencies; weak dependencies ignored per official config",
+  "hiddenScoresFedToModel": false
+}

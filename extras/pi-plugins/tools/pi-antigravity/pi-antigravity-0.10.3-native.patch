@@ -1,0 +1,1323 @@
+diff --git a/index.ts b/index.ts
+index d9b3ba6..de21f38 100644
+--- a/index.ts
++++ b/index.ts
+@@ -21,15 +21,14 @@ import type {
+ import { stripTerminalSequences, Text, truncateToWidth } from "@earendil-works/pi-tui";
+ import { Type } from "typebox";
+ import { randomUUID } from "node:crypto";
++import { cliServerName, NativeWorkspaceRegistration } from "./lib/native-workspace.mjs";
+ import path from "node:path";
+ import { piConfigDir, readJson, writeJson } from "./lib/config.ts";
+ import { installAgyDeathHooks, killAllAgyTrees } from "./lib/agy-children.ts";
+ import { checkAgyBinary, MIN_AGY_VERSION, runAgyCommand } from "./lib/agy-diagnostics.ts";
+ import { parseAgyAgents, readAgyProcessProfile } from "./lib/agy-profile.ts";
+-import { pruneBridgeMcpCache, removeMcpCacheEntry } from "./lib/mcp-cache.ts";
+ import {
+   AgyPiBridge,
+-  BRIDGE_SERVER_NAME,
+   selectBridgedTools,
+   type PiToolInfo,
+ } from "./lib/bridge.ts";
+@@ -100,8 +99,6 @@ function statusOneLine(value: string, maxLength = 160): string {
+ 
+ // --- Pi-tool bridge ---------------------------------------------------------
+ 
+-const BRIDGE_ENABLED = process.env.PI_ANTIGRAVITY_PI_TOOL_BRIDGE !== "0";
+-
+ /** Timeout for shutdown-path agy calls — fast enough not to stall closing pi. */
+ const SHUTDOWN_AGY_TIMEOUT_MS = 5_000;
+ 
+@@ -109,52 +106,6 @@ async function execAgy(args: string[], timeoutMs = DISCOVERY_TIMEOUT_MS): Promis
+   return (await runAgyCommand(args, { timeoutMs })).stdout;
+ }
+ 
+-/**
+- * Remove `pi-bridge-*` MCP registrations whose loopback server is no longer
+- * reachable. Registrations live in agy's GLOBAL config while bridge servers
+- * are per-pi-session: crashed sessions leak registrations forever, and every
+- * live session's tools are merged into every agy turn's tools/list. Pruning
+- * dead entries on startup keeps cross-session pollution to live sessions.
+- * agy also caches tool manifests on disk per server
+- * (`~/.gemini/antigravity-cli/mcp/<name>/`) and never evicts them, so the
+- * same sweep prunes cache entries with no live server left.
+- */
+-async function pruneStaleBridgeRegistrations(): Promise<void> {
+-  let list: string;
+-  try {
+-    list = await execAgy(["mcp", "list"]);
+-  } catch {
+-    return; // agy unavailable — registration below will warn instead
+-  }
+-  const stale: string[] = [];
+-  const live: string[] = [];
+-  for (const line of list.split("\n").slice(1)) {
+-    const columns = line.trim().split(/\s+/);
+-    const name = columns[0] ?? "";
+-    const url = columns[columns.length - 1] ?? "";
+-    if (!name.startsWith(`${BRIDGE_SERVER_NAME}-`) || !/^http:\/\/127\.0\.0\.1:\d+\//.test(url)) {
+-      continue;
+-    }
+-    try {
+-      await fetch(url, {
+-        method: "POST",
+-        headers: { "content-type": "application/json" },
+-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+-        signal: AbortSignal.timeout(1_500),
+-      });
+-      // Any HTTP answer (even 403/404) means a server is still listening.
+-      live.push(name);
+-    } catch {
+-      stale.push(name);
+-    }
+-  }
+-  await Promise.all(stale.map((name) => execAgy(["mcp", "remove", name]).catch(() => {})));
+-  // `agy mcp remove` deregisters but leaves the on-disk manifest cache
+-  // behind; entries whose registration is already gone never reappear in
+-  // `agy mcp list`, so prune the cache against the live set here.
+-  await pruneBridgeMcpCache({ liveServers: live });
+-}
+-
+ interface ModelCache {
+   fetchedAt?: number;
+   source?: "live" | "fallback";
+@@ -266,7 +217,8 @@ export default function antigravityExtension(pi: ExtensionAPI): void {
+     conversationId: string;
+     modelId: string;
+     turns: number;
+-  }): string => `${state.conversationId}:${state.modelId}:${state.turns}`;
++    systemPromptHash?: string;
++  }): string => `${state.conversationId}:${state.modelId}:${state.turns}:${state.systemPromptHash ?? ""}`;
+ 
+   async function persistConversationState(ctx: ExtensionContext, force = false): Promise<void> {
+     if (ctx.model?.provider !== "antigravity") return;
+@@ -282,6 +234,7 @@ export default function antigravityExtension(pi: ExtensionAPI): void {
+       turns: snapshot.turns,
+       usage: snapshot.conversationUsage,
+       contextTokens: observedContextTokens,
++      systemPromptHash: snapshot.systemPromptHash,
+     };
+     const key = conversationStateKey(state);
+     if (!force && key === persistedConversationKey) return;
+@@ -303,57 +256,60 @@ export default function antigravityExtension(pi: ExtensionAPI): void {
+ 
+   // --- Pi-tool bridge setup -------------------------------------------------
+ 
+-  const bridge = new AgyPiBridge(`${BRIDGE_SERVER_NAME}-${process.pid}`);
++  const nativeId = `p${process.pid}-${randomUUID().replace(/-/g, "").slice(0, 12)}`;
++  const serverName = cliServerName(nativeId);
++  const bridge = new AgyPiBridge(serverName);
+   const bridgeToken = randomUUID();
+   bridge.requireToken(bridgeToken);
+-  // Session-unique tool prefix: agy's MCP config is global, so concurrent pi
+-  // sessions' bridges all appear in every agy turn's tools/list. Namespacing
+-  // each session's tools makes tool→server routing unambiguous — a call can
+-  // only reach the session that advertised it.
+-  const bridgeToolPrefix = `pi__p${process.pid}__`;
++  const bridgeToolPrefix = "";
+   bridge.setToolPrefix(bridgeToolPrefix);
+   bridge.setOnCall((call) => service.pushBridgeCall(call));
+ 
++  let nativeWorkspace: NativeWorkspaceRegistration | undefined;
++  const cleanupWorkspaceOnExit = () => nativeWorkspace?.dispose();
++  process.once("exit", cleanupWorkspaceOnExit);
+   const bridgeManager = createBridgeLifecycleManager({
+     bridge,
+     bridgeToken,
+-    enabled: BRIDGE_ENABLED,
+-    pruneStaleRegistrations: pruneStaleBridgeRegistrations,
+-    addMcpServer: async (serverName, url, token) => {
+-      await execAgy([
+-        "mcp",
+-        "add",
+-        "--type",
+-        "http",
+-        "--header",
+-        `x-pi-bridge-token: ${token}`,
+-        serverName,
+-        url,
+-      ]);
++    addMcpServer: async (_serverName, url, token) => {
++      if (!nativeWorkspace) throw new Error("Pi workspace must be selected before MCP registration.");
++      nativeWorkspace.registerMcpServer(url, token);
+     },
+-    removeMcpServer: async (serverName) => {
+-      await execAgy(["mcp", "remove", serverName], SHUTDOWN_AGY_TIMEOUT_MS);
++    removeMcpServer: async () => {
++      nativeWorkspace?.dispose();
++      nativeWorkspace = undefined;
+     },
+-    evictMcpCache: removeMcpCacheEntry,
+   });
+ 
+-  /**
+-   * Register the pi-tool bridge with agy. Idempotent: no-op when disabled or
+-   * already registered. Registration must precede the first agy spawn of the
+-   * session — agy eagerly connects to MCP servers at startup (verified
+-   * 2026-08-21) — so this runs as soon as an Antigravity model is selected.
+-   */
+-  async function ensureBridgeRegistered(ui?: ExtensionUIContext): Promise<void> {
+-    await bridgeManager.ensureRegistered((warning) => ui?.notify(warning, "warning"));
++  async function ensureBridgeRegistered(
++    ui?: ExtensionUIContext,
++    cwd = process.cwd(),
++  ): Promise<void> {
++    const resolvedCwd = path.resolve(cwd);
++    if (nativeWorkspace && nativeWorkspace.cwd !== resolvedCwd) {
++      await bridgeManager.teardown();
++      nativeWorkspace?.dispose();
++      nativeWorkspace = undefined;
++    }
++    if (!nativeWorkspace) {
++      nativeWorkspace = new NativeWorkspaceRegistration({ cwd: resolvedCwd, id: nativeId, serverName });
++    }
++    const registered = await bridgeManager.ensureRegistered((warning) => ui?.notify(warning, "warning"));
++    if (!registered) throw new Error("Pi workspace bridge could not be registered.");
++  }
++
++  async function prepareNativeAgent(systemPrompt: string): Promise<string> {
++    if (!nativeWorkspace || !bridgeManager.isRegistered()) {
++      throw new Error("Pi workspace bridge has not been initialized.");
++    }
++    nativeWorkspace.writeSystemPrompt(systemPrompt, selectBridgedTools(pi.getAllTools() as PiToolInfo[], pi.getActiveTools()));
++    return nativeWorkspace.agentName;
+   }
+ 
+-  /**
+-   * Deregister the pi-tool bridge and evict its manifest cache. No-op when
+-   * the bridge is not registered or running. Runs when the session leaves
+-   * Antigravity models and on shutdown.
+-   */
+   async function teardownBridge(): Promise<void> {
+     await bridgeManager.teardown();
++    nativeWorkspace?.dispose();
++    nativeWorkspace = undefined;
+   }
+ 
+   // --- Skill passing (Phase 2) ----------------------------------------------
+@@ -378,17 +334,8 @@ export default function antigravityExtension(pi: ExtensionAPI): void {
+ 
+   const bridgedSkills = () => usableSkillCatalog(nonWorkspaceSkills(loadedSkills, tasksSessionCwd));
+ 
+-  /**
+-   * Bridge mode keeps the catalog in activate_skill's schema (refreshed on
+-   * every agy spawn), so nothing is appended to the prompt. When the bridge is
+-   * off OR failed to register with agy, fall back to the direct-mode path
+-   * catalog so skills never become silently invisible.
+-   */
+-  const getBootstrapSuffix = () => bridgeManager.getBootstrapSuffix(bridgedSkills());
+-
+   /** Publish one `pi__p<pid>__activate_skill` tool for global pi skills. */
+   function refreshSkillTools(): void {
+-    if (!BRIDGE_ENABLED) return;
+     const skills = bridgedSkills();
+     if (skills.length === 0) {
+       bridge.setDynamicTools([]);
+@@ -405,15 +352,8 @@ export default function antigravityExtension(pi: ExtensionAPI): void {
+   }
+ 
+   bridge.setToolSource(() => {
+-    if (!BRIDGE_ENABLED) return [];
+-    let activeNames: string[] = [];
+-    let allTools: PiToolInfo[] = [];
+-    try {
+-      activeNames = pi.getActiveTools();
+-      allTools = pi.getAllTools() as PiToolInfo[];
+-    } catch {
+-      return []; // API unavailable (print/RPC edge) — expose nothing.
+-    }
++    const activeNames = pi.getActiveTools();
++    const allTools = pi.getAllTools() as PiToolInfo[];
+     return selectBridgedTools(allTools, activeNames);
+   });
+ 
+@@ -646,13 +586,13 @@ export default function antigravityExtension(pi: ExtensionAPI): void {
+         replay,
+         bridge,
+         updateAgyTasksWidget,
+-        getBootstrapSuffix,
+         isActiveTool,
+         handleAgyActivity,
+         createAntigravityRuntime,
+         (modelId) => currentCache.models.find((candidate) => candidate.id === modelId),
+         readAgyProcessProfile,
+         bridgeManager.processRevision,
++        prepareNativeAgent,
+       ),
+     });
+   };
+@@ -671,9 +611,12 @@ export default function antigravityExtension(pi: ExtensionAPI): void {
+     registerAntigravityProvider(fresh.models);
+   }
+ 
+-  pi.on("before_agent_start", (event) => {
++  pi.on("before_agent_start", async (event, ctx) => {
+     captureSkills(event.systemPromptOptions?.skills);
+     refreshSkillTools();
++    if (ctx.model?.provider === "antigravity") {
++      await ensureBridgeRegistered(ctx.ui, ctx.cwd);
++    }
+   });
+ 
+   // The agy stream reports tool starts immediately, but its DONE event can be
+@@ -687,7 +630,13 @@ export default function antigravityExtension(pi: ExtensionAPI): void {
+     reconcileWidgetPolling();
+   });
+ 
+-  pi.on("agent_settled", (_event, ctx) => {
++  pi.on("agent_settled", async (_event, ctx) => {
++    if (bridge.pendingCount > 0) {
++      // Pi skips agent_before_settle when cancelled and will not re-enter the provider.
++      // Stop agy before settling MCP calls so it cannot continue the ended turn.
++      await runAntigravity(runtime, service.abortTurn);
++      bridge.cancelPending("antigravity: pi turn ended before the tool call completed.");
++    }
+     if (ctx.model?.provider !== "antigravity" && !agyAgentActive) return;
+     agyAgentActive = false;
+     updateAgyTasksWidget();
+@@ -738,6 +687,7 @@ export default function antigravityExtension(pi: ExtensionAPI): void {
+           cwd: compatibleRestore.cwd,
+           turns: compatibleRestore.turns,
+           usage: compatibleRestore.usage,
++          systemPromptHash: compatibleRestore.systemPromptHash,
+         }),
+       );
+       observedContextTokens = compatibleRestore.contextTokens;
+@@ -753,7 +703,7 @@ export default function antigravityExtension(pi: ExtensionAPI): void {
+     // selected: register lazily here (session resumed on an agy model) and on
+     // model_select; non-agy sessions never touch agy at all.
+     if (ctx.model?.provider === "antigravity") {
+-      await ensureBridgeRegistered(ctx.ui);
++      await ensureBridgeRegistered(ctx.ui, ctx.cwd);
+       await refreshStaleModelsWhenSelected();
+     }
+   });
+@@ -772,7 +722,7 @@ export default function antigravityExtension(pi: ExtensionAPI): void {
+     selectedModelKey = nextModelKey;
+     // The bridge exists only while an Antigravity model is selected.
+     if (event.model?.provider === "antigravity") {
+-      await ensureBridgeRegistered(ctx?.ui);
++      await ensureBridgeRegistered(ctx.ui, ctx.cwd);
+       await refreshStaleModelsWhenSelected();
+     } else {
+       await teardownBridge();
+@@ -826,9 +776,8 @@ export default function antigravityExtension(pi: ExtensionAPI): void {
+     } catch {
+       // Already closed.
+     }
+-    if (bridgeManager.isRegistered() || bridgeManager.isRunning()) {
+-      await teardownBridge();
+-    }
++    await teardownBridge();
++    process.off("exit", cleanupWorkspaceOnExit);
+     try {
+       tasksUi?.setWidget(AGY_TASKS_WIDGET_KEY, undefined);
+       tasksUi?.setWidget(AGY_ARTIFACTS_WIDGET_KEY, undefined);
+@@ -975,7 +924,7 @@ export default function antigravityExtension(pi: ExtensionAPI): void {
+         }
+         lines.push(`profile: ${profile}`);
+         lines.push(
+-          `bridge: enabled=${BRIDGE_ENABLED} running=${bridgeManager.isRunning()} registered=${bridgeManager.isRegistered()} revision=${bridgeManager.processRevision()}`,
++          `bridge: running=${bridgeManager.isRunning()} registered=${bridgeManager.isRegistered()} revision=${bridgeManager.processRevision()}`,
+         );
+ 
+         const conversationId = snapshot?.conversationId;
+diff --git a/lib/bridge-lifecycle.ts b/lib/bridge-lifecycle.ts
+index d3e870b..2938ca6 100644
+--- a/lib/bridge-lifecycle.ts
++++ b/lib/bridge-lifecycle.ts
+@@ -1,15 +1,11 @@
+ import type { AgyPiBridge } from "./bridge.ts";
+-import { formatSkillCatalog, type SkillLite } from "./skills.ts";
+ 
+ export interface BridgeLifecycleDeps {
+   bridge: AgyPiBridge;
+   bridgeToken: string;
+   addMcpServer: (serverName: string, url: string, token: string) => Promise<void>;
+   removeMcpServer: (serverName: string) => Promise<void>;
+-  evictMcpCache: (serverName: string) => Promise<void>;
+-  enabled?: boolean;
+-  pruneStaleRegistrations?: () => Promise<void>;
+-  notifyWarning?: (message: string) => void;
++
+ }
+ 
+ export interface BridgeLifecycleManager {
+@@ -19,11 +15,9 @@ export interface BridgeLifecycleManager {
+   readonly teardown: () => Promise<void>;
+   readonly registrationGeneration: () => number;
+   readonly processRevision: () => string;
+-  readonly getBootstrapSuffix: (skills: SkillLite[]) => string | undefined;
+ }
+ 
+ export function createBridgeLifecycleManager(deps: BridgeLifecycleDeps): BridgeLifecycleManager {
+-  const enabled = deps.enabled ?? true;
+   let registered = false;
+   let generation = 0;
+ 
+@@ -34,13 +28,9 @@ export function createBridgeLifecycleManager(deps: BridgeLifecycleDeps): BridgeL
+     processRevision: () => `${generation}:${deps.bridge.catalogRevision}`,
+ 
+     ensureRegistered: async (notify?: (message: string) => void) => {
+-      if (!enabled) return false;
+       if (registered) return true;
+ 
+       try {
+-        if (deps.pruneStaleRegistrations) {
+-          await deps.pruneStaleRegistrations();
+-        }
+         if (!deps.bridge.running) {
+           await deps.bridge.start();
+         }
+@@ -58,7 +48,6 @@ export function createBridgeLifecycleManager(deps: BridgeLifecycleDeps): BridgeL
+         if (notify) {
+           notify(warning);
+         } else {
+-          deps.notifyWarning?.(warning);
+         }
+         return false;
+       }
+@@ -73,18 +62,11 @@ export function createBridgeLifecycleManager(deps: BridgeLifecycleDeps): BridgeL
+       } catch {
+         // Registration may already be gone.
+       }
+-      try {
+-        await deps.evictMcpCache(deps.bridge.serverName);
+-      } catch {
+-        // Manifest cache eviction is best-effort.
+-      }
+       if (deps.bridge.running) {
+         await deps.bridge.close();
+       }
+       if (changed) generation += 1;
+     },
+ 
+-    getBootstrapSuffix: (skills: SkillLite[]) =>
+-      enabled && registered ? undefined : formatSkillCatalog(skills),
+   };
+ }
+diff --git a/lib/bridge.ts b/lib/bridge.ts
+index dc64051..4d5d39d 100644
+--- a/lib/bridge.ts
++++ b/lib/bridge.ts
+@@ -35,26 +35,14 @@ export interface BridgeToolDef {
+   parameters: unknown;
+ }
+ 
+-/** Shape of pi's ToolInfo the bridge selection needs. */
++/** Shape of Pi's active tool registry used to publish the live catalog. */
+ export interface PiToolInfo {
+   name: string;
+   description?: string;
+   parameters?: unknown;
+-  sourceInfo?: { source?: string };
+ }
+ 
+-/**
+- * The only pi tools bridged into agy: those pi got from its MCP adapter
+- * (gateway tools like `mcp`/`mcpScript` plus per-server direct tools),
+- * identified by their package source. Everything else of pi's surface —
+- * builtins and extension tools alike (ask_user, web_search, todo, …) — is
+- * pi-session machinery agy must not mutate mid-turn; agy has native
+- * equivalents for files, shell, and web. Skills are bridged separately as
+- * one dynamic `pi__activate_skill` tool.
+- */
+-const MCP_ADAPTER_SOURCE = /pi-mcp-adapter/;
+-
+-/** Select the pi tools eligible for bridging (MCP adapter tools only). */
++/** Publish every currently active Pi tool except this extension's own wrapper. */
+ export function selectBridgedTools(
+   tools: PiToolInfo[],
+   activeNames: readonly string[],
+@@ -63,8 +51,7 @@ export function selectBridgedTools(
+   const bridged: BridgeToolDef[] = [];
+   for (const tool of tools) {
+     if (!active.has(tool.name)) continue;
+-    if (tool.name === WRAPPER_TOOL_NAME) continue; // display-only replay wrapper
+-    if (!MCP_ADAPTER_SOURCE.test(tool.sourceInfo?.source ?? "")) continue;
++    if (tool.name === WRAPPER_TOOL_NAME) continue; // prevent recursive Antigravity calls
+     bridged.push({
+       name: tool.name,
+       description: tool.description ?? "",
+@@ -74,8 +61,12 @@ export function selectBridgedTools(
+   return bridged;
+ }
+ 
++export type BridgeContent =
++  | { type: "text"; text: string }
++  | { type: "image"; data: string; mimeType: string };
++
+ export interface BridgeCallResult {
+-  content: string;
++  content: string | BridgeContent[];
+   isError: boolean;
+ }
+ 
+@@ -260,19 +251,19 @@ export class AgyPiBridge {
+     if (!server) return Promise.resolve();
+     this.#server = undefined;
+     this.#port = 0;
+-    for (const pending of this.#pending.values()) {
+-      clearTimeout(pending.timer);
+-      pending.resolve({
+-        content: "antigravity: pi session shut down while the tool call was pending.",
+-        isError: true,
+-      });
+-    }
+-    this.#pending.clear();
++    this.cancelPending("antigravity: pi session shut down while the tool call was pending.");
+     return new Promise((resolve) => {
+       server.close(() => resolve());
+     });
+   }
+ 
++  /** Settle pending calls without closing the workspace bridge. */
++  cancelPending(content: string): void {
++    for (const id of this.#pending.keys()) {
++      this.resolveCall(id, { content, isError: true });
++    }
++  }
++
+   /** True when the provider is still waiting for pi to execute this call. */
+   isAwaiting(callId: string): boolean {
+     return this.#pending.has(callId);
+@@ -386,7 +377,9 @@ export class AgyPiBridge {
+         return {
+           ...base,
+           result: {
+-            content: [{ type: "text", text: result.content }],
++            content: Array.isArray(result.content)
++              ? result.content
++              : [{ type: "text", text: result.content }],
+             isError: result.isError,
+           },
+         };
+@@ -461,15 +454,18 @@ export function resolveBridgeResultsFromContext(
+       role?: string;
+       toolCallId?: string;
+       isError?: boolean;
+-      content?: Array<{ type?: string; text?: string }>;
++      content?: Array<{ type?: string; text?: string; data?: string; mimeType?: string }>;
+     };
+     if (message?.role !== "toolResult" || !message.toolCallId) continue;
+     if (!bridge.isAwaiting(message.toolCallId)) continue;
+-    const text = (message.content ?? [])
+-      .filter((part) => part?.type === "text")
+-      .map((part) => part.text ?? "")
+-      .join("\n");
+-    bridge.resolveCall(message.toolCallId, { content: text, isError: message.isError === true });
++    const content: BridgeContent[] = [];
++    for (const part of message.content ?? []) {
++      if (part?.type === "text") content.push({ type: "text", text: part.text ?? "" });
++      else if (part?.type === "image" && part.data && part.mimeType) {
++        content.push({ type: "image", data: part.data, mimeType: part.mimeType });
++      }
++    }
++    bridge.resolveCall(message.toolCallId, { content, isError: message.isError === true });
+     resolved += 1;
+   }
+   return resolved;
+diff --git a/lib/conversation-state.ts b/lib/conversation-state.ts
+index ad621f3..da0a6c0 100644
+--- a/lib/conversation-state.ts
++++ b/lib/conversation-state.ts
+@@ -17,6 +17,7 @@ export interface PersistedAgyConversation {
+   usage: AgyUsage;
+   /** Most recent observed model context footprint (input + cache read). */
+   contextTokens?: number;
++  systemPromptHash?: string;
+ }
+ 
+ export interface PersistedAgyReset {
+@@ -110,6 +111,10 @@ export function parsePersistedAgyState(value: unknown): PersistedAgyState | unde
+   if (record.contextTokens !== undefined && !isNonNegativeNumber(record.contextTokens)) {
+     return undefined;
+   }
++  if (record.systemPromptHash !== undefined &&
++      (typeof record.systemPromptHash !== "string" || !/^[a-f0-9]{64}$/.test(record.systemPromptHash))) {
++    return undefined;
++  }
+   return {
+     version: 1,
+     kind: "conversation",
+@@ -120,6 +125,7 @@ export function parsePersistedAgyState(value: unknown): PersistedAgyState | unde
+     turns: record.turns as number,
+     usage,
+     contextTokens: record.contextTokens as number | undefined,
++    systemPromptHash: record.systemPromptHash as string | undefined,
+   };
+ }
+ 
+diff --git a/lib/mcp-cache.ts b/lib/mcp-cache.ts
+deleted file mode 100644
+index 5f9ba66..0000000
+--- a/lib/mcp-cache.ts
++++ /dev/null
+@@ -1,54 +0,0 @@
+-/**
+- * agy's MCP tool-manifest cache.
+- *
+- * agy writes one directory of JSON tool manifests per connected server under
+- * `~/.gemini/antigravity-cli/mcp/<server-name>/`. Nothing evicts the cache —
+- * `agy mcp remove` only deregisters, and a dead loopback server leaves its
+- * manifests behind — so every bridge session leaks a directory. This module
+- * computes cache paths and prunes bridge entries whose server is gone.
+- */
+-
+-import { promises as fs } from "node:fs";
+-import * as os from "node:os";
+-import * as path from "node:path";
+-import { BRIDGE_SERVER_NAME } from "./bridge.ts";
+-
+-export function agyMcpCacheDir(home = os.homedir()): string {
+-  return path.join(home, ".gemini", "antigravity-cli", "mcp");
+-}
+-
+-/** Remove one server's manifest cache directory. Best-effort; never throws. */
+-export async function removeMcpCacheEntry(serverName: string, home = os.homedir()): Promise<void> {
+-  await fs
+-    .rm(path.join(agyMcpCacheDir(home), serverName), { recursive: true, force: true })
+-    .catch(() => {});
+-}
+-
+-/**
+- * Delete every bridge cache entry (legacy `pi-bridge` or `pi-bridge-<pid>`)
+- * that is not in `liveServers`. Non-bridge entries are left untouched.
+- * Returns the removed entry names.
+- */
+-export async function pruneBridgeMcpCache(options: {
+-  liveServers: Iterable<string>;
+-  home?: string;
+-}): Promise<string[]> {
+-  const live = new Set(options.liveServers);
+-  let entries: string[];
+-  try {
+-    entries = await fs.readdir(agyMcpCacheDir(options.home));
+-  } catch {
+-    return []; // Cache directory absent — nothing to prune.
+-  }
+-  const dead = entries.filter((name) => isBridgeCacheEntry(name) && !live.has(name));
+-  await Promise.all(dead.map((name) => removeMcpCacheEntry(name, options.home)));
+-  return dead;
+-}
+-
+-function isBridgeCacheEntry(name: string): boolean {
+-  if (name === BRIDGE_SERVER_NAME) return true; // pre-pid legacy registration
+-  return (
+-    name.startsWith(`${BRIDGE_SERVER_NAME}-`) &&
+-    /^\d+$/.test(name.slice(BRIDGE_SERVER_NAME.length + 1))
+-  );
+-}
+diff --git a/lib/native-workspace.mjs b/lib/native-workspace.mjs
+new file mode 100644
+index 0000000..1dbc5ef
+--- /dev/null
++++ b/lib/native-workspace.mjs
+@@ -0,0 +1,155 @@
++import fs from "node:fs";
++import path from "node:path";
++
++function canonical(value) {
++  if (Array.isArray(value)) return value.map(canonical);
++  if (value && typeof value === "object") {
++    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
++  }
++  return value;
++}
++
++function sameJson(left, right) {
++  return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
++}
++
++function emptyDirectory(directory) {
++  try {
++    fs.rmdirSync(directory);
++  } catch {
++    // Keep directories containing project-owned files.
++  }
++}
++
++export function createNativeAgentMarkdown(name, systemPrompt) {
++  if (!/^[a-zA-Z0-9_-]+$/.test(name)) throw new Error("Invalid Antigravity agent name.");
++  return `---\nname: ${name}\ndescription: Pi-native Antigravity agent.\nmainAgent: true\nsubagent: false\nexcludeDefaultComponents: true\ninheritCustomizations: false\ntools: []\n---\n\n${systemPrompt.replace(/\s+$/, "")}\n`;
++}
++
++/** Short MCP server name. The CLI tool id is `mcp_<server>_<Pi tool>` and must fit in 64 characters, so the server name cannot repeat the session id. */
++export function cliServerName(id) {
++  const suffix = String(id).replace(/[^a-zA-Z0-9]/g, "").slice(-8);
++  if (suffix.length < 8) throw new Error("Antigravity session id is too short for a CLI server name.");
++  return `b${suffix}`;
++}
++
++export function cliToolName(serverName, toolName, toolPrefix = "") {
++  return `mcp_${serverName}_${toolPrefix}${toolName}`;
++}
++
++/** Owns only one process/session's workspace MCP entry and custom agent. */
++export class NativeWorkspaceRegistration {
++  constructor({ cwd, id, serverName }) {
++    this.cwd = path.resolve(cwd);
++    this.id = String(id).replace(/[^a-zA-Z0-9_-]/g, "");
++    if (!this.id) throw new Error("A process/session identity is required for workspace registration.");
++    this.agentName = `pi-native-${this.id}`;
++    this.serverName = serverName ?? cliServerName(this.id);
++    this.toolPrefix = "";
++    this.configPath = path.join(this.cwd, ".agents", "mcp_config.json");
++    this.agentDirectory = path.join(this.cwd, ".agents", "agents", this.agentName);
++    this.agentPath = path.join(this.agentDirectory, "agent.md");
++    this.#agentContent = undefined;
++    this.#mcpEntry = undefined;
++    this.#originalConfig = undefined;
++    this.#originalConfigExisted = false;
++    this.#originalConfigRaw = undefined;
++  }
++
++  #agentContent;
++  #mcpEntry;
++  #originalConfig;
++  #originalConfigExisted;
++  #originalConfigRaw;
++
++  writeSystemPrompt(systemPrompt, tools = []) {
++    for (const tool of tools) {
++      const cliName = cliToolName(this.serverName, tool.name, this.toolPrefix);
++      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(cliName)) {
++        throw new Error(`Antigravity CLI name is too long for Pi tool "${tool.name}": ${cliName}`);
++      }
++    }
++    const catalog = tools.map(({ name, description }) => `- ${name}: ${description}`).join("\n");
++    const routing = `\n\n<pi_tool_bridge>\nPi tools are available through call_mcp_tool. Set ServerName to "${this.serverName}" and ToolName to "${this.toolPrefix}<Pi tool name>"; pass the Pi tool arguments unchanged in Arguments. For example, read uses ToolName "${this.toolPrefix}read". Use the registered MCP tool schemas for parameter details.\n</pi_tool_bridge>`;
++    const content = createNativeAgentMarkdown(this.agentName, systemPrompt + routing + `\n\n<pi_active_tools>\nAll names below are Pi tools on the same bridge, including ordinary extension tools and the mcp gateway.\n${catalog}\n</pi_active_tools>`);
++    if (this.#agentContent === content) return false;
++    if (this.#agentContent === undefined && fs.existsSync(this.agentPath)) {
++      throw new Error(`Refusing to overwrite an existing agent: ${this.agentPath}`);
++    }
++    if (this.#agentContent !== undefined) {
++      const current = fs.readFileSync(this.agentPath, "utf8");
++      if (current !== this.#agentContent) {
++        throw new Error(`Agent file changed outside this session: ${this.agentPath}`);
++      }
++    }
++    fs.mkdirSync(this.agentDirectory, { recursive: true });
++    fs.writeFileSync(this.agentPath, content, "utf8");
++    this.#agentContent = content;
++    return true;
++  }
++
++  registerMcpServer(url, token) {
++    if (this.#mcpEntry) return;
++    const existed = fs.existsSync(this.configPath);
++    const originalRaw = existed ? fs.readFileSync(this.configPath, "utf8") : undefined;
++    const config = originalRaw === undefined ? {} : JSON.parse(originalRaw);
++    if (!config || typeof config !== "object" || Array.isArray(config)) {
++      throw new Error(`Invalid workspace MCP configuration: ${this.configPath}`);
++    }
++    const servers = config.mcpServers ?? {};
++    if (!servers || typeof servers !== "object" || Array.isArray(servers)) {
++      throw new Error(`Invalid mcpServers object: ${this.configPath}`);
++    }
++    if (Object.hasOwn(servers, this.serverName)) {
++      throw new Error(`Workspace MCP entry already exists: ${this.serverName}`);
++    }
++    const entry = { serverUrl: url, headers: { "x-pi-bridge-token": token } };
++    this.#originalConfigExisted = existed;
++    this.#originalConfigRaw = originalRaw;
++    this.#originalConfig = originalRaw === undefined ? undefined : JSON.parse(originalRaw);
++    this.#mcpEntry = entry;
++    fs.mkdirSync(path.dirname(this.configPath), { recursive: true });
++    fs.writeFileSync(
++      this.configPath,
++      `${JSON.stringify({ ...config, mcpServers: { ...servers, [this.serverName]: entry } }, null, 2)}\n`,
++      "utf8",
++    );
++  }
++
++  dispose() {
++    this.#removeMcpServer();
++    if (this.#agentContent !== undefined && fs.existsSync(this.agentPath)) {
++      if (fs.readFileSync(this.agentPath, "utf8") === this.#agentContent) {
++        fs.unlinkSync(this.agentPath);
++        emptyDirectory(this.agentDirectory);
++        emptyDirectory(path.dirname(this.agentDirectory));
++      }
++    }
++    this.#agentContent = undefined;
++  }
++
++  #removeMcpServer() {
++    if (!this.#mcpEntry || !fs.existsSync(this.configPath)) return;
++    const currentRaw = fs.readFileSync(this.configPath, "utf8");
++    const current = JSON.parse(currentRaw);
++    const servers = current?.mcpServers;
++    if (!servers || !sameJson(servers[this.serverName], this.#mcpEntry)) return;
++    const next = { ...current, mcpServers: { ...servers } };
++    delete next.mcpServers[this.serverName];
++    if (!Object.hasOwn(this.#originalConfig ?? {}, "mcpServers") && Object.keys(next.mcpServers).length === 0) {
++      delete next.mcpServers;
++    }
++    if (sameJson(next, this.#originalConfig ?? {})) {
++      if (this.#originalConfigExisted) {
++        fs.writeFileSync(this.configPath, this.#originalConfigRaw, "utf8");
++      } else {
++        fs.unlinkSync(this.configPath);
++        emptyDirectory(path.dirname(this.configPath));
++        emptyDirectory(path.dirname(path.dirname(this.configPath)));
++      }
++    } else {
++      fs.writeFileSync(this.configPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
++    }
++    this.#mcpEntry = undefined;
++  }
++}
+diff --git a/lib/prompt.ts b/lib/prompt.ts
+index 1478cb0..10ca318 100644
+--- a/lib/prompt.ts
++++ b/lib/prompt.ts
+@@ -41,18 +41,6 @@ export function omittedImagesPrompt(images: number): string {
+   return `(${images} image(s) omitted — the agy print interface is text-only)`;
+ }
+ 
+-/** agy's CLI has no system-role input; relay Pi instructions explicitly as prompt text. */
+-export function piSystemInstructionsPrompt(instructions: string): string {
+-  return [
+-    "## Current Pi instructions",
+-    "The following is Pi's current instruction snapshot, relayed as user-prompt text because this CLI has no system-prompt channel. It replaces any earlier Pi instruction snapshot in this conversation; native system instructions still take precedence.",
+-    "These instructions do not register tools. Use only the actual agy or Pi bridge tool schemas available to you, while respecting applicable project and user guidance.",
+-    instructions ||
+-      "Pi's instruction snapshot is now empty. Stop applying earlier relayed Pi instructions.",
+-    "## End of Pi instructions",
+-  ].join("\n\n");
+-}
+-
+ /** Rehydrate a fresh agy conversation from the active branch of a pi session. */
+ export function restoredPiContextPrompt(transcript: string): string {
+   return [
+diff --git a/lib/skills.ts b/lib/skills.ts
+index 52de59a..a50ed12 100644
+--- a/lib/skills.ts
++++ b/lib/skills.ts
+@@ -142,29 +142,6 @@ export async function handleActivateSkill(
+   return readSkillBundle(skill);
+ }
+ 
+-/**
+- * Direct-mode bootstrap catalog (bridge off or unavailable). Returns undefined
+- * when there are no model-invocable skills, so nothing is injected.
+- */
+-export function formatSkillCatalog(skills: SkillLite[]): string | undefined {
+-  const usable = usableSkillCatalog(skills);
+-  if (usable.length === 0) return undefined;
+-  const lines = usable.map((skill) => {
+-    const description =
+-      skill.description.replace(/\s+/g, " ").trim().slice(0, MAX_DESCRIPTION) || "(no description)";
+-    return `- ${skill.name}: ${description} (${skill.filePath})`;
+-  });
+-  return [
+-    "## pi Agent Skills",
+-    "",
+-    "The following pi Agent Skills are available in this session:",
+-    ...lines,
+-    "",
+-    "To activate a skill, read its SKILL.md file directly.",
+-    "Activate a skill BEFORE attempting its workflow; follow the activated instructions.",
+-  ].join("\n");
+-}
+-
+ /**
+  * Load a skill bundle for agy: the full SKILL.md plus the absolute paths of
+  * bundled resources (relative references in SKILL.md are useless to agy —
+diff --git a/package.json b/package.json
+index 5f01511..2b979cd 100644
+--- a/package.json
++++ b/package.json
+@@ -1,7 +1,7 @@
+ {
+-  "name": "@tian.zuo/pi-antigravity",
+-  "version": "0.10.3",
+-  "description": "Use Antigravity (agy) models inside the pi coding agent via the agy stream-json RPC, with pi as the UI.",
++  "name": "@local/pi-antigravity-native",
++  "version": "0.1.0",
++  "description": "Use Antigravity through Pi-native tools, system instructions, and host execution hooks.",
+   "type": "module",
+   "keywords": [
+     "pi",
+@@ -17,7 +17,7 @@
+   "repository": {
+     "type": "git",
+     "url": "git+https://github.com/TianZuo555/pi-extensions.git",
+-    "directory": "packages/pi-antigravity"
++    "directory": "packages/pi-antigravity-native"
+   },
+   "homepage": "https://github.com/TianZuo555/pi-extensions#antigravity",
+   "bugs": {
+@@ -40,8 +40,8 @@
+     "which": "^7.0.0"
+   },
+   "peerDependencies": {
+-    "@earendil-works/pi-ai": "*",
+-    "@earendil-works/pi-coding-agent": "*"
++    "@earendil-works/pi-ai": "^0.99.1",
++    "@earendil-works/pi-coding-agent": "^0.99.1"
+   },
+   "devDependencies": {
+     "@effect/language-service": "^0.87.2",
+@@ -49,9 +49,6 @@
+     "@types/which": "^3.0.4",
+     "typescript": "^7.0.2"
+   },
+-  "publishConfig": {
+-    "access": "public"
+-  },
+   "scripts": {
+     "check": "tsc --noEmit -p .",
+     "test": "node --test --experimental-strip-types test/*.test.ts"
+diff --git a/src/provider.ts b/src/provider.ts
+index 20090c1..448f81a 100644
+--- a/src/provider.ts
++++ b/src/provider.ts
+@@ -16,8 +16,11 @@
+  * so failed reads are never re-executed as successful pi tools.
+  */
+ 
++import { createHash } from "node:crypto";
+ import {
+   calculateCost,
++  getCurrentSystemPrompt,
++  normalizeContext,
+   createAssistantMessageEventStream,
+   type AssistantMessage,
+   type AssistantMessageEventStream,
+@@ -47,7 +50,6 @@ import {
+   type AntigravityRuntimeInstance,
+   type AntigravityRuntimeShape,
+ } from "./runtime.ts";
+-import { hydrateContext } from "./transcript-compat.ts";
+ 
+ interface TextPart {
+   type: "text";
+@@ -59,6 +61,29 @@ interface ImagePart {
+   [k: string]: unknown;
+ }
+ 
++const HOST_METADATA_TAGS = ["ADDITIONAL_METADATA", "USER_SETTINGS_CHANGE", "SYSTEM_MESSAGE"] as const;
++
++/** Unwrap Pi's host envelope only when its complete metadata shape is recognized. */
++export function piUserRequestText(text: string): string {
++  const opening = "<USER_REQUEST>\n";
++  if (!text.startsWith(opening)) return text;
++  const closing = "\n</USER_REQUEST>";
++  const end = text.lastIndexOf(closing);
++  if (end < opening.length) return text;
++  const request = text.slice(opening.length, end);
++  let tail = text.slice(end + closing.length);
++  while (tail.trim()) {
++    tail = tail.replace(/^\s+/, "");
++    const tag = HOST_METADATA_TAGS.find((name) => tail.startsWith(`<${name}>`));
++    if (!tag) return text;
++    const close = `</${tag}>`;
++    const blockEnd = tail.indexOf(close, tag.length + 2);
++    if (blockEnd < 0) return text;
++    tail = tail.slice(blockEnd + close.length);
++  }
++  return request;
++}
++
+ /**
+  * Pi Context has no caller/extension provenance. Preserve the latest contiguous
+  * user-message batch in order, rather than letting its last message replace
+@@ -74,13 +99,15 @@ function latestUserBatch(context: Context): { start: number; prompt: string; ima
+     let images = 0;
+     for (const message of context.messages.slice(i, end)) {
+       if (typeof message.content === "string") {
+-        if (message.content.trim()) texts.push(message.content);
++        const text = piUserRequestText(message.content);
++        if (text.trim()) texts.push(text);
+         continue;
+       }
+       const parts = Array.isArray(message.content) ? message.content : [];
+       for (const part of parts as (TextPart | ImagePart)[]) {
+         if (part?.type === "text" && typeof part.text === "string" && part.text.trim()) {
+-          texts.push(part.text);
++          const text = piUserRequestText(part.text);
++          if (text.trim()) texts.push(text);
+         } else if (part?.type === "image") {
+           images += 1;
+         }
+@@ -116,17 +143,20 @@ export function piHistoryBootstrap(context: Context): string | undefined {
+ 
+   const entries: string[] = [];
+   for (const raw of context.messages.slice(0, latestUser)) {
++    if (raw.role === "system") continue;
+     const message = raw as {
+       role?: string;
+       toolName?: string;
+       content?: unknown;
+     };
+     const parts = Array.isArray(message.content) ? message.content : [];
+-    const rendered: string[] =
+-      typeof message.content === "string" && message.content.trim() ? [message.content] : [];
++    const rawText = typeof message.content === "string" ? message.content : undefined;
++    const rendered: string[] = rawText && rawText.trim()
++      ? [message.role === "user" ? piUserRequestText(rawText) : rawText]
++      : [];
+     for (const part of parts as Array<Record<string, unknown>>) {
+       if (part?.type === "text" && typeof part.text === "string" && part.text.trim()) {
+-        rendered.push(part.text);
++        rendered.push(message.role === "user" ? piUserRequestText(part.text) : part.text);
+       } else if (part?.type === "toolCall" && typeof part.name === "string") {
+         const args = JSON.stringify(part.arguments ?? {});
+         rendered.push(`[tool call: ${part.name}${args === "{}" ? "" : ` ${args}`}]`);
+@@ -221,11 +251,6 @@ export function streamAntigravity(
+   /** Called when a turn fully settles (stop or error) — the moment an agy
+    * background task may have been created. */
+   onSettled?: () => void,
+-  /**
+-   * Extra prompt text for bootstrap sends (fresh agy conversation). Bridge
+-   * mode returns nothing; direct mode (bridge off) injects skill file paths.
+-   */
+-  getBootstrapSuffix?: () => string | undefined,
+   /** Whether a pi tool name is currently active — native re-execution
+    * toolCalls are only emitted for active tools (else the wrapper). */
+   isActiveTool: (name: string) => boolean = () => true,
+@@ -240,6 +265,8 @@ export function streamAntigravity(
+   getProcessProfile: () => AgyProcessProfile = readAgyProcessProfile,
+   /** Combined bridge registration/catalog revision. */
+   getBridgeRevision: () => string | undefined = () => undefined,
++  /** Write the active Pi system snapshot and return its custom-agent name. */
++  prepareAgent?: (systemPrompt: string) => Promise<string>,
+ ) {
+   return (
+     model: Model<string>,
+@@ -294,13 +321,16 @@ export function streamAntigravity(
+ 
+       try {
+         stream.push({ type: "start", partial: output });
+-        context = hydrateContext(context);
+-
+         const { prompt } = latestUserPrompt(context);
+         if (!prompt) {
+           throw new Error("antigravity: no user text found in the request context.");
+         }
+         const summaryRequest = isSummarizationRequest(prompt);
++        const systemPrompt = getCurrentSystemPrompt(normalizeContext(context).messages);
++        const systemPromptHash = createHash("sha256")
++          .update(systemPrompt.replace(/\r\n?/g, "\n").replace(/[ \t]+$/gm, "").replace(/\n+$/, ""))
++          .digest("hex");
++        const nativeAgent = await prepareAgent?.(systemPrompt);
+ 
+         if (summaryRequest) {
+           // Pi invokes compaction and branch summarization as provider calls.
+@@ -334,12 +364,11 @@ export function streamAntigravity(
+         const controller = await turnRuntime.runPromise(
+           turnService.beginStreamTurn({
+             prompt,
+-            systemPrompt: context.systemPrompt,
++            systemPromptHash,
+             historyBootstrap: summaryRequest ? undefined : piHistoryBootstrap(context),
+-            bootstrapSuffix: summaryRequest ? undefined : getBootstrapSuffix?.(),
+             modelId: model.id,
+             effort,
+-            agent: processProfile.agent,
++            agent: nativeAgent ?? processProfile.agent,
+             mode: processProfile.mode,
+             bridgeRevision,
+             signal: options?.signal,
+diff --git a/src/runtime.ts b/src/runtime.ts
+index d7c9c31..43826a5 100644
+--- a/src/runtime.ts
++++ b/src/runtime.ts
+@@ -18,7 +18,7 @@ import {
+ } from "../lib/agy-driver.ts";
+ import type { AgyExecutionMode } from "../lib/agy-profile.ts";
+ import type { AgyTurnOutcome, AgyUsage } from "../lib/reducer.ts";
+-import { piSystemInstructionsPrompt, stallContinuationPrompt } from "../lib/prompt.ts";
++import { stallContinuationPrompt } from "../lib/prompt.ts";
+ import { AgyTurnController } from "../lib/turn.ts";
+ 
+ function envInt(name: string, fallback: number): number {
+@@ -78,6 +78,7 @@ export interface RestoredAntigravityConversation {
+   cwd: string;
+   turns: number;
+   usage: AgyUsage;
++  systemPromptHash?: string;
+ }
+ 
+ export interface AntigravityStateSnapshot {
+@@ -86,6 +87,7 @@ export interface AntigravityStateSnapshot {
+   cwd: string | undefined;
+   turns: number;
+   conversationUsage: AgyUsage;
++  systemPromptHash?: string;
+   executor: AgyExecutorSnapshot;
+ }
+ 
+@@ -106,18 +108,10 @@ export interface AntigravityRuntimeShape {
+    */
+   readonly beginStreamTurn: (request: {
+     readonly prompt: string;
+-    /** Current Pi instructions, relayed through agy's text-only user input. */
+-    readonly systemPrompt?: string;
++    /** Hash of the active Pi system snapshot loaded through agent.md. */
++    readonly systemPromptHash?: string;
+     /** Active pi-branch history used only when a fresh agy conversation needs restoring. */
+     readonly historyBootstrap?: string;
+-    /**
+-     * Extra prompt text appended ONLY when this request starts a fresh agy
+-     * conversation (bootstrap). agy keeps full conversation history, so
+-     * re-sending it on `--conversation` resumes would duplicate the block on
+-     * every user turn. Ignored on re-attach, and excluded from the re-attach
+-     * prompt match, which uses the base prompt.
+-     */
+-    readonly bootstrapSuffix?: string;
+     readonly modelId: string;
+     readonly effort?: "low" | "medium" | "high";
+     readonly agent?: string;
+@@ -137,6 +131,7 @@ export interface AntigravityRuntimeShape {
+     readonly tool: string;
+     readonly args: Record<string, unknown>;
+   }) => boolean;
++  readonly abortTurn: Effect.Effect<void, AntigravityRuntimeClosedError>;
+   readonly reset: Effect.Effect<void, AntigravityRuntimeClosedError>;
+   readonly snapshot: Effect.Effect<AntigravityStateSnapshot, AntigravityRuntimeClosedError>;
+   readonly close: Effect.Effect<void, AntigravityRuntimeClosedError>;
+@@ -178,8 +173,7 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+     // explicit reset suppresses history on a fresh conversation.
+     let restoreHistoryOnNextConversation = true;
+     let restoredConversationPending = false;
+-    let lastBootstrappedSkillsSuffix: string | undefined;
+-    let lastSentSystemPrompt: string | undefined;
++    let lastSystemPromptHash: string | undefined;
+ 
+     const invalidateActiveTurn = () => {
+       generation += 1;
+@@ -229,7 +223,7 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+                 turns = 0;
+                 restoreHistoryOnNextConversation = true;
+                 restoredConversationPending = false;
+-                lastBootstrappedSkillsSuffix = undefined;
++                lastSystemPromptHash = undefined;
+               }
+             }),
+           ),
+@@ -248,10 +242,7 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+               turns = state.turns;
+               restoreHistoryOnNextConversation = false;
+               restoredConversationPending = true;
+-              lastBootstrappedSkillsSuffix = undefined;
+-              // Persisted native history can contain a different instruction
+-              // snapshot, including one from before the current Pi process.
+-              lastSentSystemPrompt = undefined;
++              lastSystemPromptHash = state.systemPromptHash;
+             }),
+           ),
+         ),
+@@ -279,7 +270,6 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+                 conversationCwd = undefined;
+                 restoreHistoryOnNextConversation = true;
+                 restoredConversationPending = false;
+-                lastBootstrappedSkillsSuffix = undefined;
+               }
+               if (model !== undefined && model !== request.modelId) {
+                 conversationId = undefined;
+@@ -287,7 +277,14 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+                 conversationCwd = undefined;
+                 restoreHistoryOnNextConversation = true;
+                 restoredConversationPending = false;
+-                lastBootstrappedSkillsSuffix = undefined;
++              }
++              if (conversationId && request.systemPromptHash !== lastSystemPromptHash) {
++                conversationId = undefined;
++                conversationUsage = {};
++                conversationCwd = undefined;
++                restoreHistoryOnNextConversation = true;
++                restoredConversationPending = false;
++                lastSystemPromptHash = undefined;
+               }
+               model = request.modelId;
+               const controller = new AgyTurnController(request.prompt, conversationUsage);
+@@ -311,14 +308,6 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+                 !conversationId && restoreHistoryOnNextConversation
+                   ? request.historyBootstrap
+                   : undefined;
+-              const systemPrompt = request.systemPrompt ?? "";
+-              const systemPromptRelay = (
+-                !conversationId
+-                  ? Boolean(systemPrompt)
+-                  : systemPrompt !== lastSentSystemPrompt
+-              )
+-                ? piSystemInstructionsPrompt(systemPrompt)
+-                : undefined;
+               const timeoutMs = envInt("AGY_TURN_TIMEOUT_MS", 600_000);
+               const deadline = Date.now() + timeoutMs;
+               const timeoutError = new AgySpawnError(
+@@ -336,33 +325,16 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+                 turnAbort.signal.addEventListener("abort", onTurnAbort, { once: true });
+                 if (turnAbort.signal.aborted) onTurnAbort();
+               });
+-              // Direct-mode skill paths ride the prompt when the bridge is
+-              // disabled or registration failed. If the bridge was active
+-              // initially and later fails mid-conversation, or if the skill
+-              // catalog changes, the new suffix is appended even when an agy
+-              // conversation already exists. Suffixes already sent to the
+-              // current conversation are not duplicated on every turn.
+-              const bootstrapSuffix =
+-                request.bootstrapSuffix && request.bootstrapSuffix !== lastBootstrappedSkillsSuffix
+-                  ? request.bootstrapSuffix
+-                  : undefined;
+-              let pendingSystemPromptRelay = systemPromptRelay;
+-              let pendingBootstrapSuffix = bootstrapSuffix;
+-              const freshSystemPromptRelay = systemPrompt
+-                ? piSystemInstructionsPrompt(systemPrompt)
+-                : undefined;
+               let restoredAttemptActive = resumingPersistedConversation;
+               let restoredResultMissing = false;
+               const freshRestorePrompt = [
+-                freshSystemPromptRelay,
+                 request.historyBootstrap,
+                 request.prompt,
+-                request.bootstrapSuffix,
+               ]
+                 .filter((part): part is string => Boolean(part))
+                 .join("\n\n");
+               const spawnRequest: AgyTurnRequest = {
+-                prompt: [systemPromptRelay, historyBootstrap, request.prompt, bootstrapSuffix]
++                prompt: [historyBootstrap, request.prompt]
+                   .filter((part): part is string => Boolean(part))
+                   .join("\n\n"),
+                 conversationId,
+@@ -383,6 +355,7 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+                   // resolve, and /agy-tasks needs the id meanwhile.
+                   conversationId = id;
+                   conversationCwd = cwd;
++                  lastSystemPromptHash = request.systemPromptHash;
+                 },
+                 onActivity: (activity) => {
+                   if (turnGeneration !== generation || turnAbort.signal.aborted) return;
+@@ -421,10 +394,7 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+                   conversationCwd = undefined;
+                   restoredConversationPending = false;
+                   restoreHistoryOnNextConversation = true;
+-                  lastSentSystemPrompt = undefined;
+-                  lastBootstrappedSkillsSuffix = undefined;
+-                  pendingSystemPromptRelay = freshSystemPromptRelay;
+-                  pendingBootstrapSuffix = request.bootstrapSuffix;
++                  lastSystemPromptHash = undefined;
+                   freshFallback = true;
+                   retry = 0;
+                 };
+@@ -438,44 +408,16 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+                     ? conversationId
+                     : (conversationId ?? spawnRequest.conversationId);
+                   const resumingRetry = retry > 0 && resumableConversationId !== undefined;
+-                  const carriedRelay = resumingRetry
+-                    ? pendingSystemPromptRelay
+-                    : freshFallback
+-                      ? freshSystemPromptRelay
+-                      : systemPromptRelay;
+-                  const carriedSuffix = resumingRetry
+-                    ? pendingBootstrapSuffix
+-                    : freshFallback
+-                      ? request.bootstrapSuffix
+-                      : bootstrapSuffix;
+-                  const commitAttemptSync = () => {
+-                    if (turnGeneration !== generation || turnAbort.signal.aborted) return;
+-                    // Only this attempt's payload can acknowledge a snapshot.
+-                    // A new conversation with no instructions is empty by definition.
+-                    if (carriedRelay !== undefined || resumableConversationId === undefined) {
+-                      lastSentSystemPrompt = systemPrompt;
+-                      pendingSystemPromptRelay = undefined;
+-                    }
+-                    if (carriedSuffix !== undefined) {
+-                      lastBootstrappedSkillsSuffix = carriedSuffix;
+-                      pendingBootstrapSuffix = undefined;
+-                    }
+-                  };
+                   const attempt: AgyTurnRequest = {
+                     ...spawnRequest,
+                     prompt: resumingRetry
+-                      ? [carriedRelay, stallContinuationPrompt(), carriedSuffix]
+-                          .filter((part): part is string => Boolean(part))
+-                          .join("\n\n")
++                      ? stallContinuationPrompt()
+                       : freshFallback
+                         ? freshRestorePrompt
+                         : spawnRequest.prompt,
+                     conversationId: resumableConversationId,
+                     timeoutMs: remainingMs,
+-                    onConversation: (id) => {
+-                      spawnRequest.onConversation?.(id);
+-                      commitAttemptSync();
+-                    },
++                    onConversation: spawnRequest.onConversation,
+                   };
+                   try {
+                     const outcome = await executor.run(attempt);
+@@ -486,7 +428,6 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+                       startFreshFallback();
+                       continue;
+                     }
+-                    if (outcome.status === "OK") commitAttemptSync();
+                     return outcome;
+                   } catch (error) {
+                     if (turnAbort.signal.aborted) throw abortFailure();
+@@ -530,6 +471,7 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+                   if (outcome.conversationId) {
+                     conversationId = outcome.conversationId;
+                     restoreHistoryOnNextConversation = false;
++                    lastSystemPromptHash = request.systemPromptHash;
+                   }
+                   if (outcome.usage) conversationUsage = { ...outcome.usage };
+                   restoredConversationPending = false;
+@@ -565,6 +507,8 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+         return true;
+       },
+ 
++      abortTurn: ensureOpen.pipe(Effect.andThen(Effect.promise(() => recycle("abort")))),
++
+       reset: ensureOpen.pipe(
+         Effect.andThen(
+           Effect.promise(async () => {
+@@ -575,8 +519,7 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+             turns = 0;
+             restoreHistoryOnNextConversation = false;
+             restoredConversationPending = false;
+-            lastBootstrappedSkillsSuffix = undefined;
+-            lastSentSystemPrompt = undefined;
++            lastSystemPromptHash = undefined;
+           }),
+         ),
+       ),
+@@ -589,6 +532,7 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+             cwd,
+             turns,
+             conversationUsage: { ...conversationUsage },
++            systemPromptHash: lastSystemPromptHash,
+             executor: executor.snapshot(),
+           })),
+         ),
+@@ -603,7 +547,7 @@ const makeRuntime = (executor: AgyTurnExecutor) =>
+               conversationUsage = {};
+               conversationCwd = undefined;
+               restoredConversationPending = false;
+-              lastBootstrappedSkillsSuffix = undefined;
++              lastSystemPromptHash = undefined;
+               await recycle("shutdown");
+             }),
+           ),
+diff --git a/src/transcript-compat.ts b/src/transcript-compat.ts
+deleted file mode 100644
+index 069fc2b..0000000
+--- a/src/transcript-compat.ts
++++ /dev/null
+@@ -1,11 +0,0 @@
+-import { getCurrentSystemPrompt, getCurrentTools, type Context } from "@earendil-works/pi-ai";
+-
+-/** 0.86.0 provider 只收到 transcript。用官方 API 填回旧 Context 字段，供现有 provider 代码读取。 */
+-export function hydrateContext(context: Context): Context {
+-  const messages = context.messages ?? [];
+-  return {
+-    ...context,
+-    systemPrompt: getCurrentSystemPrompt(messages),
+-    tools: getCurrentTools(messages),
+-  };
+-}

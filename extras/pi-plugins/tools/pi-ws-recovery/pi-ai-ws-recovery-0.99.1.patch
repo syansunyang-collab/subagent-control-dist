@@ -1,0 +1,216 @@
+diff --git a/packages/ai/src/api/openai-codex-responses.ts b/packages/ai/src/api/openai-codex-responses.ts
+index 9c1831a..05cc617 100644
+--- a/packages/ai/src/api/openai-codex-responses.ts
++++ b/packages/ai/src/api/openai-codex-responses.ts
+@@ -289,11 +289,15 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
+ 				websocketRequestId,
+ 			);
+ 			const bodyJson = JSON.stringify(body);
++			const requestBytes = new TextEncoder().encode(bodyJson).byteLength;
+ 			const httpTimeoutMs = normalizeTimeoutMs(options?.timeoutMs);
+ 			const websocketConnectTimeoutMs = normalizeTimeoutMs(options?.websocketConnectTimeoutMs);
+ 			const transport = options?.transport || "auto";
+ 			let startEmitted = false;
+-			const websocketDisabledForSession = transport !== "sse" && isWebSocketSseFallbackActive(cacheSessionId);
++			const websocketAttempt = transport === "sse"
++				? { allowed: false, recoveryProbe: false }
++				: acquireWebSocketAttempt(cacheSessionId, requestBytes);
++			const websocketDisabledForSession = transport !== "sse" && !websocketAttempt.allowed;
+ 			if (websocketDisabledForSession) {
+ 				recordWebSocketSseFallback(cacheSessionId);
+ 			}
+@@ -331,6 +335,7 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
+ 							throw new Error("Request was aborted");
+ 						}
+ 						assertSuccessfulOutput(output);
++						recordWebSocketSuccess(cacheSessionId, websocketAttempt.recoveryProbe);
+ 						stream.push({
+ 							type: "done",
+ 							reason: output.stopReason,
+@@ -350,7 +355,12 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
+ 							retriedWebSocketConnectionLimit = true;
+ 							continue;
+ 						}
+-						if (aborted || (isCodexNonTransportError(error) && !connectionLimitBeforeStart)) {
++						if (aborted) {
++							releaseWebSocketRecoveryProbe(cacheSessionId, websocketAttempt.recoveryProbe);
++							throw error;
++						}
++						if (isCodexNonTransportError(error) && !connectionLimitBeforeStart) {
++							recordWebSocketSuccess(cacheSessionId, websocketAttempt.recoveryProbe);
+ 							throw error;
+ 						}
+ 						appendAssistantMessageDiagnostic(
+@@ -360,10 +370,10 @@ export const stream: StreamFunction<"openai-codex-responses", OpenAICodexRespons
+ 								...(websocketStarted ? {} : { fallbackTransport: "sse" }),
+ 								eventsEmitted: websocketStarted,
+ 								phase: websocketStarted ? "after_message_stream_start" : "before_message_stream_start",
+-								requestBytes: new TextEncoder().encode(bodyJson).byteLength,
++								requestBytes,
+ 							}),
+ 						);
+-						recordWebSocketFailure(cacheSessionId, error);
++						recordWebSocketFailure(cacheSessionId, error, requestBytes);
+ 						if (websocketStarted) {
+ 							throw error;
+ 						}
+@@ -863,7 +873,7 @@ async function* parseSSE(response: Response, signal?: AbortSignal): AsyncGenerat
+ // ============================================================================
+ 
+ const OPENAI_BETA_RESPONSES_WEBSOCKETS = "responses_websockets=2026-02-06";
+-const SESSION_WEBSOCKET_CACHE_TTL_MS = 5 * 60 * 1000;
++const SESSION_WEBSOCKET_CACHE_TTL_MS = 15 * 60 * 1000;
+ const SESSION_WEBSOCKET_MAX_AGE_MS = 55 * 60 * 1000;
+ 
+ type WebSocketEventType = "open" | "message" | "error" | "close";
+@@ -890,6 +900,15 @@ interface CachedWebSocketConnection {
+ 	continuation?: CachedWebSocketContinuationState;
+ }
+ 
++type WebSocketFallbackReason = "transport" | "message_too_big";
++interface WebSocketFallbackState {
++	reason: WebSocketFallbackReason;
++	consecutiveFailures: number;
++	retryAt: number;
++	probeInFlight: boolean;
++	failedRequestBytes?: number;
++}
++
+ export interface OpenAICodexWebSocketDebugStats {
+ 	requests: number;
+ 	connectionsCreated: number;
+@@ -903,13 +922,33 @@ export interface OpenAICodexWebSocketDebugStats {
+ 	lastPreviousResponseId?: string;
+ 	websocketFailures: number;
+ 	sseFallbacks: number;
++	websocketRecoveryProbes: number;
++	websocketRecoveries: number;
++	oversizeFallbacks: number;
+ 	websocketFallbackActive?: boolean;
++	fallbackReason?: WebSocketFallbackReason;
++	consecutiveFailures?: number;
++	nextProbeAt?: number;
++	lastFailedRequestBytes?: number;
+ 	lastWebSocketError?: string;
+ }
+ 
+ const websocketSessionCache = new Map<string, Map<string, CachedWebSocketConnection>>();
+-const websocketDebugStats = new Map<string, OpenAICodexWebSocketDebugStats>();
+-const websocketSseFallbackSessions = new Set<string>();
++const WEBSOCKET_FALLBACK_INITIAL_COOLDOWN_MS = 30 * 1000;
++const WEBSOCKET_FALLBACK_MAX_COOLDOWN_MS = 5 * 60 * 1000;
++const WEBSOCKET_OVERSIZE_RECOVERY_RATIO = 0.8;
++const globalWithOpenAICodexWebSocketRecoveryState = globalThis as typeof globalThis & {
++	__piOpenAICodexWebSocketRecoveryState?: {
++		websocketDebugStats: Map<string, OpenAICodexWebSocketDebugStats>;
++		websocketFallbackStates: Map<string, WebSocketFallbackState>;
++	};
++};
++const websocketRecoveryState = globalWithOpenAICodexWebSocketRecoveryState.__piOpenAICodexWebSocketRecoveryState ??= {
++	websocketDebugStats: new Map(),
++	websocketFallbackStates: new Map(),
++};
++const { websocketDebugStats, websocketFallbackStates } = websocketRecoveryState;
++
+ 
+ function getOrCreateWebSocketDebugStats(sessionId: string): OpenAICodexWebSocketDebugStats {
+ 	let stats = websocketDebugStats.get(sessionId);
+@@ -925,6 +964,9 @@ function getOrCreateWebSocketDebugStats(sessionId: string): OpenAICodexWebSocket
+ 			lastInputItems: 0,
+ 			websocketFailures: 0,
+ 			sseFallbacks: 0,
++			websocketRecoveryProbes: 0,
++			websocketRecoveries: 0,
++			oversizeFallbacks: 0,
+ 		};
+ 		websocketDebugStats.set(sessionId, stats);
+ 	}
+@@ -939,11 +981,11 @@ export function getOpenAICodexWebSocketDebugStats(sessionId: string): OpenAICode
+ export function resetOpenAICodexWebSocketDebugStats(sessionId?: string): void {
+ 	if (sessionId) {
+ 		websocketDebugStats.delete(sessionId);
+-		websocketSseFallbackSessions.delete(sessionId);
++		websocketFallbackStates.delete(sessionId);
+ 		return;
+ 	}
+ 	websocketDebugStats.clear();
+-	websocketSseFallbackSessions.clear();
++	websocketFallbackStates.clear();
+ }
+ 
+ export function closeOpenAICodexWebSocketSessions(sessionId?: string): void {
+@@ -964,8 +1006,23 @@ export function closeOpenAICodexWebSocketSessions(sessionId?: string): void {
+ 
+ registerSessionResourceCleanup(closeOpenAICodexWebSocketSessions);
+ 
++function acquireWebSocketAttempt(sessionId: string | undefined, requestBytes: number) {
++	if (!sessionId) return { allowed: true, recoveryProbe: false };
++	const state = websocketFallbackStates.get(sessionId);
++	if (!state) return { allowed: true, recoveryProbe: false };
++	if (state.probeInFlight) return { allowed: false, recoveryProbe: false };
++	if (state.reason === "message_too_big" && state.failedRequestBytes !== undefined &&
++		requestBytes > Math.floor(state.failedRequestBytes * WEBSOCKET_OVERSIZE_RECOVERY_RATIO)) {
++		return { allowed: false, recoveryProbe: false };
++	}
++	if (state.reason === "transport" && Date.now() < state.retryAt) return { allowed: false, recoveryProbe: false };
++	state.probeInFlight = true;
++	getOrCreateWebSocketDebugStats(sessionId).websocketRecoveryProbes++;
++	return { allowed: true, recoveryProbe: true };
++}
++
+ function isWebSocketSseFallbackActive(sessionId: string | undefined): boolean {
+-	return sessionId ? websocketSseFallbackSessions.has(sessionId) : false;
++	return sessionId ? websocketFallbackStates.has(sessionId) : false;
+ }
+ 
+ function recordWebSocketSseFallback(sessionId: string | undefined): void {
+@@ -975,14 +1032,46 @@ function recordWebSocketSseFallback(sessionId: string | undefined): void {
+ 	stats.websocketFallbackActive = isWebSocketSseFallbackActive(sessionId);
+ }
+ 
+-function recordWebSocketFailure(sessionId: string | undefined, error: unknown): void {
++function recordWebSocketFailure(sessionId: string | undefined, error: unknown, requestBytes: number): void {
+ 	if (!sessionId) return;
+-	websocketSseFallbackSessions.add(sessionId);
+-
++	const reason = error instanceof WebSocketCloseError && error.code === WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE
++		? "message_too_big" : "transport";
++	const previous = websocketFallbackStates.get(sessionId);
++	const consecutiveFailures = previous?.reason === reason ? previous.consecutiveFailures + 1 : 1;
++	const cooldownMs = Math.min(WEBSOCKET_FALLBACK_INITIAL_COOLDOWN_MS * 2 ** (consecutiveFailures - 1),
++		WEBSOCKET_FALLBACK_MAX_COOLDOWN_MS);
++	const state: WebSocketFallbackState = {
++		reason, consecutiveFailures, retryAt: reason === "transport" ? Date.now() + cooldownMs : 0,
++		probeInFlight: false, failedRequestBytes: reason === "message_too_big" ? requestBytes : undefined,
++	};
++	websocketFallbackStates.set(sessionId, state);
+ 	const stats = getOrCreateWebSocketDebugStats(sessionId);
+ 	stats.websocketFailures++;
++	if (reason === "message_too_big") stats.oversizeFallbacks++;
+ 	stats.lastWebSocketError = formatThrownValue(error);
+ 	stats.websocketFallbackActive = true;
++	stats.fallbackReason = reason;
++	stats.consecutiveFailures = consecutiveFailures;
++	stats.nextProbeAt = reason === "transport" ? state.retryAt : undefined;
++	stats.lastFailedRequestBytes = state.failedRequestBytes;
++}
++
++function releaseWebSocketRecoveryProbe(sessionId: string | undefined, recoveryProbe: boolean): void {
++	if (!sessionId || !recoveryProbe) return;
++	const state = websocketFallbackStates.get(sessionId);
++	if (state) state.probeInFlight = false;
++}
++
++function recordWebSocketSuccess(sessionId: string | undefined, recoveryProbe: boolean): void {
++	if (!sessionId || !websocketFallbackStates.has(sessionId)) return;
++	websocketFallbackStates.delete(sessionId);
++	const stats = getOrCreateWebSocketDebugStats(sessionId);
++	if (recoveryProbe) stats.websocketRecoveries++;
++	stats.websocketFallbackActive = false;
++	stats.fallbackReason = undefined;
++	stats.consecutiveFailures = 0;
++	stats.nextProbeAt = undefined;
++	stats.lastFailedRequestBytes = undefined;
+ }
+ 
+ type WebSocketConstructor = new (

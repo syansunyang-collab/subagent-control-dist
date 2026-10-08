@@ -1,0 +1,53 @@
+{
+  "name": "pi-scheduler-native",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone Pi scheduler extension: deferred agent wake-ups and scheduled shell commands with single-pending delivery, per-task process locks, Windows shellPath resolution, and pi-web liveness keep-alive.",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "scheduler"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "extensions/**/*",
+    "scripts/**/*",
+    "README.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/scheduler/index.ts"
+    ]
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:fast": "node --test test/*.test.mjs",
+    "migrate": "node scripts/migrate-legacy.mjs"
+  },
+  "dependencies": {
+    "croner": "10.0.1",
+    "fs-native-extensions": "1.5.1"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-ai": {
+      "optional": true
+    },
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    },
+    "typebox": {
+      "optional": true
+    }
+  }
+}

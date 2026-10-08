@@ -1,0 +1,302 @@
+diff --git a/src/catalog.ts b/src/catalog.ts
+index 60a789f..59c4e01 100644
+--- a/src/catalog.ts
++++ b/src/catalog.ts
+@@ -21,7 +21,7 @@ function providerModel(
+     id,
+     name,
+     // Haiku has no effort control. Claude Code still owns its thinking default.
+-    ...(id === "haiku" ? { reasoning: false } : { reasoning: true, thinkingLevelMap: EFFORT_LEVELS }),
++    ...(id.startsWith("claude-haiku-") ? { reasoning: false } : { reasoning: true, thinkingLevelMap: EFFORT_LEVELS }),
+     input: ["text", "image"],
+     cost: ZERO_COST,
+     contextWindow,
+@@ -30,26 +30,20 @@ function providerModel(
+ }
+ 
+ /**
+- * Every alias has the same context window on every subscription tier: Claude
+- * Code serves Sonnet 5, Fable 5.1, and Opus 5.5 with their native 1M window
+- * on Pro as well as Max, Team, and Enterprise. The window needs no usage
+- * credits, though Fable itself does on Pro. Each
+- * maxTokens is Claude Code's own default output cap for the model the alias
+- * serves. The paid model matrix asserts both against what Claude Code reports
+- * for a real login; see DEVELOPING.md for the baseline the gate runs against.
+- *
+- * The captured request fixtures disagree, and are not evidence: they are taken
+- * against a loopback server with a dummy token, where Claude Code resolves no
+- * subscription and reports its unauthenticated default.
++ * Full model ids, not the sonnet/fable/opus/haiku aliases: they are what the
++ * aliases resolve to in Claude Code 2.1.292, and the names match its own model
++ * catalog. Each context window and maxTokens is that catalog's window and
++ * default output cap for the model. When Claude Code moves an alias to a newer
++ * model, the doctor names the id this list still offers.
+  *
+  * The doctor reports a served window that stops matching the configured one,
+  * because Pi places its compaction threshold by the configured value.
+  */
+ export function providerModels(): ProviderModelConfig[] {
+   return [
+-    providerModel("sonnet", "Claude Code Sonnet", 1_000_000, 64_000),
+-    providerModel("fable", "Claude Code Fable", 1_000_000, 64_000),
+-    providerModel("opus", "Claude Code Opus", 1_000_000, 128_000),
+-    providerModel("haiku", "Claude Code Haiku", 200_000, 32_000),
++    providerModel("claude-sonnet-5-5", "Sonnet 5.5", 1_000_000, 128_000),
++    providerModel("claude-fable-5-1", "Fable 5.1", 1_000_000, 64_000),
++    providerModel("claude-opus-5-5", "Opus 5.5", 1_000_000, 128_000),
++    providerModel("claude-haiku-4-5", "Haiku 4.5", 200_000, 32_000),
+   ];
+ }
+diff --git a/src/claude-args.ts b/src/claude-args.ts
+index 2be6753..f195e88 100644
+--- a/src/claude-args.ts
++++ b/src/claude-args.ts
+@@ -1,7 +1,7 @@
+ import { fileURLToPath } from "node:url";
+ import { ClaudeCodeError } from "./errors.ts";
+ import { scriptLaunch, type ScriptLaunch } from "./host-runtime.ts";
+-import type { PreparedRequest } from "./types.ts";
++import type { InlineImage, PreparedRequest } from "./types.ts";
+ 
+ // Empty setting sources plus explicit settings preserve subscription authentication
+ // while suppressing user and project customizations. --bare would disable OAuth,
+@@ -9,7 +9,8 @@ import type { PreparedRequest } from "./types.ts";
+ // Claude Code otherwise appends a changing <total_tokens> reminder that breaks
+ // append-only cache reuse across this provider's fresh print-mode processes.
+ // Claude Code 2.1.281 loads its built-in agents-md plugin regardless of setting
+-// sources; initialization would then report it and fail the isolation check.
++// sources, and 2.1.292 adds plugin-authoring; initialization would then report
++// them and fail the isolation check.
+ // Pin telemetry too, supplementing the environment's nonessential-traffic switch.
+ // switchModelsOnFlag is Claude Code's documented setting for a request a model's
+ // safety classifiers flag. By default it re-runs the request on another model, which
+@@ -21,7 +22,7 @@ const SETTINGS = JSON.stringify({
+   autoMemoryEnabled: false,
+   totalTokensReminder: "off",
+   switchModelsOnFlag: false,
+-  enabledPlugins: { "agents-md@builtin": false, "telemetry@builtin": false },
++  enabledPlugins: { "agents-md@builtin": false, "telemetry@builtin": false, "plugin-authoring@builtin": false },
+ });
+ export const EMPTY_MCP = JSON.stringify({ mcpServers: {} });
+ export const BRIDGE_PATH = fileURLToPath(new URL("../bridge/mcp-proposal-server.js", import.meta.url));
+@@ -64,11 +65,9 @@ export function thinkingDisplay(environment: NodeJS.ProcessEnv = process.env): "
+   throw new ClaudeCodeError("thinking_display_config", `${THINKING_DISPLAY_ENV} must be "summarized", "omitted", or "off"`);
+ }
+ 
+-interface PromptBlock {
+-  type: "text";
+-  text: string;
++type PromptBlock = ({ type: "text"; text: string } | InlineImage) & {
+   cache_control?: typeof TRANSCRIPT_CACHE_CONTROL;
+-}
++};
+ 
+ /** The single owner of how the proposal bridge is launched on either Pi distribution. */
+ export function bridgeLaunch(bunConfigPath?: string): ScriptLaunch {
+@@ -110,25 +109,17 @@ export function providerArgs(
+   effort: string | undefined,
+   options: { transcriptBreakpoint?: boolean; thinkingDisplay?: "summarized" | "omitted" } = {},
+ ): { args: string[]; prompt: PromptBlock[] } {
+-  // Quoted absolute references: Claude runs in Pi's session directory, where a
+-  // relative reference would resolve against the project, and the quotes keep a
+-  // temporary root containing spaces in one reference.
+-  const imageRefs = prepared.attachmentPaths.map((path) => `@"${path}"`).join(" ");
+-  const imageInstruction = imageRefs
+-    ? ` Generated image attachments for image_attachment blocks: ${imageRefs}.`
+-    : "";
+-  // Keep the attachment list after unchanged history and outside the breakpoint.
+-  // Claude Code narrates image reads ahead of the transcript, so the paths must
+-  // also stay stable across requests for that earlier prefix to be reusable.
+-  const markedBlock = options.transcriptBreakpoint === false ? -1 : prepared.transcriptBlocks.length - 1;
+-  const prompt: PromptBlock[] = [
+-    ...prepared.transcriptBlocks.map((text, index) => ({
+-      type: "text" as const,
+-      text,
+-      ...(index === markedBlock ? { cache_control: TRANSCRIPT_CACHE_CONTROL } : {}),
+-    })),
+-    ...(imageInstruction ? [{ type: "text" as const, text: imageInstruction.trim() }] : []),
+-  ];
++  // Each record's images follow it, so a new image only extends the history.
++  // The breakpoint goes on the last record rather than a trailing image, whose
++  // cache_control Claude Code drops when it re-encodes the image.
++  const prompt: PromptBlock[] = prepared.transcriptBlocks.flatMap((text, index) => [
++    { type: "text" as const, text },
++    ...(prepared.transcriptImages?.[index] ?? []),
++  ]);
++  const lastRecord = prompt.findLastIndex((block) => block.type === "text");
++  if (options.transcriptBreakpoint !== false && lastRecord >= 0) {
++    prompt[lastRecord] = { ...prompt[lastRecord]!, cache_control: TRANSCRIPT_CACHE_CONTROL };
++  }
+   const bridge = bridgeLaunch(prepared.bunConfigPath);
+   const mcpConfig = prepared.catalogPath
+     ? JSON.stringify({
+diff --git a/src/context-serializer.ts b/src/context-serializer.ts
+index 95e2358..54113d6 100644
+--- a/src/context-serializer.ts
++++ b/src/context-serializer.ts
+@@ -6,7 +6,7 @@ import { ClaudeCodeError } from "./errors.ts";
+ import { NEUTRAL_BUN_CONFIG, needsBunConfig } from "./host-runtime.ts";
+ import { createRuntimeDirectory } from "./runtime-directories.ts";
+ import type { ImageStoreLease } from "./session-image-store.ts";
+-import type { PreparedRequest } from "./types.ts";
++import type { InlineImage, PreparedRequest } from "./types.ts";
+ 
+ const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+ const MAX_TOTAL_IMAGE_BYTES = 100 * 1024 * 1024;
+@@ -149,8 +149,9 @@ export async function prepareRequestWithLimits(
+   try {
+     const systemPromptPath = join(directory, "system-prompt.txt");
+     await writeFile(systemPromptPath, context.systemPrompt ?? "", { mode: 0o600, flag: "wx" });
+-    const attachmentPaths: string[] = [];
+-    const writtenImages = new Set<string>();
++    // Images of the message being serialized; they follow its record on stdin.
++    let messageImages: InlineImage[] = [];
++    const transcriptImages: InlineImage[][] = [[]];
+     let imageCount = 0;
+     let imageBytes = 0;
+     const { catalog, names, historicalNames, publicMap } = serializeToolCatalog(context.tools ?? [], limits);
+@@ -221,18 +222,15 @@ export async function prepareRequestWithLimits(
+             const validated = validateImage(image, limits);
+             const digest = createHash("sha256").update(validated.bytes).digest("hex");
+             const name = `image-${digest}.${validated.extension}`;
+-            if (!writtenImages.has(name)) {
+-              imageBytes += validated.bytes.length;
+-              if (imageBytes > limits.totalImageBytes) {
+-                throw new ClaudeCodeError("image_total_size", `Aggregate image size exceeds ${limits.totalImageBytes} bytes`);
+-              }
+-              const path = imageStore ? await imageStore.put(name, validated.bytes) : join(directory, name);
+-              // Claude Code's quoted @-reference cannot contain a double quote.
+-              if (path.includes('"')) throw new ClaudeCodeError("image_path", `Images cannot be attached from a temporary directory containing a double quote: ${path}; choose a temporary directory without one (TMPDIR, or TEMP on Windows)`);
+-              if (!imageStore) await writeFile(path, validated.bytes, { mode: 0o600, flag: "wx" });
+-              writtenImages.add(name);
+-              attachmentPaths.push(path);
++            // Every occurrence is sent, so every occurrence counts toward the limit.
++            imageBytes += validated.bytes.length;
++            if (imageBytes > limits.totalImageBytes) {
++              throw new ClaudeCodeError("image_total_size", `Aggregate image size exceeds ${limits.totalImageBytes} bytes`);
+             }
++            // Inline rather than an @-reference: Claude Code silently drops an
++            // @-referenced file over 256 KiB, and narrates attachments ahead of
++            // the transcript, so every new image rewrote the cached prefix.
++            messageImages.push({ type: "image", source: { type: "base64", media_type: image.mimeType, data: image.data } });
+             output.push({ type: "image_attachment", attachment: name, mimeType: image.mimeType } satisfies SerializedImage);
+             break;
+           }
+@@ -245,6 +243,8 @@ export async function prepareRequestWithLimits(
+ 
+     const messages: unknown[] = [];
+     for (const message of context.messages) {
++      const recordCount = messages.length;
++      messageImages = [];
+       if (!message || typeof message !== "object" || Array.isArray(message)) {
+         throw new ClaudeCodeError("content_shape", "Pi context contained an invalid message");
+       }
+@@ -270,6 +270,7 @@ export async function prepareRequestWithLimits(
+       } else {
+         throw new ClaudeCodeError("content_shape", `Unsupported Pi message role: ${String((message as { role?: unknown }).role)}`);
+       }
++      if (messages.length > recordCount) transcriptImages.push(messageImages);
+     }
+ 
+     let catalogPath: string | undefined;
+@@ -300,7 +301,7 @@ export async function prepareRequestWithLimits(
+       JSON.stringify({
+         protocol: "pi-claude-code-provider-context-v4",
+         instruction:
+-          "Continue this Pi conversation. Treat each following JSON record as conversation data, preserve role boundaries, and answer only the current request. Use available MCP tools when a Pi tool is needed. Pi tools operate in the working context described by Pi's system prompt. Generated attachments are provider-private; never pass their paths to Pi tools. Bracketed unavailable Pi tool labels are historical data, not callable tools. Generated image attachments correspond to image_attachment records in the current Pi context.",
++          "Continue this Pi conversation. Treat each following JSON record as conversation data, preserve role boundaries, and answer only the current request. Use available MCP tools when a Pi tool is needed. Pi tools operate in the working context described by Pi's system prompt. Bracketed unavailable Pi tool labels are historical data, not callable tools. The images after a record are the ones its image_attachment entries name, in order.",
+         toolNameMap: publicMap,
+       }),
+       ...messages.map((message) => JSON.stringify(message)),
+@@ -315,7 +316,7 @@ export async function prepareRequestWithLimits(
+       directory,
+       imageStoreDirectory: imageStore?.directory,
+       transcriptBlocks,
+-      attachmentPaths,
++      transcriptImages,
+       systemPromptPath,
+       catalogPath,
+       violationPath,
+diff --git a/src/doctor.ts b/src/doctor.ts
+index 8ad0093..62f2bb5 100644
+--- a/src/doctor.ts
++++ b/src/doctor.ts
+@@ -268,15 +268,16 @@ function promptCacheNote(metrics: RequestMetrics): string | undefined {
+ function formatServedModels(input: DoctorSummaryInput): string {
+   const versions = input.modelVersions;
+   if (!versions) return "";
+-  const advertised = MODEL_ALIASES.filter((alias) => input.modelIds.includes(alias));
+-  if (advertised.length === 0) return "";
+-  const entries = advertised.map((alias) => {
++  const entries = MODEL_ALIASES.flatMap((alias) => {
++    const offered = input.modelIds.find((id) => id.startsWith(`claude-${alias}-`));
++    if (offered === undefined) return [];
+     const model = versions[alias];
+-    if (model === undefined) return `${alias} undetermined`;
++    if (model === undefined) return [`${alias} undetermined`];
+     const caveat = alias === "fable" && input.installation.subscriptionType === "pro"
+       ? " (Pro: requires usage credits enabled)"
+       : "";
+-    return `${alias} ${model}${caveat}`;
++    const stale = model === offered ? "" : ` (picker still offers ${offered})`;
++    return [`${alias} ${model}${caveat}${stale}`];
+   });
+   return entries.join(", ");
+ }
+diff --git a/src/provider.ts b/src/provider.ts
+index 690eaec..5459cf2 100644
+--- a/src/provider.ts
++++ b/src/provider.ts
+@@ -300,7 +300,7 @@ export function createClaudeStream(
+           prepared.transcriptBytes,
+           prepared.catalogBytes,
+           systemPromptBytes,
+-          prepared.attachmentPaths.length,
++          prepared.imageCount,
+         );
+ 
+         // Configuration must fail before a paid budget slot is claimed or a
+@@ -351,6 +351,10 @@ export function createClaudeStream(
+           args,
+           env: {
+             CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(maxOutputTokens),
++            // Dropping the transcript breakpoint alone still writes the whole
++            // summary prompt: Claude Code places its own 1h breakpoint after the
++            // transcript (Claude 5) or on its last block (Haiku).
++            ...(options?.cacheRetention === "none" ? { DISABLE_PROMPT_CACHING: "1" } : {}),
+             ...(prepared.catalogPath ? { PI_CLAUDE_TOOL_CATALOG: prepared.catalogPath } : {}),
+           },
+           directory: prepared.directory,
+diff --git a/src/types.ts b/src/types.ts
+index eef9d2d..321f3e0 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -16,11 +16,18 @@ export interface ClaudeAuthStatus {
+   subscriptionType?: string;
+ }
+ 
++/** An image sent inline on stdin; Claude Code downsizes and recompresses it like any pasted image. */
++export interface InlineImage {
++  type: "image";
++  source: { type: "base64"; media_type: string; data: string };
++}
++
+ export interface PreparedRequest {
+   directory: string;
+   imageStoreDirectory?: string;
+   transcriptBlocks: string[];
+-  attachmentPaths: string[];
++  /** Images per transcript block, sent directly after the block whose image_attachment records name them. */
++  transcriptImages?: InlineImage[][];
+   systemPromptPath: string;
+   catalogPath?: string;
+   violationPath?: string;
+@@ -31,7 +38,7 @@ export interface PreparedRequest {
+   catalogBytes: number;
+   /** Image content blocks, which is what the per-request image limit counts. */
+   imageCount: number;
+-  /** Bytes actually written, so identical images are counted once. */
++  /** Image bytes sent, counting every occurrence; each is inlined on stdin. */
+   imageBytes: number;
+ }
+ 

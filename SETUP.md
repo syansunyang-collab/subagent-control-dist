@@ -62,6 +62,10 @@
 
 本机另装了 Pi 插件 `pi-claude-code-provider`（0.6.0 起）时，设置用户环境变量 `PI_CLAUDE_CODE_PROVIDER_WEB_SEARCH=off`，它就不再注册自带的 Claude 搜索工具，搜索统一走 `web_search`；不设时两个搜索工具同时出现在提示词里。bootstrap 不写这个变量，设置后重启 Pi 生效。
 
+## 可选扩展
+
+`extras/pi-plugins/` 是维护者插件仓的插件、补丁与运维工具快照，bootstrap 不安装。需要时读 `extras/pi-plugins/EXTRAS.md`，按其中每个单元的前提与命令选装；补丁类单元在 Pi 或对应 npm 包升级后按该文件「升级后复查」重新检查。
+
 ## 验证
 
 1. Claude Code 新会话：调用 `mcp__asyncSubagent__subagent_server_info`，`build_id` 与 `~/.pi/agent/extensions/subagent-control/deployment.json` 的 `build_id` 相同；再用 `mcp__asyncSubagent__subagent_prepare` 的 `list` 动作，返回角色与型号的逐行目录。

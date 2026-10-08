@@ -1,0 +1,215 @@
+diff --git a/.agents/plans/046-restore-confirmed-seen-results.md b/.agents/plans/046-restore-confirmed-seen-results.md
+index b2103bc..6d0d077 100644
+--- a/.agents/plans/046-restore-confirmed-seen-results.md
++++ b/.agents/plans/046-restore-confirmed-seen-results.md
+@@ -11,7 +11,7 @@ steps:
+   - phase: validation
+     steps:
+       - "- [x] 覆盖失败、未读、分支、压缩、回执和重复保存。"
+-      - "- [ ] 本地提交，经现有入口部署并验证加载。"
++      - "- [x] 本地提交，经现有入口部署并验证加载。"
+ ---
+ 
+ # 恢复已确认发送的工具结果
+@@ -24,6 +24,8 @@ steps:
+ 
+ ## 验证
+ - [x] 覆盖失败、未读、分支、压缩、回执和重复保存。
+-- [ ] 本地提交，经现有入口部署并验证加载。
++- [x] 本地提交，经现有入口部署并验证加载。
++
++部署版本 `1.6.0-local.9-3cb018f`，80 项离线测试通过。Pi 0.87.1 正式 SDK 与 provider 的本地模拟对照通过，旧版重载后工具输出为 2,433 字符，新版为 1,635 字符；两组均 2 请求，无网络或真实凭据。部署后的固定路径安装包复验通过，Pi Web 目标会话已重新初始化并保持空闲。全局设置及策略配置哈希未变。真实任务费用与整体缓存回退收益另行验收。
+ 
+ 只保存发送边界可确认的工具结果 ID，追加为模型不可见的会话记录。没有记录的历史结果仍需先读一次，不从旧对话推断全部已读。已有回执、当前分支可见性、最近两轮及受保护结果沿用现有规则。缓存总体收益与该重载修复分别验收。
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 9bb0190..d9e6483 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,10 @@
+ # Changelog
+ 
++## 1.6.0-local.10 - 2026-09-28
++
++- cold-mask 新增 `compactionHoldRatio`（默认 0.72，`0` 关闭）：Pi 上下文用量达到模型窗口的该比例后不再新增裁剪，已有回执照常发送。自动压缩在 90% 处重写历史，临近时裁剪付出的缓存重算会被压缩作废；0.72 即压缩线的 80%。
++- 依据：6 个会话的回放中 5 个不变，1 个在四种缓存假设下均更省；手动压缩与会话结束无法预判，不在本项覆盖范围。
++
+ ## 1.6.0-local.9 - 2026-09-27
+ 
+ - Codex 主请求成功后保存本次 provider payload 中出现的新增工具结果 ID；完整 reload 后按当前分支恢复已读资格，避免尚未归档的已读结果再完整发送一次。
+diff --git a/package.json b/package.json
+index 1bdbb65..1abd6ca 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@syansunyang/pi-context-prune",
+-  "version": "1.6.0-local.9",
++  "version": "1.6.0-local.10",
+   "description": "Pi coding-agent extension that summarizes finished tool-call output out of context and keeps the originals one query away. Fork of championswimmer/pi-context-prune 1.4.0, with fixes for pruned-result handling, errored turns, reload and abort.",
+   "type": "module",
+   "main": "./dist/index.js",
+diff --git a/policy-lab.ts b/policy-lab.ts
+index d99179a..4bb3b18 100644
+--- a/policy-lab.ts
++++ b/policy-lab.ts
+@@ -171,6 +171,7 @@ export default function policyLab(pi: ExtensionAPI): void {
+     summarizerThinking: labConfig.summarizerThinking,
+     summarizerMaxCharsPerResult: labConfig.summarizerMaxCharsPerResult,
+     priceLineRatio: labConfig.priceLineRatio,
++    compactionHoldRatio: labConfig.compactionHoldRatio,
+     priceLines: labConfig.priceLines,
+     stageSummary: labConfig.stageSummary,
+     path: configPath,
+@@ -456,9 +457,17 @@ export default function policyLab(pi: ExtensionAPI): void {
+     return { messages: applyLabStubs(messages, stubMap()), refs };
+   };
+ 
++  /** True once Pi's context usage reaches `compactionHoldRatio` of the window: compaction is near. */
++  const nearCompaction = (ctx: ExtensionContext): boolean => {
++    if (labConfig.compactionHoldRatio <= 0) return false;
++    const usage = ctx.getContextUsage?.();
++    return typeof usage?.tokens === "number" && usage.contextWindow > 0
++      && usage.tokens >= usage.contextWindow * labConfig.compactionHoldRatio;
++  };
++
+   /** cold-mask: archive the budgeted old set and replace it with short receipts. */
+   const maskColdCandidates = (ctx: ExtensionContext, messages: any[]): any[] => {
+-    if (pendingJob) return messages;
++    if (pendingJob || nearCompaction(ctx)) return messages;
+     const branch = ctx.sessionManager.getBranch();
+     const selection = selectLabCandidates(collectLabToolTurns(branch), {
+       seenIds,
+diff --git a/src/lab-config.ts b/src/lab-config.ts
+index 2a548d7..89df71c 100644
+--- a/src/lab-config.ts
++++ b/src/lab-config.ts
+@@ -14,6 +14,7 @@ import { join } from "node:path";
+ import { getAgentDir } from "@earendil-works/pi-coding-agent";
+ import { DEFAULT_CONFIG, SUMMARIZER_THINKING_LEVELS, type ContextPruneConfig, type SummarizerThinking } from "./types.js";
+ import {
++  DEFAULT_COMPACTION_HOLD_RATIO,
+   DEFAULT_KEEP_RECENT_TOOL_TURNS,
+   DEFAULT_PRICE_LINE_RATIO,
+   DEFAULT_PRICE_LINES,
+@@ -39,6 +40,8 @@ export interface LabConfig {
+   priceLineRatio: number;
+   /** "provider/model-id" pattern -> request input size billed at a higher rate. */
+   priceLines: Record<string, number>;
++  /** cold-mask: no new release while Pi's context usage is at or above this share of the window (0 disables). */
++  compactionHoldRatio: number;
+   /** cold-mask: summarize the results released in a user turn when the turn ends. */
+   stageSummary: boolean;
+ }
+@@ -52,6 +55,7 @@ export const DEFAULT_LAB_CONFIG: LabConfig = {
+   summarizerMaxCharsPerResult: DEFAULT_CONFIG.summarizerMaxCharsPerResult,
+   priceLineRatio: DEFAULT_PRICE_LINE_RATIO,
+   priceLines: { ...DEFAULT_PRICE_LINES },
++  compactionHoldRatio: DEFAULT_COMPACTION_HOLD_RATIO,
+   stageSummary: true,
+ };
+ 
+@@ -106,6 +110,7 @@ export function normalizeLabConfig(raw: unknown): LabConfig {
+     summarizerMaxCharsPerResult: nonNegativeInt(source.summarizerMaxCharsPerResult, DEFAULT_LAB_CONFIG.summarizerMaxCharsPerResult),
+     priceLineRatio: ratio(source.priceLineRatio, DEFAULT_LAB_CONFIG.priceLineRatio),
+     priceLines: tokenLines(source.priceLines, DEFAULT_LAB_CONFIG.priceLines),
++    compactionHoldRatio: ratio(source.compactionHoldRatio, DEFAULT_LAB_CONFIG.compactionHoldRatio),
+     stageSummary: typeof source.stageSummary === "boolean" ? source.stageSummary : DEFAULT_LAB_CONFIG.stageSummary,
+   };
+ }
+diff --git a/src/lab-policy.ts b/src/lab-policy.ts
+index 794b3f4..1d56488 100644
+--- a/src/lab-policy.ts
++++ b/src/lab-policy.ts
+@@ -28,6 +28,14 @@ export const DEFAULT_KEEP_RECENT_TOOL_TURNS = 2;
+ /** Share of a model's price line at which every old result is released at once (0 disables). */
+ export const DEFAULT_PRICE_LINE_RATIO = 0.85;
+ 
++/**
++ * cold-mask holds new releases once Pi's context usage reaches this share of the model's window
++ * (0 disables). Automatic compaction rewrites the history at 90%, so a release just before it pays
++ * a cache rebuild that the compaction discards; replaying production sessions put the hold at 80%
++ * of that line.
++ */
++export const DEFAULT_COMPACTION_HOLD_RATIO = 0.72;
++
+ /**
+  * Request input size above which the provider bills the whole request at a higher rate
+  * (list prices: OpenAI API pricing page checked 2026-09-23, xAI docs checked 2026-09-19).
+@@ -116,6 +124,7 @@ export interface LabEventConfig {
+   summarizerThinking: string;
+   summarizerMaxCharsPerResult: number;
+   priceLineRatio: number;
++  compactionHoldRatio: number;
+   stageSummary: boolean;
+   priceLines: Record<string, number>;
+   path: string | null;
+diff --git a/test/lab-compaction-hold.test.ts b/test/lab-compaction-hold.test.ts
+new file mode 100644
+index 0000000..048b9f3
+--- /dev/null
++++ b/test/lab-compaction-hold.test.ts
+@@ -0,0 +1,43 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import { makeLabHarness, receiptsIn } from "./lab-harness.ts";
++
++const usageAt = (state: { tokens: number | null }) => () => ({
++  tokens: state.tokens,
++  contextWindow: 1000,
++  percent: state.tokens === null ? null : state.tokens / 10,
++});
++
++test("cold-mask holds releases near compaction and resumes below the hold line", async () => {
++  const state = { tokens: 720 as number | null };
++  const h = makeLabHarness({ mode: "cold-mask", keepRecentToolTurns: 0, rawConfig: { stageSummary: false }, contextUsage: usageAt(state) });
++  try {
++    await h.sessionStart();
++    h.prompt("task");
++    await h.turn(["a"]);
++    await h.request();
++    assert.equal(receiptsIn(await h.request()).length, 0);
++    assert.equal(h.labEvents().filter((event) => event.event === "apply").length, 0);
++    state.tokens = 719;
++    assert.equal(receiptsIn(await h.request()).length, 1);
++  } finally { h.cleanup(); }
++});
++
++test("a zero hold ratio or unknown usage never holds a release", async () => {
++  for (const [ratio, tokens] of [[0, 990], [undefined, null]] as const) {
++    const state = { tokens: tokens as number | null };
++    const h = makeLabHarness({
++      mode: "cold-mask",
++      keepRecentToolTurns: 0,
++      rawConfig: { stageSummary: false, ...(ratio === undefined ? {} : { compactionHoldRatio: ratio }) },
++      contextUsage: usageAt(state),
++    });
++    try {
++      await h.sessionStart();
++      h.prompt("task");
++      await h.turn(["a"]);
++      await h.request();
++      assert.equal(receiptsIn(await h.request()).length, 1, `ratio ${ratio}, tokens ${tokens}`);
++    } finally { h.cleanup(); }
++  }
++});
+diff --git a/test/lab-harness.ts b/test/lab-harness.ts
+index cbd1c66..6dbd536 100644
+--- a/test/lab-harness.ts
++++ b/test/lab-harness.ts
+@@ -47,6 +47,8 @@ export interface LabHarnessOptions {
+   selectChoice?: string;
+   /** Active model seen by the extension (default fake/fake-model, which has no price line). */
+   model?: { provider: string; id: string; api?: string };
++  /** What ctx.getContextUsage() returns (default: unknown). */
++  contextUsage?: () => { tokens: number | null; contextWindow: number; percent: number | null } | undefined;
+ }
+ 
+ export interface TurnOptions {
+@@ -197,6 +199,7 @@ export function makeLabHarness(options: LabHarnessOptions): LabHarness {
+     hasUI: true,
+     signal: abortController.signal,
+     model,
++    getContextUsage: () => options.contextUsage?.(),
+     modelRegistry: {
+       find: () => model,
+       getAvailable: () => [],

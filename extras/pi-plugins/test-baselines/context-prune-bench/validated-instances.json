@@ -1,0 +1,22 @@
+{
+ "python": "3.12.10 + asgiref sqlparse tzdata",
+ "validated": [
+  "django__django-16485",
+  "django__django-16502",
+  "django__django-16527",
+  "django__django-16560",
+  "django__django-16595",
+  "django__django-16631",
+  "django__django-16661",
+  "django__django-16662",
+  "django__django-16667",
+  "django__django-16819",
+  "django__django-16877",
+  "django__django-16899",
+  "django__django-16901",
+  "django__django-16950",
+  "django__django-17029",
+  "django__django-17084",
+  "django__django-17087"
+ ]
+}

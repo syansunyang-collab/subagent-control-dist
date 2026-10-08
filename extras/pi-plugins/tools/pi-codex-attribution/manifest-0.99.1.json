@@ -1,0 +1,368 @@
+{
+  "version": "0.99.1",
+  "sourceRef": "v0.99.1",
+  "resolvedRef": "d86654abb8862e201933517d6f1fce9f88dd117f",
+  "payloadSha256": "8726eac13baf770c77003b3643d2f765f953bf561fb3fb7153b8fbef10c85869",
+  "files": [
+    {
+      "path": "dist/bundle/chunks/anthropic-messages-COAGR3XM.js",
+      "before": null,
+      "after": "01f198df4b2b2b6cfab751053ab2e67de0b9d425ea42e2d37e978cc60bb8b25b"
+    },
+    {
+      "path": "dist/bundle/chunks/azure-openai-responses-UUA7APOS.js",
+      "before": null,
+      "after": "6b2a0fbd8a29a9a6d28f2a8f864efaa0f6921900ac3207ce0b62afa493623bf4"
+    },
+    {
+      "path": "dist/bundle/chunks/bedrock-converse-stream.js",
+      "before": "ef2a651567c4bf0614cb8ead9cd3c69a89b46bca92b70f66baffd59e5fd7b24a",
+      "after": "9bfbbdf1ac8c6810499a719ef032c7e703d5d4f27a816d9d3db614b225cc3ebd"
+    },
+    {
+      "path": "dist/bundle/chunks/chunk-2YYJF3YK.js",
+      "before": null,
+      "after": "e904921199197a587d7adab46a35bb82b427ca46d0e3a0baa10abefc111638e2"
+    },
+    {
+      "path": "dist/bundle/chunks/chunk-CXJEPLH2.js",
+      "before": null,
+      "after": "16d43fc3b6df518725a13b95f39870e1cbe0bd2e51775578d720e180d3f35676"
+    },
+    {
+      "path": "dist/bundle/chunks/chunk-I3ULYAQN.js",
+      "before": null,
+      "after": "0251a4c8fda2cd1a9abaa8a1ffc7964916a6a9ba19198a891b30bb6e5aa01d0f"
+    },
+    {
+      "path": "dist/bundle/chunks/chunk-S6GFJN66.js",
+      "before": null,
+      "after": "be6004113c13f7208563a40e8f1f7daf9e20808801a69a3827b07d3f91d6040d"
+    },
+    {
+      "path": "dist/bundle/chunks/chunk-TTYIMYLW.js",
+      "before": null,
+      "after": "182767273f314edac8a2f40554656bd430733309b0b82708809d8a2479e03827"
+    },
+    {
+      "path": "dist/bundle/chunks/chunk-VXUPRXVW.js",
+      "before": null,
+      "after": "328a44ae127d8e59e547deb3c5a13eb44e6fb52463efb85820868f1571c77795"
+    },
+    {
+      "path": "dist/bundle/chunks/google-generative-ai-D455PHI2.js",
+      "before": null,
+      "after": "f09a3fdcc97a09621585d798602a82e8001ca5cc20e2a4a78e41679f3b12dd55"
+    },
+    {
+      "path": "dist/bundle/chunks/google-vertex-G5ETXZZI.js",
+      "before": null,
+      "after": "786117e1ea95761e612c350726477f0bcb9c4c763a4e320d668339d5b7eba49c"
+    },
+    {
+      "path": "dist/bundle/chunks/mistral-conversations-RUE7MOR7.js",
+      "before": null,
+      "after": "58800e9cd5b863f170a3d53a58577ab7b638bb7422a6ad78b5a19cc42559f307"
+    },
+    {
+      "path": "dist/bundle/chunks/openai-codex-responses-QXJTIZXL.js",
+      "before": null,
+      "after": "94b29e6ee5bcd5e9d22dcea2013cead6faa035c84e409ea576a56e673f831dd9"
+    },
+    {
+      "path": "dist/bundle/chunks/openai-completions-ODGWNK4T.js",
+      "before": null,
+      "after": "e09764c809fca18d5dde26b2b7253980c297c58d5eeca1fd444da2b0d2b92d04"
+    },
+    {
+      "path": "dist/bundle/chunks/openai-responses-7KMU5ORD.js",
+      "before": null,
+      "after": "3f24528cefef0949d3bd10deb8ba0c13cec2a38fc6d20120f8731aacb75f0119"
+    },
+    {
+      "path": "dist/bundle/chunks/virtual-modules-CR4DS5SZ.js",
+      "before": null,
+      "after": "7333f2ee0d847f9d9e6623e40e20cfe8f36051178a20493d9817f2c198e596fa"
+    },
+    {
+      "path": "dist/bundle/cli-runtime.js",
+      "before": "f007046e3311ee270a78770b357b695d070fe70f2e8df623e4f1461fa8dfb272",
+      "after": "70be0f0ca1e2ff662beb98e30c8476ade9c8247d7078aa21248ac52fac87a371"
+    },
+    {
+      "path": "dist/bundle/index.js",
+      "before": "df1f4c36758e3d339d42c6caebb2fca1d9f415de658d56b7b1fa6a9a808f0aa5",
+      "after": "00a2e9bfdfee2f2f2eccb74b9693d120963eb96c16aa8f0024029abb8c35097b"
+    },
+    {
+      "path": "dist/bundle/rpc-entry.js",
+      "before": "8c9b60d0ee623b1fbe4bdb4f822d07d228b8a5f32c6fe9d7413eb12fef2a1d61",
+      "after": "6f6dedcfbb70391e5d311f38f304af634c3f8986738f45a02a9a94cb726f732f"
+    },
+    {
+      "path": "dist/core/agent-session.d.ts.map",
+      "before": "45a440a084d5935eaaaa33dd579720c763c667df2d2189770039a738766c1dcc",
+      "after": "1e3dbf41bccdfa5c752ec7f427160727645961f7f774d5fc4c54b9b0be49eb94"
+    },
+    {
+      "path": "dist/core/agent-session.js",
+      "before": "fc2ea38a53937a66dc39322c1e97387694580765078f1736a3f11a0330b8bb23",
+      "after": "22e720c389b77ff7a3a5e12d9b7a02a46591f9a9200dffb0206b02727a4ba33f"
+    },
+    {
+      "path": "dist/core/agent-session.js.map",
+      "before": "f8aba8e0efd0399eef9f6e3a9a9793e709682c1fa3486c83dd75a9b4d83f4aa0",
+      "after": "c00981dcafc08f5adf27c4ee33ca715dbfc7da28cb70f43b1ca7841ce7ee2f5c"
+    },
+    {
+      "path": "dist/core/compaction/branch-summarization.d.ts",
+      "before": "36376989db49c19167a1478947968158b4ef8184e493cf392e7deaaeaec55943",
+      "after": "3b7fc8de5f05efa925e73ffe4b1ca1fd2c17870ea7b642d11f5c5e4b01cb9736"
+    },
+    {
+      "path": "dist/core/compaction/branch-summarization.d.ts.map",
+      "before": "49e993f4aaaf3395f97a2647a492cc0aa6a2dd0b98d37a52cb74671915e748dd",
+      "after": "a2f72fbe309ace4fc19ea410dc6cf173cd0d1e80b51818b5dd0d78d1455c0916"
+    },
+    {
+      "path": "dist/core/compaction/branch-summarization.js",
+      "before": "0327aead9ce78dab3c3c7e54779b5974ec41bcb769dd3024f0c61edcd9ebea7e",
+      "after": "df41126f21d1a8c95bac4722334ecd59f2c5bd2057757688ed95d90e736cbaa1"
+    },
+    {
+      "path": "dist/core/compaction/branch-summarization.js.map",
+      "before": "36705db5d21a688265ec7f19531e1cdb66ee3a8deb653f8480ec8d07cb5b4500",
+      "after": "2bc9040d2e00ac421ea1142b2c66f65be9698575128313e382f72f9b756ea018"
+    },
+    {
+      "path": "dist/core/compaction/compaction.d.ts",
+      "before": "0e93fec810760cfed03f749be2a79cf1cff8540899b693592139c673d03b35fa",
+      "after": "d6240f8b8677d3004e1975c4e40db19d2d4797c1eccb782c2495a24d1ab1f2ff"
+    },
+    {
+      "path": "dist/core/compaction/compaction.d.ts.map",
+      "before": "b9302f181bbc8865e713a3dd0bb773d3b53f9e8f44eff7a8f28e227185680a83",
+      "after": "2a8c2100c70977e44728313801687a390721d66de81ed9683609e9c8ef282e52"
+    },
+    {
+      "path": "dist/core/compaction/compaction.js",
+      "before": "573f0321e9a93a4e8dca8c327f6459082ac438d1bc8b6c3c171d90894dd1543c",
+      "after": "eb1efd9ce65397b4f0cc3f78455533710ddbb9d1b16c8c83802bb47f4fbcbaf2"
+    },
+    {
+      "path": "dist/core/compaction/compaction.js.map",
+      "before": "436ceffc89354cea553d4bc1d7696612145db64c5013fee63d2e38ed97d2cfe6",
+      "after": "41ab848cf2921491e60b52819400e4f84ef9d1b7d18e8f1bdc74b0c08d58de40"
+    },
+    {
+      "path": "dist/core/model-config.d.ts",
+      "before": "1cb205136152ee4be71a847a7ba89d401980616763bfc270a5e376421d2735ae",
+      "after": "5c1d74954899ffc570319c5347323ec3c246e0bdda4a51ca401b2ec48699e7e1"
+    },
+    {
+      "path": "dist/core/model-config.d.ts.map",
+      "before": "bf74d3e61490e5593a2b636c82be25f908be8ede3141783beb9549a06969a98b",
+      "after": "ae586d33ba26856fc1f84cad644a12b1a64026c34aad13537212656de7af8f0d"
+    },
+    {
+      "path": "dist/core/model-config.js",
+      "before": "68c447ff2ef729331713e044dae41b7416dbafbf96c83773308e2eb9c3f86107",
+      "after": "6db0a084a1ec0a4043a0ea3f02b65b11892a9dc08377040e6acdfad947b1a2bb"
+    },
+    {
+      "path": "dist/core/model-config.js.map",
+      "before": "44333be86fb62a5431721698c2ecbd45a3086c658181dd0fc47db0cdd74bec41",
+      "after": "667ac0b811ff130bbf611360fa1e36fca15d304a459145b359f2cda84c0d52a1"
+    },
+    {
+      "path": "dist/core/sdk.d.ts.map",
+      "before": "5368b94a3b943e7b452b5eb40c7ba830884a3803998ab6c3a7a25d69d2f0ea39",
+      "after": "d20c7b2a1f6f5c31e4e4b107349d6b70387bd4fd9171638ec891aed66a65aa40"
+    },
+    {
+      "path": "dist/core/sdk.js",
+      "before": "e4700d60ee0ac30afa185a771c14a3f59670b60bf700a8f6ab4e218a0feffea3",
+      "after": "fbf4422cc37927e6bb7527f8477cd4a28ff07d4e20dcf381f2d1e885f3ca8b6e"
+    },
+    {
+      "path": "dist/core/sdk.js.map",
+      "before": "e246e16541f0f9bd85a1e3b1b0474f9bb3744c4ba2d8e9196a68dce89bbfabfb",
+      "after": "270313ed048d16ce4da644c8efda45b4271ca549ebf71cc80a5d075b2bd63a2f"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.d.ts.map",
+      "before": "77f9bbff2b4e792353f83c277d5db97451548353ea12f62d22511ccadae2c2df",
+      "after": "cadc057b9440d86c0cd5489b50d90e9e2061bc4db7d414450c16a63aaff2df84"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+      "before": "65def8c7f3fa01e38fe05467520efc8673c22ea8197833a3b04b29c8a60cb1e3",
+      "after": "667e80de9024be85c2e6b5c47514cfce3ce701378b70638ca5c2cfa541db9566"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js.map",
+      "before": "88878415ca98857eb71b325b12fcc1d930e6560b28c49042fe09af75c3b4e068",
+      "after": "625cbb99393b13dd887882d5c4fccd1bbae9d8a9536edadd7f2148b634c2bcf0"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts",
+      "before": "1ae9fb28e132a7d0c545c96b69bca5a69db1374695853d12921bc623709a7589",
+      "after": "7142c52d7b808de965a9ef36ef8be8fefa50fe0771b70e482dca57541f15a295"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts.map",
+      "before": "a3aa23264e0b52d23d35764ce28cb544489607df87ea5078c6658c22cc3d7f27",
+      "after": "7ed43a1bd526570907a36a907da0fd34b81c87b3394fd9e07fa547092241c66f"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/agent.js",
+      "before": "163ad28551f1c38b8eb899a5c9dd89cd9d9005fb7dd9c4abeb008ee380e98c51",
+      "after": "3b97b74c575b2cef43e49a72e16f0cc25ecc428d90ff59f231d7f2a9f72e654e"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/agent.js.map",
+      "before": "d0d078ad69dae5064d3e1e8e04e801abe7cef69f9f2a6aeacafcefb9252ed4d5",
+      "after": "c0b07d93d90db4efd0d3e92960440b8ee35cdcbc59d676ac5a61714fb8933986"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/proxy.d.ts",
+      "before": "d3e15f2cdf0c8ba0b7349583ce68e9ac62536fad6a476db9a6c79d343b1a932a",
+      "after": "bdcb7a0f83b48590e63db306a72347d5f4f3f9bc620c678f654a4f0d16bbae87"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/proxy.d.ts.map",
+      "before": "bab7697686847e74c5d725d6fcef49364280f7d5a57afeffd9612989d12e0a55",
+      "after": "4d4353217383e7afa4d397639d51c421320e3264ef9563df6e9d750262dd052e"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/proxy.js",
+      "before": "eb566386833f64962d64517707a3ee6841b3050a1cdd737b97d91fe72df5e60b",
+      "after": "d10a0143cdd7b0e120a0c2ea7bd97192bee81ea00e69b6eb155a72a1ecff6607"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/proxy.js.map",
+      "before": "bf579b1ce21d8a53bb72c8b6ff098f4fc1ef4f58b214ca7b8ebb9034b5c6faa9",
+      "after": "e01a55382fe529b4b2acdb9e6d019b295f59a28fe254793359d46baf7fc7715e"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/types.d.ts",
+      "before": "a4cc438f7ec8f75c2170d6190b64db0efb34904b467469d4bd719db0c9973997",
+      "after": "a4bd95690d69fee08ba82669e4f097c475250645b2e2133ac05fe59b42113b7d"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/types.d.ts.map",
+      "before": "b0e9ed6cd5e544de9d1dc305e30a211e195007160858ec66957d5f779e0f14b6",
+      "after": "fa5f1c2b644b0830a2838efa8f3afa17e0430e1dc7e8063b5e87bf3970b0a3b9"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-agent-core/dist/types.js.map",
+      "before": "69e4637660532a242a07930dd44ac6291d20172d9804f73288ff040c6c2e23f7",
+      "after": "39e57849fcd8470f9a5641a6ca2061c25b6eee57ed9ee3c9fb1ab2768dabc353"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/codex-request-metadata.d.ts",
+      "before": null,
+      "after": "2527c9d64580a4e27e2df917800324b52527d1294d6dc2f7c289893861b8a251"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/codex-request-metadata.d.ts.map",
+      "before": null,
+      "after": "ebfbd7349666a4cb8661285572978cb5ffccf516468d98513775620a86df0949"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/codex-request-metadata.js",
+      "before": null,
+      "after": "287772da964d1bae6afc726a96c73de707fa2bc505d5179b2f0abc93cf324902"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/codex-request-metadata.js.map",
+      "before": null,
+      "after": "2d5b056e905e9bd74de65228336031ae67efd18a61ddd814489856327f11e9f9"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.d.ts",
+      "before": "a1e45bf4733690b417c463f450c36c0c42b8060cfa14213b9281c0d35770d030",
+      "after": "918c7c4bc55aba012744c9f7b9bb1e14f29e26616e8d5853037009298688a077"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.d.ts.map",
+      "before": "2fc602f31cfe7c3f2cd66e420c5f703ea6a33e1525ff6ca5e34f3c3c03aaefa2",
+      "after": "49af15691b237896de5b9aa4e5ec8402e904ea6ffe895b7fa3e6ca4d26a06916"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "before": "53b4abdad5f2af1e5e5c12605d96bf6651d4a4b847351d87898ebb67d04236f7",
+      "after": "db8842b7960407016ef7b88975fb2244349b7a5ec24e451a5026888c55af427d"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js.map",
+      "before": "41979c2b4a38530cb1266af1ae5dc8e40a24be5552fddb827f66c79c760ed021",
+      "after": "7adda4607cb483e3eefcd12d6e1dab9941278dfc0826dfa3cc505e040a242a97"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.d.ts",
+      "before": "552baa4343275a20df53734e5aa12f46cb8648ca28421adf1318b199eae69a05",
+      "after": "fe16bb373fe05b2582ba54e9946dfd737c79f56c3f15b5f1f471b3335ca454f6"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.d.ts.map",
+      "before": "33ca097b5a94e0229ee03db798043ab10077dc3d6d18bdadb84af68343e232c9",
+      "after": "4742805939a829663daf83d674121a188fb733808324c27cfb872535c5fbbfe0"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+      "before": "8167bfe47b0c9cc99a653d84f24ad055128e66888429f9f954e063918c074ea0",
+      "after": "60abee415d7f9641d2b52d28bc0d2f679e6fac4d8b665c3c77f502ee66f467da"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js.map",
+      "before": "9882b4f409b11127ef8cf7aa281e2cf4a800f66b97e62bd69f0159bccbb63e39",
+      "after": "a259ad12423aa52d65862bbe697ad3a1c24f9fb21f0b29466216ae7ee657dd7f"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-responses.d.ts.map",
+      "before": "6b7acec8ef0bfcc7d1d1df031908522afc23d648ff61bedf37fb979e654fd1a6",
+      "after": "3b313742584c383bd0b8c376e86950417c5c578abf86a2f5863181379a1ad5fb"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+      "before": "8a294f760ea70459c6d41c83878a8d0cda5dd4780c46b490c85e0d3495471e3e",
+      "after": "6a065ca68eefa9be050ef1e5c85baf9ef4be67487ef9fdde25929174aac4bd69"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js.map",
+      "before": "7cb3b6a4db927b0b97b3de32ee4126eae98fec97e223f046d08d7fa2feccdda2",
+      "after": "a69425e451286c6cf1acce671d5700f43287a31230507c6dd4cb41963ab03dff"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/simple-options.d.ts.map",
+      "before": "5e3342523b37e2fcbb2b86e283c3a576c25853bd76a473b91dd4177becce7178",
+      "after": "ad35fc2eb58977ee56173d200957776b89d6048fbb23458c9e3bfbfd6e47e212"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/simple-options.js",
+      "before": "36cec6b6c3c58a47ae2f902cc39e1601fdaf7ed5b0e99e3577089c036ad14805",
+      "after": "08c0d5153abe228c89008591b757dcae79816f0ceb078220dda51e53d519be8d"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/simple-options.js.map",
+      "before": "e8e61cccfd36515f81dc8d1ba0fefdced5e62cd00a9ae36c98e9f0d34db40c95",
+      "after": "694f5526c5d31096b81d65e6bf593bb3e402038572b14edfa67226620777387d"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/types.d.ts",
+      "before": "7e6a457a6f60029187b722456fa883d4eb6e5219f871c65bba323c1f8bb4eca2",
+      "after": "065ed4f4a90abdaeca985917469e2a6ef716e3c6481b3a8843ba17e27c7cdc89"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/types.d.ts.map",
+      "before": "5225edbec4e4e416cf25a2a5bca910818711d1cfca2fb022f2c97e92e321c23b",
+      "after": "46ee04b336fb149021d2f6d29e3ff821664ec600f204d870a4aa569405f5cc0b"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/types.js.map",
+      "before": "e0ef561b280004257bcc25eb1cda34d0620ed42ec755923eecaa6f6981a6f735",
+      "after": "868ba5ea2d9f043f288b4c495634486b98ad63fe29d661c1cd4ecf505a4322a9"
+    }
+  ]
+}

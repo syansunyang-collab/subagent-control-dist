@@ -1,0 +1,325 @@
+diff --git a/.agents/plans/046-restore-confirmed-seen-results.md b/.agents/plans/046-restore-confirmed-seen-results.md
+new file mode 100644
+index 0000000..b2103bc
+--- /dev/null
++++ b/.agents/plans/046-restore-confirmed-seen-results.md
+@@ -0,0 +1,29 @@
++---
++name: 046-restore-confirmed-seen-results
++description: 保存成功请求中出现的工具结果，避免重载后重复发送并保护未读结果。
++steps:
++  - phase: discovery
++    steps:
++      - "- [x] 核对生产来源、请求钩子和重载复现。"
++  - phase: implementation
++    steps:
++      - "- [x] 成功响应后持久化已读结果，按当前分支恢复。"
++  - phase: validation
++    steps:
++      - "- [x] 覆盖失败、未读、分支、压缩、回执和重复保存。"
++      - "- [ ] 本地提交，经现有入口部署并验证加载。"
++---
++
++# 恢复已确认发送的工具结果
++
++## 核查
++- [x] 核对生产来源、请求钩子和重载复现。
++
++## 实现
++- [x] 成功响应后持久化已读结果，按当前分支恢复。
++
++## 验证
++- [x] 覆盖失败、未读、分支、压缩、回执和重复保存。
++- [ ] 本地提交，经现有入口部署并验证加载。
++
++只保存发送边界可确认的工具结果 ID，追加为模型不可见的会话记录。没有记录的历史结果仍需先读一次，不从旧对话推断全部已读。已有回执、当前分支可见性、最近两轮及受保护结果沿用现有规则。缓存总体收益与该重载修复分别验收。
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 7ac76b8..9bb0190 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,11 @@
+ # Changelog
+ 
++## 1.6.0-local.9 - 2026-09-27
++
++- Codex 主请求成功后保存本次 provider payload 中出现的新增工具结果 ID；完整 reload 后按当前分支恢复已读资格，避免尚未归档的已读结果再完整发送一次。
++- 失败、取消和未到发送钩子的请求不授予已读资格；未读尾部、最近两轮、保护结果及已有回执沿用原规则。记录不进入模型上下文，不新增模型请求。
++- 旧会话没有已读记录的部分不回填推断；新版本成功读取后开始持久化。其他 provider 保持原有内存资格行为。此项不宣称解决所有缓存回退。
++
+ ## 1.6.0-local.8 - 2026-09-27
+ 
+ - 新增 `/pruner-threshold` 阈值选择，支持 6K、15K、30K、60K，也支持直接带参数。选择从下一次判断生效，无需 reload；当前分支持久化，覆盖配置文件默认值。
+diff --git a/package.json b/package.json
+index 2e55a74..1bdbb65 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@syansunyang/pi-context-prune",
+-  "version": "1.6.0-local.8",
++  "version": "1.6.0-local.9",
+   "description": "Pi coding-agent extension that summarizes finished tool-call output out of context and keeps the originals one query away. Fork of championswimmer/pi-context-prune 1.4.0, with fixes for pruned-result handling, errored turns, reload and abort.",
+   "type": "module",
+   "main": "./dist/index.js",
+diff --git a/policy-lab.ts b/policy-lab.ts
+index 89c2784..d99179a 100644
+--- a/policy-lab.ts
++++ b/policy-lab.ts
+@@ -78,6 +78,7 @@ import { registerLabReadTool } from "./src/lab-read-tool.js";
+ const JOB_TIMEOUT_MS = 180_000;
+ const PAUSE_ENTRY_TYPE = "context-prune-paused";
+ const THRESHOLD_ENTRY_TYPE = "context-prune-threshold";
++const SEEN_ENTRY_TYPE = "context-prune-seen-results";
+ const THRESHOLDS = [6000, 15000, 30000, 60000];
+ 
+ /** Minimal view of the session manager method used to persist a summary message. */
+@@ -124,6 +125,9 @@ export default function policyLab(pi: ExtensionAPI): void {
+   const stats = new StatsAccumulator();
+   /** Tool results the main model has already received in an earlier request. */
+   const seenIds = new Set<string>();
++  // Codex results are acknowledged only after a successful response, then survive reload.
++  let pendingSeenIds = new Set<string>();
++  let submittedSeenIds: string[] = [];
+   /** Lab events of the current branch, used to decide stage-summary coverage. */
+   const labEvents: LabEvent[] = [];
+   /** short ref -> tool call id, restored from the persisted archive entries. */
+@@ -178,11 +182,16 @@ export default function policyLab(pi: ExtensionAPI): void {
+     stats.reconstructFromSession(ctx);
+     shortIdByToolCallId.clear();
+     labEvents.length = 0;
++    seenIds.clear();
++    pendingSeenIds.clear();
++    submittedSeenIds = [];
+     paused = false;
+     labConfig = { ...labConfig, triggerTokens: configuredTriggerTokens };
+ 
+     for (const entry of ctx.sessionManager.getBranch()) {
+-      if (entry?.type === "custom" && entry.customType === THRESHOLD_ENTRY_TYPE) {
++      if (entry?.type === "custom" && entry.customType === SEEN_ENTRY_TYPE) {
++        for (const id of entry.data?.toolCallIds ?? []) if (typeof id === "string") seenIds.add(id);
++      } else if (entry?.type === "custom" && entry.customType === THRESHOLD_ENTRY_TYPE) {
+         if (THRESHOLDS.includes(entry.data?.tokens)) labConfig.triggerTokens = entry.data.tokens;
+       } else if (entry?.type === "custom" && entry.customType === PAUSE_ENTRY_TYPE) {
+         if (typeof entry.data?.paused === "boolean") paused = entry.data.paused;
+@@ -200,7 +209,6 @@ export default function policyLab(pi: ExtensionAPI): void {
+       }
+     }
+ 
+-    seenIds.clear();
+     hydrated = true;
+   };
+ 
+@@ -617,6 +625,8 @@ export default function policyLab(pi: ExtensionAPI): void {
+   });
+ 
+   pi.on("session_shutdown", async (event) => {
++    pendingSeenIds.clear();
++    submittedSeenIds = [];
+     invalidatePlans(`session-shutdown:${event.reason}`);
+   });
+ 
+@@ -636,7 +646,6 @@ export default function policyLab(pi: ExtensionAPI): void {
+ 
+   pi.on("context", async (event, ctx) => {
+     if (!hydrated) hydrate(ctx);
+-    const incoming = toolResultIds(event.messages);
+     let messages: any[] = event.messages;
+     let changed = false;
+ 
+@@ -678,12 +687,40 @@ export default function policyLab(pi: ExtensionAPI): void {
+       }
+     }
+ 
+-    // A result becomes releasable only after it appeared in an earlier request.
+-    for (const id of incoming) seenIds.add(id);
++    const incoming = toolResultIds(messages);
++    if (ctx.model?.api === "openai-codex-responses") {
++      pendingSeenIds = new Set([...incoming].filter(id => !seenIds.has(id) && !indexer.getIndex().has(id)));
++      submittedSeenIds = [];
++    } else {
++      // Other providers retain the existing in-memory eligibility behavior.
++      for (const id of incoming) seenIds.add(id);
++    }
+ 
+     return changed ? { messages } : undefined;
+   });
+ 
++  pi.on("before_provider_request", (event, ctx) => {
++    if (ctx.model?.api !== "openai-codex-responses") return;
++    const payload = event.payload as { input?: { type?: string; call_id?: string }[] };
++    const sent = new Set((Array.isArray(payload?.input) ? payload.input : [])
++      .filter(item => item.type === "function_call_output" || item.type === "custom_tool_call_output")
++      .map(item => item.call_id));
++    // Match the Responses adapter's call ID normalization; store the original branch ID.
++    submittedSeenIds = [...pendingSeenIds].filter(id =>
++      sent.has(id.split("|")[0].replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64).replace(/_+$/, "")));
++  });
++
++  pi.on("message_end", (event, ctx) => {
++    if (ctx.model?.api !== "openai-codex-responses" || event.message.role !== "assistant") return;
++    const ids = submittedSeenIds;
++    submittedSeenIds = [];
++    pendingSeenIds.clear();
++    if (!["stop", "toolUse", "length"].includes(event.message.stopReason) || ids.length === 0) return;
++    // Custom entries do not enter model context. Persist only newly acknowledged results.
++    pi.appendEntry(SEEN_ENTRY_TYPE, { toolCallIds: ids });
++    for (const id of ids) seenIds.add(id);
++  });
++
+   pi.on("turn_end", async (_event, ctx) => {
+     if (paused) return;
+     if (labConfig.mode !== LAB_MODE_BUDGET_SUMMARY) return;
+diff --git a/test/lab-harness.ts b/test/lab-harness.ts
+index 8f09a29..cbd1c66 100644
+--- a/test/lab-harness.ts
++++ b/test/lab-harness.ts
+@@ -46,7 +46,7 @@ export interface LabHarnessOptions {
+   rawConfig?: Record<string, unknown>;
+   selectChoice?: string;
+   /** Active model seen by the extension (default fake/fake-model, which has no price line). */
+-  model?: { provider: string; id: string };
++  model?: { provider: string; id: string; api?: string };
+ }
+ 
+ export interface TurnOptions {
+@@ -73,7 +73,7 @@ export interface LabHarness {
+   /** Records the tool results for calls announced earlier. */
+   results(ids: string[], options?: TurnOptions): void;
+   turnEnd(): Promise<void>;
+-  request(): Promise<any[]>;
++  request(options?: { stopReason?: string; omitProviderIds?: string[]; providerHook?: boolean }): Promise<any[]>;
+   agentEnd(): Promise<void>;
+   sessionTree(): Promise<void>;
+   sessionShutdown(reason: string): Promise<void>;
+@@ -140,6 +140,7 @@ export function makeLabHarness(options: LabHarnessOptions): LabHarness {
+     return id;
+   };
+   const rebuild = () => {
++    lastId = branch.at(-1)?.id ?? null;
+     agent.length = 0;
+     agent.push(...buildContextEntries(branch).flatMap(sessionEntryToContextMessages));
+   };
+@@ -287,10 +288,16 @@ export function makeLabHarness(options: LabHarnessOptions): LabHarness {
+     async turnEnd() {
+       await handlers.get("turn_end")!({ message: null, toolResults: [], turnIndex: branch.length }, ctx);
+     },
+-    async request() {
++    async request(options = {}) {
+       const messages = structuredClone(agent);
+       const out = await handlers.get("context")!({ messages }, ctx);
+-      return (out?.messages ?? messages) as any[];
++      const sent = (out?.messages ?? messages) as any[];
++      if (options.providerHook !== false) await handlers.get("before_provider_request")?.({ payload: {
++        input: sent.filter(m => m.role === "toolResult" && !options.omitProviderIds?.includes(m.toolCallId))
++          .map(m => ({ type: "function_call_output", call_id: m.toolCallId.split("|")[0] })),
++      } }, ctx);
++      await handlers.get("message_end")?.({ message: { role: "assistant", stopReason: options.stopReason ?? "stop", content: [], usage } }, ctx);
++      return sent;
+     },
+     async agentEnd() {
+       await handlers.get("agent_end")!({ messages: structuredClone(agent) }, ctx);
+diff --git a/test/lab-seen.test.ts b/test/lab-seen.test.ts
+new file mode 100644
+index 0000000..1c3c815
+--- /dev/null
++++ b/test/lab-seen.test.ts
+@@ -0,0 +1,99 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import { makeLabHarness, receiptsIn } from "./lab-harness.ts";
++
++const model = { provider: "openai-codex", api: "openai-codex-responses", id: "gpt-6-sol" };
++const resultText = (id: string) => `${id}:${"x".repeat(800)}`;
++const acknowledgements = (h: ReturnType<typeof makeLabHarness>) =>
++  h.branch.filter(e => e.customType === "context-prune-seen-results");
++
++test("Codex reload restores confirmed old results without releasing unread or recent results", async () => {
++  const h = makeLabHarness({ mode: "cold-mask", model, triggerTokens: 100, keepRecentToolTurns: 2, rawConfig: { stageSummary: false } });
++  try {
++    await h.sessionStart();
++    h.prompt("task");
++    await h.turn(["a0"], { resultText });
++    await h.request();
++    await h.turn(["a1"], { resultText });
++    await h.request();
++    await h.turn(["a2"], { resultText });
++    await h.reloadExtension();
++    const sent = await h.request();
++    assert.deepEqual(receiptsIn(sent).map(m => m.toolCallId), ["a0"]);
++    assert.equal(sent.find(m => m.toolCallId === "a2").content[0].text, resultText("a2"));
++    assert.equal(h.summarizerPrompts().length, 0);
++    assert.equal(sent.some(m => m.customType === "context-prune-seen-results"), false, "acknowledgements never enter model context");
++    await h.reloadExtension();
++    assert.deepEqual(receiptsIn(await h.request()).map(m => m.toolCallId), ["a0"]);
++  } finally { h.cleanup(); }
++});
++
++test("Codex failures and missing provider sends cannot grant pruning eligibility", async () => {
++  for (const failure of [{ stopReason: "error" }, { stopReason: "aborted" }, { providerHook: false }]) {
++    const h = makeLabHarness({ mode: "cold-mask", model, keepRecentToolTurns: 0 });
++    try {
++      await h.sessionStart();
++      h.prompt("task");
++      await h.turn(["a0"], { resultText });
++      assert.equal(receiptsIn(await h.request(failure)).length, 0);
++      assert.equal(acknowledgements(h).length, 0);
++      assert.equal(receiptsIn(await h.request(failure)).length, 0, "failure must also stay unread without reload");
++      await h.reloadExtension();
++      assert.equal(receiptsIn(await h.request()).length, 0, "first successful read keeps the original");
++      assert.equal(receiptsIn(await h.request()).length, 1);
++    } finally { h.cleanup(); }
++  }
++});
++
++test("Codex records only provider-visible results and persists each ID once", async () => {
++  const h = makeLabHarness({ mode: "cold-mask", model, keepRecentToolTurns: 0 });
++  try {
++    await h.sessionStart();
++    h.prompt("task");
++    await h.turn(["call_a|fc_a", "hidden"], { resultText });
++    await h.request({ omitProviderIds: ["hidden"] });
++    assert.deepEqual(acknowledgements(h).flatMap(e => e.data.toolCallIds), ["call_a|fc_a"]);
++    await h.reloadExtension();
++    assert.deepEqual(receiptsIn(await h.request()).map(m => m.toolCallId), ["call_a|fc_a"]);
++    await h.request();
++    await h.request();
++    assert.deepEqual(acknowledgements(h).flatMap(e => e.data.toolCallIds), ["call_a|fc_a", "hidden"]);
++  } finally { h.cleanup(); }
++});
++
++test("Codex seen state follows the current branch and does not resurrect compacted material", async () => {
++  const h = makeLabHarness({ mode: "cold-mask", model, keepRecentToolTurns: 0 });
++  try {
++    await h.sessionStart();
++    h.prompt("task");
++    await h.turn(["a0"], { resultText });
++    const fork = h.branch.length;
++    await h.request();
++    assert.equal(acknowledgements(h).length, 1);
++    h.branch.splice(fork);
++    await h.sessionTree();
++    h.reload();
++    assert.equal(receiptsIn(await h.request()).length, 0, "a sibling branch's acknowledgement is absent");
++    h.compact();
++    await h.reloadExtension();
++    const sent = await h.request();
++    assert.equal(sent.some(m => m.role === "toolResult"), false);
++    assert.equal(h.indexedIds().length, 0);
++  } finally { h.cleanup(); }
++});
++
++test("Codex pause continues acknowledging reads and resume after reload uses them", async () => {
++  const h = makeLabHarness({ mode: "cold-mask", model, keepRecentToolTurns: 0 });
++  try {
++    await h.sessionStart();
++    await h.command("pause");
++    h.prompt("task");
++    await h.turn(["a0"], { resultText });
++    await h.request();
++    await h.reloadExtension();
++    assert.equal(receiptsIn(await h.request()).length, 0);
++    await h.command("resume");
++    assert.equal(receiptsIn(await h.request()).length, 1);
++    assert.equal(acknowledgements(h).length, 1);
++  } finally { h.cleanup(); }
++});

@@ -1,0 +1,11 @@
+{
+  "name": "pi-global-system-tail",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./local-time.ts"
+    ]
+  }
+}

@@ -1,0 +1,155 @@
+--- a/src/ask-tool.ts
++++ b/src/ask-tool.ts
+@@ -69,17 +69,17 @@
+ 		source: "tool",
+ 		sourceEntryId: toolCallId,
+ 	});
+-	if (ctx.mode !== "tui") {
+-		return nonInteractiveResponse(validation.state);
+-	}
+ 	ctx.ui.setWorkingVisible(false);
+ 	try {
+-		const result = await runAskFlow(ctx, params, {
++		const outcome = await runAskFlow(ctx, params, {
+ 			remote: remoteAsk
+ 				? { runtime: remoteAsk, source: "tool", toolCallId }
+ 				: undefined,
+ 		});
+-		return successfulResponse(result);
++		if (outcome.kind === "unsupported") {
++			return nonInteractiveResponse(validation.state);
++		}
++		return successfulResponse(outcome.result);
+ 	} finally {
+ 		ctx.ui.setWorkingVisible(true);
+ 	}
+--- a/src/ui/controller.ts
++++ b/src/ui/controller.ts
+@@ -101,11 +101,15 @@
+ 	unsubscribeConfig: () => void;
+ }
+ 
++export type AskFlowOutcome =
++	| { kind: "unsupported" }
++	| { kind: "ui"; result: AskResult };
++
+ export async function runAskFlow(
+ 	ctx: ExtensionContext,
+ 	params: AskParams,
+ 	options: AskFlowOptions = {}
+-): Promise<AskResult> {
++): Promise<AskFlowOutcome> {
+ 	const store = getAskConfigStore();
+ 	const { config, notice } = await store.ensureLoaded();
+ 	const flowOptions = {
+@@ -113,22 +117,49 @@
+ 		presentSingleAsMulti:
+ 			options.presentSingleAsMulti ?? config.behaviour.presentSingleAsMulti,
+ 	};
+-	if (ctx.mode !== "tui") {
++	const flowParams: AskFlowParams = {
++		...params,
++		config,
++		configNotice: notice?.text,
++		cwd: ctx.cwd,
++		ctx,
++		flowOptions,
++	};
++	const cancelledResult = (): AskResult => ({
++		...toAskResult(createInitialState(params, flowOptions)),
++		cancelled: true,
++	});
++	if (ctx.mode === "tui") {
+ 		return {
+-			...toAskResult(createInitialState(params, flowOptions)),
+-			cancelled: true,
++			kind: "ui",
++			result: await ctx.ui.custom<AskResult>((...args) =>
++				createAskFlowController(args, flowParams)
++			),
+ 		};
+ 	}
+-	return ctx.ui.custom<AskResult>((...args) =>
+-		createAskFlowController(args, {
+-			...params,
+-			config,
+-			configNotice: notice?.text,
+-			cwd: ctx.cwd,
+-			ctx,
+-			flowOptions,
+-		})
+-	);
++	// Non-TUI hosts may still expose a custom UI bridge (for example Pi Web's RPC
++	// host). Hosts without one resolve `custom()` with undefined and never call
++	// the factory - the same contract pi's no-op UI context implements - so a
++	// factory that never ran means the rich ask UI is unavailable here.
++	let factoryInvoked = false;
++	try {
++		const bridged = await ctx.ui.custom<AskResult | undefined>((...args) => {
++			factoryInvoked = true;
++			return createAskFlowController(args, flowParams);
++		});
++		if (bridged !== undefined) {
++			return { kind: "ui", result: bridged };
++		}
++	} catch (error) {
++		if (error instanceof Error && error.name === "AbortError") {
++			return { kind: "ui", result: cancelledResult() };
++		}
++		throw error;
++	}
++	if (factoryInvoked) {
++		return { kind: "ui", result: cancelledResult() };
++	}
++	return { kind: "unsupported" };
+ }
+ 
+ function createAskFlowController(
+--- a/src/answer-commands.ts
++++ b/src/answer-commands.ts
+@@ -291,7 +291,7 @@
+ 		remoteSource: RemoteAskSource;
+ 	}
+ ): Promise<void> {
+-	const result = await withHiddenWorkingRow(ctx, () =>
++	const outcome = await withHiddenWorkingRow(ctx, () =>
+ 		runAskFlow(ctx, params, {
+ 			allowFreeform: options.allowFreeform,
+ 			remote: options.remoteAsk
+@@ -299,6 +299,11 @@
+ 				: undefined,
+ 		})
+ 	);
++	if (outcome.kind === "unsupported") {
++		ctx.ui.notify("Ask UI is not available in this host.", "error");
++		return;
++	}
++	const result = outcome.result;
+ 	if (result.cancelled) {
+ 		ctx.ui.notify("Ask form cancelled.", "info");
+ 		return;
+--- a/src/resume-pending-ask.ts
++++ b/src/resume-pending-ask.ts
+@@ -64,9 +64,9 @@
+ 	);
+ 	ctx.ui.setWorkingVisible(false);
+ 
+-	let result: Awaited<ReturnType<typeof runAskFlow>>;
++	let outcome: Awaited<ReturnType<typeof runAskFlow>>;
+ 	try {
+-		result = await runAskFlow(ctx, pendingAsk.params, {
++		outcome = await runAskFlow(ctx, pendingAsk.params, {
+ 			remote: {
+ 				runtime: remoteAsk,
+ 				source: "ask:resume",
+@@ -76,6 +76,10 @@
+ 	} finally {
+ 		ctx.ui.setWorkingVisible(true);
+ 	}
++	if (outcome.kind === "unsupported") {
++		return;
++	}
++	const result = outcome.result;
+ 
+ 	appendPendingAskDismissal(pi, pendingAsk.toolCallId);
+ 	if (result.cancelled) {

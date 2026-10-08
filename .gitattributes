@@ -42,3 +42,6 @@ notes/verify/evidence/chief-engineer-20260923/** -text -eol -whitespace
 
 # 用户级 Pi 插件快照按原字节部署，bootstrap 逐字节比对本机安装。
 adapters/pi/user-addons/** -text
+
+# 分发仓 extras/ 是插件仓快照，按导出原字节保存（含 CRLF 补丁，转换换行会让 git apply 失败）。
+extras/** -text

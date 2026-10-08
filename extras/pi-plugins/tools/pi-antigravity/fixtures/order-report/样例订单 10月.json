@@ -1,0 +1,7 @@
+[
+  { "customer": "张三", "status": "paid", "quantity": 2, "unitPrice": "12.35" },
+  { "customer": "王五", "status": "paid", "quantity": 1, "unitPrice": 0 },
+  { "customer": "李四", "status": "cancelled", "quantity": 1, "unitPrice": "123.45" },
+  { "customer": "张三", "status": "paid", "quantity": 3, "unitPrice": "0.10" },
+  { "customer": "王五", "status": "pending", "quantity": 2, "unitPrice": "25.00" }
+]

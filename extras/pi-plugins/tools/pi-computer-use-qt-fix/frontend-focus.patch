@@ -1,0 +1,8 @@
+diff --git a/src/bridge.ts b/src/bridge.ts
+--- a/src/bridge.ts
++++ b/src/bridge.ts
+@@ -1808,3 +1808,3 @@ async function dispatchUiTransaction(
+ 	const steps: ExecutionTrace[] = [];
+-	const actionState: ActionState = { currentFocus: false };
++	const actionState: ActionState = { currentFocus: !headless };
+ 	for (const action of actions) {
