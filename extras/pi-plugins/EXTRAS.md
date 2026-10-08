@@ -78,7 +78,7 @@ Pi Web：维护者个人部署，未随分发，需要时单独找维护者。
 
 **前提**：Pi 0.99.1；无账号要求。路线 B 另需 npm 与 fork 的 devDependencies（`@earendil-works/pi-ai`、`pi-coding-agent`、`pi-tui` 均为 `^0.84.1`，`esbuild@^0.27.2`；fork 不带 lockfile）。
 
-**适用版本**：`1.6.0-local.12`。生产构建 `forks/pi-context-prune/dist/policy-lab.js`，LF 检出下 SHA-256 为 `85c86db56d8cd49720bd61df777fa5a2b83009b3f82fee094e15fae256311579`，与维护者本机部署一致。发布器不校验 Pi 版本，以无模型加载检查代替。
+**适用版本**：`1.6.0-local.12`。生产构建 `forks/pi-context-prune/dist/policy-lab.js`（LF 换行）SHA-256 为 `85c86db56d8cd49720bd61df777fa5a2b83009b3f82fee094e15fae256311579`，与维护者本机部署的 `dist/index.js` 一致。在开启 `core.autocrlf` 的 Windows 上重新检出或复制后若变成 CRLF，哈希会不同，核对前先确认换行。发布器不校验 Pi 版本，以无模型加载检查代替。
 
 **安装路线 A：部署已提交构建**（产物结构与发布器 `stage()` 相同，不跑测试）
 
@@ -199,7 +199,7 @@ node tools/context-prune-bench/manage-cache-diag.mjs install
 
 **适用版本**：各脚本在 Pi 0.86.0–0.99.1 期间编写，未统一复验；`cache-replay-20260927/README.md` 标注运行条件为 Pi 0.87.1。
 
-**安装 / 验证 / 回滚**：无安装与回滚入口。不依赖本机数据的离线自检：`node --test tools/context-prune-bench/boundary-replay/test.mjs`、`node --test tools/context-prune-bench/ripgrep-chain/harness/no-network.test.mjs`。`wire-diag/test.mjs` 按硬编码路径加载全局 Pi，改路径后才能运行。
+**安装 / 验证 / 回滚**：无安装与回滚入口。离线自检 `node --test tools/context-prune-bench/ripgrep-chain/harness/no-network.test.mjs` 不依赖本机数据；`boundary-replay/test.mjs` 经 `candidate.mjs` 按 cwd 导入 `tmp/context-prune-pause-fix/dist/lab-exports.js`，该构建不随分发，缺少时报 `ERR_MODULE_NOT_FOUND`，需要时向维护者索取对应版本的 lab-exports 构建。`wire-diag/test.mjs` 按硬编码路径加载全局 Pi，改路径后才能运行。
 
 **风险与维护**：实验类脚本会创建大量临时工作区与会话；`rounds.py` 须在 Claude 桌面应用进程树之外启动（应用更新会结束其子进程）。`*.jsonl` 采集数据不随分发，`boundary-replay/summarize.mjs <jsonl>` 等分析入口需先用 `run.mjs`、`live.mjs`、`pair-run.mjs` 产生自有采集。
 
@@ -387,12 +387,12 @@ Copy-Item artifacts/templates/pi-global-system-tail/APPEND_SYSTEM.md (Join-Path 
 
 ```powershell
 python -B tools/pi-codex-attribution/manage.py status
-python -B tools/pi-prompt-stability/manage.py status --host-only
 python -B tools/pi-codex-attribution/manage.py apply
+python -B tools/pi-prompt-stability/manage.py status --host-only
 python -B tools/pi-prompt-stability/manage.py apply --host-only
 ```
 
-`status` 应先为 `baseline`。`--root` 默认 `%APPDATA%\npm\node_modules\@earendil-works\pi-coding-agent`，npm 全局前缀不同时每条命令加 `--root "<全局 Pi 目录>"`。完成后重启所有 Pi 进程。
+attribution 的 `status` 在原版 0.99.1 上应为 `baseline`。prompt-stability 宿主补丁以 attribution 打完后的文件为基线，所以它的 `status --host-only` 要在 attribution `apply` 之后看，此时应为 `baseline`；在原版上直接看会是 `unknown`。`--root` 默认 `%APPDATA%\npm\node_modules\@earendil-works\pi-coding-agent`，npm 全局前缀不同时每条命令加 `--root "<全局 Pi 目录>"`。完成后重启所有 Pi 进程。
 
 只要 WS recovery、不要 attribution 时，用独立 WS 载荷，并显式给目标：
 
@@ -519,7 +519,7 @@ node tools/pi-antigravity/manage-pi-antigravity.mjs rollback
 
 **前提**：目标包已安装且源码中存在 `hydrateContext` 调用点；Pi 0.99.1。
 
-**适用版本**：不校验版本号，以调用点存在为条件；缺包或缺调用点时非零退出。
+**适用版本**：不校验版本号，以调用点存在为条件。`apply` 与 `verify` 在缺包或缺调用点时非零退出；`status` 只输出报告、恒为退出 0，要读其中的 `present`、`missingHooks`、`compatMatches`，作为检查门时用 `verify`。
 
 **安装**：`node tools/pi-transcript-hydrate/apply.mjs status`，然后 `node tools/pi-transcript-hydrate/apply.mjs apply`（`--target <id>` 可重复，`<id>` 为 `@tian.zuo/pi-antigravity` 或 `pi-claude-code-provider`；目标目录固定在 `%USERPROFILE%\.pi\agent\npm\node_modules`）。覆盖前备份到 `.runtime/pi-transcript-hydrate-backups/`。之后 `/reload`。
 
@@ -560,7 +560,7 @@ python -B tools/pi-computer-use-qt-fix/build-candidate.py --source "$cu\native\w
 python -B tools/pi-computer-use-qt-fix/manage-installed.py apply --candidate <同一目录> --record <新的记录文件.json>
 ```
 
-`build-candidate.py` 复制源码到 `--work-dir`（须在 `<Pi 用户目录>` 之外且不存在）、`git apply` 补丁、`cargo test`、`cargo build --release`，写 `candidate-build.json`。`manage-installed.py apply` 备份到 `<Pi 用户目录>\state\deploy\pi-computer-use-qt-<时间>\`，停止正在运行的 `windows-bridge.exe`，替换已安装源码、包内 `prebuilt\windows\windows-bridge.exe` 与 `<Pi 用户目录>\helpers\pi-computer-use\windows-bridge.exe`，不改 `settings.json`；`--record` 必须是新路径。原生补丁按 `native.patch`、`window-root.patch`、`visual-observation.patch`、`focused-input-foreground.patch` 的顺序逐个构建并安装，后一次以已安装（已含前一补丁）的源码为 `--source`（顺序依据维护者部署记录的时间推断，记录不随分发）。
+`build-candidate.py` 复制源码到 `--work-dir`（须在 `<Pi 用户目录>` 之外且不存在）、`git apply` 补丁、`cargo test`、`cargo build --release`，写 `candidate-build.json`。`manage-installed.py apply` 备份到 `<Pi 用户目录>\state\deploy\pi-computer-use-qt-<时间>\`，停止正在运行的 `windows-bridge.exe`，替换已安装源码、包内 `prebuilt\windows\windows-bridge.exe` 与 `<Pi 用户目录>\helpers\pi-computer-use\windows-bridge.exe`，不改 `settings.json`；`--record` 必须是新路径。原生补丁按 `native.patch`、`window-root.patch`、`visual-observation.patch`、`focused-input-foreground.patch` 的顺序逐个构建并安装，后一次以已安装（已含前一补丁）的源码为 `--source`（顺序依据维护者部署记录的时间推断，记录不随分发）。每一轮的 `build-candidate.py` 与 `manage-installed.py apply` 都传同一个 `--patch tools/pi-computer-use-qt-fix/<本轮补丁>`：管理器默认按 `native.patch` 核对候选记录里的补丁哈希，后续补丁不传 `--patch` 会被拒绝写入。
 
 前端补丁用 `manage-installed.py apply --frontend-candidate <目录> --record <新记录>`：候选目录为包目录的副本并已应用 `frontend-focus.patch`、`visual-observation-frontend.patch`，且须有手写的 `frontend-build.json`，格式为 `{"sourceHashes": {"<相对路径>": "<已安装文件 SHA-256>"}, "candidateHashes": {"<相对路径>": "<候选文件 SHA-256>"}}`；仓内没有生成该文件的脚本。
 

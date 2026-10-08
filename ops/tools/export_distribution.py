@@ -58,7 +58,8 @@ def plugin_selected(path: str) -> bool:
 
 def head_files(repo: Path, keep, prefix: str = "") -> tuple[str, dict[str, bytes]]:
     head = git(repo, "rev-parse", "HEAD").strip()
-    archive = git(repo, "archive", "--format=tar", "HEAD", binary=True)
+    # 关掉 core.autocrlf：没有 eol 属性的仓（如 fork）按提交原字节导出，不随本机 git 配置转 CRLF。
+    archive = git(repo, "-c", "core.autocrlf=false", "archive", "--format=tar", "HEAD", binary=True)
     files = {}
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
         for member in tar.getmembers():
