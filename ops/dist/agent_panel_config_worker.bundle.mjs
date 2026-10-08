@@ -2,7 +2,7 @@
 import { parentPort, workerData } from "node:worker_threads";
 
 // src/agent-panel/src/server/config-store.mjs
-import { spawn as spawn2, spawnSync } from "node:child_process";
+import { spawnSync as spawnSync2 } from "node:child_process";
 import { createHash as createHash3, randomBytes as randomBytes2 } from "node:crypto";
 import { copyFileSync, existsSync as existsSync5, readFileSync as readFileSync6, readdirSync as readdirSync3, realpathSync as realpathSync3, renameSync as renameSync3, rmSync as rmSync2, writeFileSync as writeFileSync3 } from "node:fs";
 import path7 from "node:path";
@@ -7195,6 +7195,127 @@ var DISPATCH_PREPARE_OVERRIDE_FLAGS = Object.freeze({
   origin_id: "--origin-id"
 });
 
+// ops/tools/pi_model_catalog.mjs
+import { spawn, spawnSync } from "node:child_process";
+var THINKING_LEVELS = Object.freeze(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+var REQUEST_ID = "pi-model-catalog";
+var BASE_ARGS = Object.freeze([
+  "--mode",
+  "rpc",
+  "--no-session",
+  "--no-skills",
+  "--no-prompt-templates",
+  "--no-themes",
+  "--no-context-files",
+  "--no-tools"
+]);
+var OUTPUT_LIMIT = 16 * 1024 * 1024;
+var REQUEST_LINE = `${JSON.stringify({ id: REQUEST_ID, type: "get_available_models" })}
+`;
+var PiCatalogError = class extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = "PiCatalogError";
+    this.code = code;
+  }
+};
+function supportedThinkingLevels(model) {
+  if (!model?.reasoning) return ["off"];
+  const map = model.thinkingLevelMap ?? {};
+  return THINKING_LEVELS.filter((level) => map[level] !== null && (level === "xhigh" || level === "max" ? map[level] !== void 0 : true));
+}
+function valid(model) {
+  return model && typeof model.provider === "string" && model.provider && typeof model.id === "string" && model.id;
+}
+function normalizePiModel(model) {
+  const levels = supportedThinkingLevels(model);
+  const map = model.thinkingLevelMap ?? {};
+  return {
+    value: `${model.provider}/${model.id}`,
+    name: typeof model.name === "string" && model.name ? model.name : model.id,
+    supports_vision: Array.isArray(model.input) ? model.input.includes("image") : null,
+    thinking_levels: levels,
+    level_map: Object.fromEntries(levels.filter((level) => typeof map[level] === "string" && map[level] !== level).map((level) => [level, map[level]])),
+    context_window: Number.isFinite(model.contextWindow) ? model.contextWindow : null
+  };
+}
+function isPiModel(model) {
+  return Boolean(valid(model));
+}
+function catalogResponse(line) {
+  let record2;
+  try {
+    record2 = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (record2?.type !== "response" || record2.id !== REQUEST_ID || record2.command !== "get_available_models") return null;
+  if (!record2.success || !Array.isArray(record2.data?.models)) {
+    throw new PiCatalogError("PI_RPC_RESPONSE_INVALID", "Pi RPC \u62D2\u7EDD\u76EE\u5F55\u67E5\u8BE2\u6216\u8FD4\u56DE\u683C\u5F0F\u4E0D\u6B63\u786E");
+  }
+  return record2.data.models;
+}
+function invocationOf(command) {
+  return Array.isArray(command) ? command.map(String) : [String(command)];
+}
+var childEnv = () => ({ ...process.env, NO_COLOR: "1", PI_SKIP_VERSION_CHECK: "1" });
+function probePiModels({ cwd, command, args = [], timeoutMs = 3e4, signal } = {}) {
+  const invocation = invocationOf(command);
+  return new Promise((resolve, reject) => {
+    const child = spawn(invocation[0], [...invocation.slice(1), ...BASE_ARGS, ...args], { cwd, windowsHide: true, env: childEnv() });
+    const closed = new Promise((resolveClose) => child.once("close", resolveClose));
+    let buffer = "";
+    let bytes = 0;
+    let settled = false;
+    const finish = (error, models) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      child.kill();
+      closed.then(() => {
+        if (error) reject(error);
+        else resolve(models);
+      });
+    };
+    const abort = () => finish(new PiCatalogError("PI_RPC_CANCELLED", "\u6A21\u578B\u76EE\u5F55\u67E5\u8BE2\u5DF2\u53D6\u6D88"));
+    const timer = setTimeout(() => finish(new PiCatalogError("PI_RPC_TIMEOUT", `Pi \u6A21\u578B\u76EE\u5F55\u67E5\u8BE2\u8D85\u8FC7 ${timeoutMs} ms\uFF0C\u70B9\u51FB\u91CD\u8BD5\u76EE\u5F55`)), timeoutMs);
+    signal?.addEventListener("abort", abort, { once: true });
+    child.once("error", (error) => finish(new PiCatalogError("PI_RPC_START_FAILED", `Pi \u542F\u52A8\u5931\u8D25\uFF08${error.code || "unknown"}\uFF09\uFF0C\u68C0\u67E5 Pi \u5B89\u88C5\u8DEF\u5F84`)));
+    child.stdin.on("error", () => finish(new PiCatalogError("PI_RPC_INPUT_FAILED", "Pi RPC \u8F93\u5165\u7BA1\u9053\u5DF2\u5173\u95ED")));
+    child.stderr.resume();
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      if (settled) return;
+      bytes += Buffer.byteLength(chunk);
+      if (bytes > OUTPUT_LIMIT) {
+        finish(new PiCatalogError("PI_RPC_OUTPUT_LIMIT", "Pi RPC \u8F93\u51FA\u8D85\u8FC7 16 MiB"));
+        return;
+      }
+      buffer += chunk;
+      let newline;
+      while ((newline = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, newline).replace(/\r$/, "");
+        buffer = buffer.slice(newline + 1);
+        let models;
+        try {
+          models = catalogResponse(line);
+        } catch (error) {
+          finish(error);
+          return;
+        }
+        if (models) {
+          finish(null, models);
+          return;
+        }
+      }
+    });
+    child.once("close", (code) => finish(new PiCatalogError("PI_RPC_RESPONSE_MISSING", `Pi \u9000\u51FA\u4F46\u672A\u8FD4\u56DE\u6A21\u578B\u76EE\u5F55\uFF08exit=${code}\uFF09`)));
+    if (signal?.aborted) abort();
+    else child.stdin.end(REQUEST_LINE);
+  });
+}
+
 // ops/tools/dispatch-core/_tool_common.mjs
 import {
   closeSync,
@@ -7311,11 +7432,11 @@ var ROOT = projectRoot();
 var RUNTIME_ROOT = runtimeRoot();
 
 // ops/tools/dispatch-core/model_selection.mjs
-var EFFORT_LEVELS = Object.freeze(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+var EFFORT_LEVELS = THINKING_LEVELS;
 var ID_RE = /^[a-z0-9_]+$/;
 var ROLE_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*\.toml$/;
 var PICK_KEYS = Object.freeze(["id", "when", "capability", "model", "effort", "effort_min", "effort_max", "default"]);
-var NOTE_KEYS = Object.freeze(["tag", "supports_vision", "description", "efforts", "effort_note"]);
+var NOTE_KEYS = Object.freeze(["tag", "description", "efforts", "effort_note"]);
 var REMOVED_ROLE_KEYS = Object.freeze({
   pi_model: "\u6539\u5199 [[picks]]",
   pi_model_reasoning_effort: "\u6539\u5199 [[picks]]",
@@ -7326,7 +7447,8 @@ var REMOVED_ROLE_KEYS = Object.freeze({
 var REMOVED_NOTE_KEYS = Object.freeze({
   max_effort: "\u53EF\u9009\u6863\u4F4D\u6539\u5199 efforts",
   effort_levels: "\u53EF\u9009\u6863\u4F4D\u6539\u5199 efforts\uFF0C\u5B9E\u6D4B\u8BF4\u660E\u5199 effort_note",
-  status: "\u6A21\u578B\u662F\u5426\u53EF\u7528\u4EE5 Pi \u6A21\u578B\u6E05\u5355\u4E3A\u51C6"
+  status: "\u6A21\u578B\u662F\u5426\u53EF\u7528\u4EE5 Pi \u6A21\u578B\u6E05\u5355\u4E3A\u51C6",
+  supports_vision: "\u56FE\u50CF\u8F93\u5165\u4EE5 Pi \u76EE\u5F55\u4E3A\u51C6\uFF0C\u5220\u9664\u8BE5\u5B57\u6BB5"
 });
 var WORKER_RESOURCE_LISTS = Object.freeze(["tools", "extensions", "skills"]);
 var PROJECT_SKILL_MODES = Object.freeze(["none", "all"]);
@@ -7371,17 +7493,14 @@ function loadNotes(file) {
       if (REMOVED_NOTE_KEYS[key]) fail2("field_removed", file, `${at2}.${key}`, `\u5DF2\u5220\u9664\uFF0C${REMOVED_NOTE_KEYS[key]}`);
       if (!NOTE_KEYS.includes(key)) fail2("field_unknown", file, `${at2}.${key}`, `\u672A\u77E5\u5B57\u6BB5\uFF1B\u53EF\u7528\u5B57\u6BB5\uFF1A${NOTE_KEYS.join("\u3001")}`);
     }
-    if (value.supports_vision !== void 0 && typeof value.supports_vision !== "boolean") {
-      fail2("value_invalid", file, `${at2}.supports_vision`, "\u5FC5\u987B\u662F true \u6216 false");
-    }
-    const efforts = value.efforts ?? EFFORT_LEVELS;
-    const ordered = Array.isArray(efforts) && efforts.length > 0 && efforts.every((item, index) => rank(item) >= 0 && (index === 0 || rank(item) > rank(efforts[index - 1])));
+    const { efforts } = value;
+    const ordered = efforts === void 0 || Array.isArray(efforts) && efforts.length > 0 && efforts.every((item, index) => rank(item) >= 0 && (index === 0 || rank(item) > rank(efforts[index - 1])));
     if (!ordered) fail2("value_invalid", file, `${at2}.efforts`, `\u5FC5\u987B\u662F ${EFFORT_LEVELS.join(" < ")} \u7684\u975E\u7A7A\u5B50\u96C6\uFF0C\u6309\u6863\u4F4D\u987A\u5E8F\u6392\u5217\u4E14\u4E0D\u91CD\u590D`);
     notes.set(model, {
       tag: optionalText(value.tag, file, `${at2}.tag`),
-      supports_vision: value.supports_vision ?? null,
       description: optionalText(value.description, file, `${at2}.description`),
-      efforts: [...efforts],
+      // 未写 efforts 时为 null：可选档位取 Pi 支持档（见 modelEfforts）。
+      efforts: efforts === void 0 ? null : [...efforts],
       effort_note: optionalText(value.effort_note, file, `${at2}.effort_note`)
     });
   }
@@ -7585,8 +7704,11 @@ function loadSelectionConfig(sources) {
     warnings: routes.filter((route) => route.phase_error).map((route) => ({ code: "dispatch_phase_invalid", file: route.file, field: "dispatch_phase", role: route.role, message: route.phase_error }))
   };
 }
-function modelEfforts(config, model) {
-  return [...effortsOf(config.notes, model)];
+function modelEfforts(config, model, piDetails = null) {
+  const pi2 = piDetails?.[model]?.thinking_levels;
+  const noted = config.notes.get(model)?.efforts;
+  if (!Array.isArray(pi2)) return [...noted ?? EFFORT_LEVELS];
+  return noted ? noted.filter((level) => pi2.includes(level)) : [...pi2];
 }
 function roleRecord(config, role) {
   const found = config.roles.get(role);
@@ -7632,18 +7754,21 @@ function capabilityRow(role, id) {
     inherit_role_picks: inherits(role, id)
   };
 }
-function projectCatalog(config, { piModels = null, role: roleFilter = "", capability = "" } = {}) {
-  const pi2 = piModels ? new Set(piModels) : null;
+function projectCatalog(config, { piDetails = null, role: roleFilter = "", capability = "" } = {}) {
+  const pi2 = piDetails ? new Set(Object.keys(piDetails)) : null;
   const picked = [...config.roles.values()].flatMap((role) => role.picks.map((pick) => pick.model));
-  const models = [.../* @__PURE__ */ new Set([...piModels ?? [], ...config.notes.keys(), ...picked])].map((model) => {
+  const models = [.../* @__PURE__ */ new Set([...pi2 ?? [], ...config.notes.keys(), ...picked])].map((model) => {
     const note = config.notes.get(model);
+    const detail = piDetails?.[model];
     return {
       model,
       tag: note?.tag ?? "",
-      supports_vision: note?.supports_vision ?? null,
-      efforts: modelEfforts(config, model),
+      supports_vision: detail?.supports_vision ?? null,
+      efforts: modelEfforts(config, model, piDetails),
       effort_note: note?.effort_note ?? "",
-      in_pi: pi2 ? pi2.has(model) : null
+      in_pi: pi2 ? pi2.has(model) : null,
+      pi_levels: Array.isArray(detail?.thinking_levels) ? [...detail.thinking_levels] : null,
+      level_map: Array.isArray(detail?.thinking_levels) ? { ...detail.level_map } : null
     };
   });
   const warnings = [...config.warnings];
@@ -7678,7 +7803,7 @@ function projectCatalog(config, { piModels = null, role: roleFilter = "", capabi
 }
 
 // ops/tools/pi_worker_resources.mjs
-import { spawn } from "node:child_process";
+import { spawn as spawn2 } from "node:child_process";
 import { existsSync as existsSync4, mkdirSync as mkdirSync3, readFileSync as readFileSync5, statSync as statSync4, writeFileSync as writeFileSync2 } from "node:fs";
 import { homedir } from "node:os";
 import path6 from "node:path";
@@ -7736,7 +7861,23 @@ function resourceName(file) {
   const extensions = parts.lastIndexOf("extensions");
   if (extensions >= 0 && extensions === last - 1) return parts[last].replace(/\.[^.]+$/, "");
   if (extensions >= 0 && extensions < last) return parts[extensions + 1];
+  for (let end = last; end >= Math.max(1, last - 3); end -= 1) {
+    const dir = parts.slice(0, end).join("/");
+    const name = piPackageName(/^[A-Za-z]:$/.test(parts[0]) ? dir : `/${dir}`);
+    if (name) return name;
+  }
   return parts[last].replace(/\.[^.]+$/, "");
+}
+function piPackageName(dir) {
+  const file = path6.join(dir, "package.json");
+  if (!existsSync4(file)) return null;
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync5(file, "utf8"));
+  } catch {
+    return null;
+  }
+  return manifest?.pi && typeof manifest.name === "string" && manifest.name.trim() ? manifest.name.trim() : null;
 }
 function loadWorkerResourcesConfig(configPath = WORKER_RESOURCES_CONFIG) {
   const raw = JSON.parse(readFileSync5(configPath, "utf8"));
@@ -7823,7 +7964,7 @@ ${key}`;
 function runToolProbe(extensions, piCli, cwd) {
   const loader = path6.join(path6.dirname(piCli), "core", "extensions", "loader.js");
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["--input-type=module", "-e", PROBE_SCRIPT], {
+    const child = spawn2(process.execPath, ["--input-type=module", "-e", PROBE_SCRIPT], {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -7970,7 +8111,7 @@ function resolvePythonCommand(controlRoot, override) {
   return "python";
 }
 function runPython(pythonCommand, args, input) {
-  const outcome = spawnSync(pythonCommand, args, {
+  const outcome = spawnSync2(pythonCommand, args, {
     input,
     encoding: "utf8",
     timeout: 15e3,
@@ -8068,78 +8209,6 @@ function resolveDefaultPiCommand(options = {}) {
   }
   return ["pi"];
 }
-function defaultPiModelProbe({ cwd, piCommand = resolveDefaultPiCommand(), timeoutMs = 3e4, signal } = {}) {
-  const invocation = Array.isArray(piCommand) ? piCommand.map(String) : [String(piCommand)];
-  const args = [
-    "--mode",
-    "rpc",
-    "--no-session",
-    "--no-skills",
-    "--no-prompt-templates",
-    "--no-themes",
-    "--no-context-files",
-    "--no-tools"
-  ];
-  const requestId = "agent-panel-model-catalog";
-  return new Promise((resolve, reject) => {
-    const child = spawn2(invocation[0], [...invocation.slice(1), ...args], {
-      cwd,
-      windowsHide: true,
-      env: { ...process.env, NO_COLOR: "1", PI_SKIP_VERSION_CHECK: "1" }
-    });
-    const closed = new Promise((resolveClose) => child.once("close", resolveClose));
-    let buffer = "";
-    let bytes = 0;
-    let settled = false;
-    const finish = (error, models) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", abort);
-      child.kill();
-      closed.then(() => {
-        if (error) reject(error);
-        else resolve(models);
-      });
-    };
-    const abort = () => finish(new ConfigError("PI_RPC_CANCELLED", "\u6A21\u578B\u76EE\u5F55\u67E5\u8BE2\u5DF2\u53D6\u6D88", { status: 503 }));
-    const timer = setTimeout(() => finish(new ConfigError("PI_RPC_TIMEOUT", `Pi \u6A21\u578B\u76EE\u5F55\u67E5\u8BE2\u8D85\u8FC7 ${timeoutMs} ms\uFF0C\u70B9\u51FB\u91CD\u8BD5\u76EE\u5F55`, { status: 503 })), timeoutMs);
-    signal?.addEventListener("abort", abort, { once: true });
-    child.once("error", (error) => finish(new ConfigError("PI_RPC_START_FAILED", `Pi \u542F\u52A8\u5931\u8D25\uFF08${error.code || "unknown"}\uFF09\uFF0C\u68C0\u67E5 Pi \u5B89\u88C5\u8DEF\u5F84`, { status: 503 })));
-    child.stdin.on("error", () => finish(new ConfigError("PI_RPC_INPUT_FAILED", "Pi RPC \u8F93\u5165\u7BA1\u9053\u5DF2\u5173\u95ED", { status: 503 })));
-    child.stderr.resume();
-    child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
-      if (settled) return;
-      bytes += Buffer.byteLength(chunk);
-      if (bytes > 16 * 1024 * 1024) {
-        finish(new ConfigError("PI_RPC_OUTPUT_LIMIT", "Pi RPC \u8F93\u51FA\u8D85\u8FC7 16 MiB", { status: 503 }));
-        return;
-      }
-      buffer += chunk;
-      let newline;
-      while ((newline = buffer.indexOf("\n")) !== -1) {
-        const line = buffer.slice(0, newline).replace(/\r$/, "");
-        buffer = buffer.slice(newline + 1);
-        let record2;
-        try {
-          record2 = JSON.parse(line);
-        } catch {
-          continue;
-        }
-        if (record2?.type !== "response" || record2.id !== requestId || record2.command !== "get_available_models") continue;
-        if (!record2.success || !Array.isArray(record2.data?.models)) {
-          finish(new ConfigError("PI_RPC_RESPONSE_INVALID", "Pi RPC \u62D2\u7EDD\u76EE\u5F55\u67E5\u8BE2\u6216\u8FD4\u56DE\u683C\u5F0F\u4E0D\u6B63\u786E", { status: 503 }));
-        } else finish(null, record2.data.models);
-        return;
-      }
-    });
-    child.once("close", (code) => finish(new ConfigError("PI_RPC_RESPONSE_MISSING", `Pi \u9000\u51FA\u4F46\u672A\u8FD4\u56DE\u6A21\u578B\u76EE\u5F55\uFF08exit=${code}\uFF09`, { status: 503 })));
-    if (signal?.aborted) abort();
-    else child.stdin.end(`${JSON.stringify({ id: requestId, type: "get_available_models" })}
-`);
-  });
-}
 async function loadPiScopeSdk(piCommand) {
   const invocation = Array.isArray(piCommand) ? piCommand : [piCommand];
   const cli = invocation.find((part) => typeof part === "string" && /\.[cm]?js$/i.test(part));
@@ -8169,19 +8238,15 @@ async function scopePiModels(models, { cwd, piCommand = resolveDefaultPiCommand(
 async function loadPiCatalog(probe, scopeModels, controlRoot, piCommand, signal, timeoutMs) {
   let mainModels;
   try {
-    mainModels = await probe({ cwd: controlRoot, profile: "main", piCommand, signal, timeoutMs });
+    mainModels = await probe({ cwd: controlRoot, command: piCommand, signal, timeoutMs });
     if (!Array.isArray(mainModels)) throw new ConfigError("PI_RPC_RESPONSE_INVALID", "Pi RPC \u8FD4\u56DE\u7684\u6A21\u578B\u76EE\u5F55\u4E0D\u662F\u6570\u7EC4");
     mainModels = await scopeModels(mainModels, { cwd: controlRoot, piCommand });
     if (!Array.isArray(mainModels)) throw new ConfigError("PI_MODEL_SCOPE_INVALID", "Pi \u767D\u540D\u5355\u89E3\u6790\u7ED3\u679C\u4E0D\u662F\u6570\u7EC4");
   } catch (error) {
-    return { available: false, error: error instanceof ConfigError ? error.message : "Pi \u6A21\u578B\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u76EE\u5F55", error_code: error instanceof ConfigError ? error.code : "PI_RPC_FAILED", source: "pi-rpc/get_available_models", models: [] };
+    const known = error instanceof ConfigError || error instanceof PiCatalogError;
+    return { available: false, error: known ? error.message : "Pi \u6A21\u578B\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u76EE\u5F55", error_code: known ? error.code : "PI_RPC_FAILED", source: "pi-rpc/get_available_models", models: [] };
   }
-  const models = mainModels.filter((model) => model && typeof model.provider === "string" && model.provider && typeof model.id === "string" && model.id).map((model) => ({
-    ...model,
-    value: `${model.provider}/${model.id}`,
-    name: typeof model.name === "string" && model.name ? model.name : model.id,
-    context_window: Number.isFinite(model.contextWindow) ? model.contextWindow : null
-  }));
+  const models = mainModels.filter(isPiModel).map((model) => ({ ...model, ...normalizePiModel(model) }));
   return { available: true, error: "", source: "pi-rpc/get_available_models", models };
 }
 var EMPTY_RESOURCE_CATALOG = Object.freeze({ available: false, error: "", tools: [], extensions: [], skills: [], project_skills: [], required_tools: [], diagnostics: [] });
@@ -8209,8 +8274,8 @@ function resourceValues(source) {
 }
 function assertResourceValue(field, value, location) {
   if (field === "project_skills" && PROJECT_SKILL_MODES2.includes(value)) return;
-  const valid = Array.isArray(value) && value.every((item) => typeof item === "string" && item.trim() === item && item) && new Set(value).size === value.length;
-  if (!valid) {
+  const valid2 = Array.isArray(value) && value.every((item) => typeof item === "string" && item.trim() === item && item) && new Set(value).size === value.length;
+  if (!valid2) {
     const shape = field === "project_skills" ? '"none"\u3001"all" \u6216\u4E0D\u91CD\u590D\u7684\u540D\u79F0\u6570\u7EC4' : "\u4E0D\u91CD\u590D\u7684\u540D\u79F0\u6570\u7EC4";
     throw new ConfigError("CONFIG_VALUE_INVALID", `${location} \u9700\u8981${shape}`, { details: { location } });
   }
@@ -8242,7 +8307,7 @@ function createConfigStore(options = {}) {
   let configSources = null;
   let agentsRoot = path7.join(controlRoot, "ops", "agents");
   const pythonCommand = resolvePythonCommand(controlRoot, options.pythonCommand);
-  const piModelProbe = options.piModelProbe || defaultPiModelProbe;
+  const piModelProbe = options.piModelProbe || probePiModels;
   const piModelScope = options.piModelScope || scopePiModels;
   const piCommand = options.piCommand || resolveDefaultPiCommand();
   const faultInjector = options.faultInjector ?? null;
@@ -8590,7 +8655,7 @@ function createConfigStore(options = {}) {
 }
 
 // src/agent-panel/src/server/selection-store.mjs
-import { spawnSync as spawnSync2 } from "node:child_process";
+import { spawnSync as spawnSync3 } from "node:child_process";
 import { createHash as createHash4, randomBytes as randomBytes3 } from "node:crypto";
 import { copyFileSync as copyFileSync2, existsSync as existsSync6, mkdirSync as mkdirSync4, mkdtempSync, readFileSync as readFileSync7, readdirSync as readdirSync4, renameSync as renameSync4, rmSync as rmSync3, writeFileSync as writeFileSync4 } from "node:fs";
 import os2 from "node:os";
@@ -8603,6 +8668,7 @@ var PICK_FIELDS = ["id", "when", "capability", "model", "effort", "effort_min", 
 var OPTIONAL_PICK_FIELDS = ["when", "capability", "default"];
 var FIXED_PICKS = Object.freeze({ "delegate-work": ["luna_xhigh", "luna_max", "sol_high"] });
 var EFFORT_FIELDS = { effort_min: "\u6700\u4F4E\u6863\u4F4D", effort: "\u9ED8\u8BA4\u6863\u4F4D", effort_max: "\u6700\u9AD8\u6863\u4F4D" };
+var NOTE_TEXT_FIELDS = ["tag", "description", "effort_note"];
 var SelectionError = class extends PanelError {
   constructor(code, message, details = null, status = 422) {
     super(code, message, { status, scope: "local", details });
@@ -8723,6 +8789,26 @@ function effortsInUse(targets, roles) {
     })) : [];
   }));
 }
+function effortsUnsupported(targets, piDetails) {
+  return Object.entries(targets[NOTES]?.notes ?? {}).flatMap(([model, note]) => {
+    const levels = piDetails?.[model]?.thinking_levels;
+    if (!note.efforts || !Array.isArray(levels)) return [];
+    const extra = note.efforts.filter((level) => !levels.includes(level));
+    if (note.efforts.length && !extra.length) return [];
+    return [{
+      code: "EFFORT_NOT_SUPPORTED",
+      file: NOTES,
+      field: `notes."${model}".efforts`,
+      message: extra.length ? `Pi \u4E0D\u652F\u6301 ${extra.join("\u3001")}\uFF1B\u53EF\u9009 ${levels.join("/")}` : `\u81F3\u5C11\u4FDD\u7559\u4E00\u4E2A\u6863\u4F4D\uFF1B\u53EF\u9009 ${levels.join("/")}`
+    }];
+  });
+}
+function piDetailsOf(pi2) {
+  return pi2?.available ? Object.fromEntries(pi2.models.map((entry) => [entry.value, entry])) : null;
+}
+function plainRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value);
+}
 function fileOrder(a2, b2) {
   return (a2 === NOTES ? 0 : 1) - (b2 === NOTES ? 0 : 1) || a2.localeCompare(b2);
 }
@@ -8746,7 +8832,8 @@ function createSelectionStore(options = {}) {
       const parsed = Object.fromEntries(files.map((file) => [file, parse2(texts[file])]));
       const editable = {
         roles: Object.fromEntries(roleFiles.map((file) => [path8.basename(file, ".toml"), editablePicks(parsed[file].picks || [])])),
-        efforts: Object.fromEntries(Object.entries(parsed[NOTES].notes || {}).filter(([, note]) => note.efforts).map(([model, note]) => [model, note.efforts]))
+        efforts: Object.fromEntries(Object.entries(parsed[NOTES].notes || {}).filter(([, note]) => note.efforts).map(([model, note]) => [model, note.efforts])),
+        notes: Object.fromEntries(Object.entries(parsed[NOTES].notes || {}).map(([model, note]) => [model, Object.fromEntries(NOTE_TEXT_FIELDS.filter((field) => typeof note[field] === "string").map((field) => [field, note[field]]))]).filter(([, fields]) => Object.keys(fields).length))
       };
       let config;
       try {
@@ -8766,13 +8853,12 @@ function createSelectionStore(options = {}) {
   function selectionState(configState = {}, monitorRoot = null) {
     const snapshot = readSnapshot();
     const pi2 = configState.catalogs?.pi ?? { available: false, error: "", models: [] };
-    const piModels = pi2.available ? pi2.models.map((entry) => entry.value) : null;
     let projectOverride = null;
     if (monitorRoot && path8.resolve(monitorRoot) !== snapshot.root) {
       const monitoredSources = resolveModelConfigSources({ roots: [{ root: snapshot.root }], projectRoot: monitorRoot }).describe();
       if (monitoredSources.project_override) projectOverride = monitoredSources;
     }
-    const catalog = projectCatalog(snapshot.config, { piModels });
+    const catalog = projectCatalog(snapshot.config, { piDetails: piDetailsOf(pi2) });
     catalog.warnings = catalog.warnings.map((warning) => located({ code: "SELECTION_WARNING", ...warning }, snapshot.root, (role) => snapshot.editable.roles[role]));
     return {
       catalog,
@@ -8787,23 +8873,31 @@ function createSelectionStore(options = {}) {
     };
   }
   function draftTargets(draft, snapshot) {
-    if (!draft || typeof draft !== "object" || Array.isArray(draft)) throw new SelectionError("SELECTION_DRAFT_INVALID", "\u8349\u7A3F\u5FC5\u987B\u662F\u5BF9\u8C61");
+    if (!plainRecord(draft)) throw new SelectionError("SELECTION_DRAFT_INVALID", "\u8349\u7A3F\u5FC5\u987B\u662F\u5BF9\u8C61");
     const targets = {};
     for (const [role, picks] of Object.entries(draft.roles || {})) {
       if (!Object.hasOwn(snapshot.editable.roles, role)) throw new SelectionError("SELECTION_ROLE_INVALID", `\u89D2\u8272\u4E0D\u5B58\u5728\uFF1A${role}`);
       const target = editablePicks(picks);
       if (!equalData(target, snapshot.editable.roles[role])) targets[roleFile(role)] = { picks: target };
     }
-    const efforts = Object.entries(draft.efforts || {}).filter(([model, levels]) => {
+    const notes = {};
+    for (const [model, levels] of Object.entries(draft.efforts || {})) {
       if (!Array.isArray(levels)) throw new SelectionError("SELECTION_DRAFT_INVALID", `\u53EF\u9009\u6863\u4F4D\u5FC5\u987B\u662F\u6570\u7EC4\uFF1A${model}`);
-      return !equalData(levels, snapshot.editable.efforts[model] ?? EFFORT_LEVELS);
-    });
-    if (efforts.length) targets[NOTES] = { notes: Object.fromEntries(efforts.map(([model, levels]) => [model, { efforts: levels }])) };
+      if (!equalData(levels, snapshot.editable.efforts[model] ?? null)) (notes[model] ??= {}).efforts = levels;
+    }
+    for (const [model, fields] of Object.entries(draft.notes || {})) {
+      if (!plainRecord(fields)) throw new SelectionError("SELECTION_DRAFT_INVALID", `\u6A21\u578B\u7B14\u8BB0\u5FC5\u987B\u662F\u5BF9\u8C61\uFF1A${model}`);
+      for (const [field, value] of Object.entries(fields)) {
+        if (typeof value !== "string") throw new SelectionError("SELECTION_DRAFT_INVALID", `${model} \u7684 ${field} \u5FC5\u987B\u662F\u5B57\u7B26\u4E32`);
+        if (value.trim() !== (snapshot.editable.notes[model]?.[field] ?? "")) (notes[model] ??= {})[field] = value.trim();
+      }
+    }
+    if (Object.keys(notes).length) targets[NOTES] = { notes };
     return targets;
   }
   function written(file, data, target) {
     if (file !== NOTES) return equalData(editablePicks(data.picks || []), target.picks);
-    return Object.entries(target.notes).every(([model, note]) => equalData(data.notes?.[model]?.efforts, note.efforts));
+    return Object.entries(target.notes).every(([model, note]) => Object.entries(note).every(([field, value]) => field === "efforts" ? equalData(data.notes?.[model]?.efforts ?? null, value) : (data.notes?.[model]?.[field] ?? "") === value));
   }
   function validateCandidates(snapshot, candidates, picksOf) {
     const root = mkdtempSync(path8.join(os2.tmpdir(), "panel-selection-"));
@@ -8822,7 +8916,7 @@ function createSelectionStore(options = {}) {
       } catch (error) {
         return candidateError(error, root, picksOf);
       }
-      const parsed = spawnSync2(pythonCommand, ["-c", PYTHON_PARSE], {
+      const parsed = spawnSync3(pythonCommand, ["-c", PYTHON_PARSE], {
         input: JSON.stringify(candidates),
         encoding: "utf8",
         timeout: 15e3,
@@ -8839,18 +8933,30 @@ function createSelectionStore(options = {}) {
   function saveSelection({ draft, expected_revision: expectedRevision } = {}, configState = {}, monitorRoot = null) {
     const snapshot = readSnapshot();
     const unknown = Object.entries(draft?.roles || {}).flatMap(([role, picks]) => (Array.isArray(picks) ? picks : []).flatMap((pick, index) => Object.keys(pick || {}).filter((key) => !PICK_FIELDS.includes(key)).map((key) => ({ code: "PICK_FIELD_UNKNOWN", file: roleFile(role), field: `picks[${index}].${key}`, role, pick_id: pick.id, message: `\u542B\u9762\u677F\u4E0D\u652F\u6301\u7684\u914D\u7F6E\u9879\u300C${key}\u300D\uFF0C\u4FDD\u5B58\u5DF2\u62D2\u7EDD` }))));
-    if (unknown.length) return { state: "validation_error", errors: unknown };
+    const unknownNotes = Object.entries(plainRecord(draft?.notes) ? draft.notes : {}).flatMap(([model, fields]) => Object.keys(plainRecord(fields) ? fields : {}).filter((key) => !NOTE_TEXT_FIELDS.includes(key)).map((key) => ({ code: "NOTE_FIELD_UNKNOWN", file: NOTES, field: `notes."${model}".${key}`, message: `\u542B\u9762\u677F\u4E0D\u652F\u6301\u7684\u914D\u7F6E\u9879\u300C${key}\u300D\uFF0C\u4FDD\u5B58\u5DF2\u62D2\u7EDD` })));
+    if (unknown.length || unknownNotes.length) return { state: "validation_error", errors: [...unknown, ...unknownNotes] };
     const targets = draftTargets(draft, snapshot);
     const changed = Object.keys(targets).sort(fileOrder);
     const stale = changed.find((file) => expectedRevision?.[file] !== snapshot.revisions[file]);
     if (stale) return { state: "revision_conflict", file: stale, current_revision: snapshot.revisions[stale] };
     const inUse = effortsInUse(targets, snapshot.editable.roles);
     if (inUse.length) return { state: "validation_error", errors: inUse };
+    const piDetails = piDetailsOf(configState.catalogs?.pi);
+    const unsupported = effortsUnsupported(targets, piDetails);
+    if (unsupported.length) return { state: "validation_error", errors: unsupported };
+    for (const [model, note] of Object.entries(targets[NOTES]?.notes ?? {})) {
+      if (note.efforts && equalData(note.efforts, piDetails?.[model]?.thinking_levels)) note.efforts = null;
+    }
     const picksOf = (role) => targets[roleFile(role)]?.picks ?? snapshot.editable.roles[role];
     const candidates = {};
     for (const file of changed) {
       try {
-        candidates[file] = patchDocument(snapshot.texts[file], targets[file], { file: absolute(snapshot.root, file) });
+        const deletedPaths = file === NOTES ? Object.entries(targets[file].notes).flatMap(([model, note]) => {
+          const cleared = Object.keys(note).filter((field) => note[field] === "" || note[field] === null);
+          const kept = new Set([...Object.keys(snapshot.parsed[NOTES].notes?.[model] ?? {}), ...Object.keys(note)].filter((field) => !cleared.includes(field)));
+          return kept.size ? cleared.map((field) => ["notes", model, field]) : [["notes", model]];
+        }) : [];
+        candidates[file] = patchDocument(snapshot.texts[file], targets[file], { file: absolute(snapshot.root, file), deletedPaths });
       } catch (error) {
         if (!(error instanceof TomlWritebackError)) throw error;
         return { state: "validation_error", errors: [candidateError(error, snapshot.root, picksOf)] };

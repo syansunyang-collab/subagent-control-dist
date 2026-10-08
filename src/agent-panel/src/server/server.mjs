@@ -291,8 +291,8 @@ function sameProjectPath(left, right) {
     : a === b;
 }
 
-function readAllowedProjects(runtimeRoot, fallbackRoot, panelStateRoot) {
-  const file = path.join(path.resolve(String(runtimeRoot || fallbackRoot)), "deployment.json");
+function readAllowedProjects(deploymentRoot, fallbackRoot, panelStateRoot) {
+  const file = path.join(deploymentRoot, "deployment.json");
   try {
     const payload = JSON.parse(readFileSync(file, "utf8"));
     const listed = Array.isArray(payload?.allowed_projects) ? payload.allowed_projects : [];
@@ -612,14 +612,21 @@ async function routeHandler(projection, projectionWorker, configStore, config, r
   });
 }
 
-// 发布清单缺失或 build_id 不是非空字符串时返回 null：健康接口照常 200，调用方把缺标识当成“身份未知”。
+// 发布清单在 MCP 发布槽根下，在仓库与 Pi 槽的 ops/dist 下，两种布局都认。
+// 都缺失或 build_id 不是非空字符串时返回 null：健康接口照常 200，调用方把缺标识当成“身份未知”。
 function readPublishedBuildId(runtimeRoot) {
-  try {
-    const payload = JSON.parse(readFileSync(path.join(runtimeRoot, "ops", "dist", "subagent_service.manifest.json"), "utf8"));
-    return typeof payload?.build_id === "string" && payload.build_id.length > 0 ? payload.build_id : null;
-  } catch {
-    return null;
+  for (const file of [
+    path.join(runtimeRoot, "subagent_service.manifest.json"),
+    path.join(runtimeRoot, "ops", "dist", "subagent_service.manifest.json"),
+  ]) {
+    try {
+      const payload = JSON.parse(readFileSync(file, "utf8"));
+      if (typeof payload?.build_id === "string" && payload.build_id.length > 0) return payload.build_id;
+    } catch {
+      // 这种布局下没有清单，试下一处。
+    }
   }
+  return null;
 }
 
 export async function createPanelServer(options = {}) {
@@ -737,14 +744,15 @@ export async function createPanelServer(options = {}) {
     syncFaultInjector: options.configSyncFaultInjector,
     selectionFaultInjector: options.selectionFaultInjector,
   };
-  const runtimeRootForProjects = path.resolve(String(
-    options.runtimeRoot || process.env.SUBAGENT_RUNTIME_ROOT || publishedRuntimeRoot(),
-  ));
+  // 项目清单在 Pi 扩展槽的 deployment.json；运行资产根是发布槽，没有这份文件。
+  const deploymentRoot = options.configHomeDir
+    ? path.join(options.configHomeDir, ".pi", "agent", "extensions", "subagent-control")
+    : publishedRuntimeRoot();
   Object.defineProperty(config, "allowedProjects", {
     enumerable: true,
     get: () => (Array.isArray(options.allowedProjects) && options.allowedProjects.length
       ? options.allowedProjects.map((item) => path.resolve(String(item)))
-      : readAllowedProjects(runtimeRootForProjects, controlRepoPath, panelStateRoot)),
+      : readAllowedProjects(deploymentRoot, controlRepoPath, panelStateRoot)),
   });
   config.switchMonitorRoot = async (next) => {
     const newPaths = validateControlRepo(next);

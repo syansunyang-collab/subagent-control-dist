@@ -1,4 +1,5 @@
 // ops/tools/pi_write_domain_extension.mjs
+import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -87,6 +88,8 @@ function parseWriteDomainSpec(raw, { baseDir = process.cwd() } = {}) {
   const allowed = list(parsed.allowed ?? [], "allowed");
   const roots = list(parsed.roots ?? [], "roots");
   const deleteAllowed = list(parsed.deleteAllowed ?? [], "deleteAllowed");
+  const transientRoots = list(parsed.transientRoots ?? [], "transientRoots");
+  const gitRoot = parsed.gitRoot ? normalizeDomainPath(parsed.gitRoot, baseDir, caseInsensitive) : null;
   const runtimeRoot = parsed.runtimeRoot ? normalizeDomainPath(parsed.runtimeRoot, baseDir, caseInsensitive) : null;
   return {
     version,
@@ -94,6 +97,8 @@ function parseWriteDomainSpec(raw, { baseDir = process.cwd() } = {}) {
     allowed,
     roots,
     deleteAllowed,
+    transientRoots,
+    gitRoot,
     runtimeRoot,
     log,
     caseInsensitive
@@ -113,7 +118,7 @@ function evaluateWriteDomain(resolvedPath, spec) {
   return evaluatePathSet(resolvedPath, [...spec.allowed, ...spec.roots]);
 }
 function evaluateDeleteDomain(resolvedPath, spec) {
-  return evaluatePathSet(resolvedPath, spec.deleteAllowed || []);
+  return evaluatePathSet(resolvedPath, [...spec.deleteAllowed || [], ...spec.roots || []]);
 }
 function guardToolCall(event, cwd, spec) {
   const toolName = String(event?.toolName ?? "");
@@ -146,11 +151,12 @@ function appendAuditRecord(logPath, record) {
     return String(error?.message || error);
   }
 }
-function blockedReason(record) {
+function blockedReason(record, spec) {
   return [
     `write domain violation: ${record.tool} target ${record.raw_path ?? "(missing path)"} is outside this task's declared write scope.`,
-    "Use a path listed in task_package scope.write/write_extra, the task artifacts directory, or the evidence directory; scope.delete does not authorize write/edit.",
-    "Do not retry the same path through another tool; report the required scope change to the parent."
+    "Write business changes only to paths listed in task_package scope.write/write_extra;",
+    `scripts, fixtures, logs and temporary files go under this task's own directories, where creating and deleting are free: ${(spec.roots || []).join(", ")}.`,
+    "scope.delete does not authorize write/edit. Do not retry the same path through another tool; report the required scope change to the parent."
   ].join(" ");
 }
 function installPiWriteDomain(pi) {
@@ -174,7 +180,7 @@ function installPiWriteDomain(pi) {
         reason: `write domain audit unavailable; ${record.tool} was blocked before execution: ${logError}`
       };
     }
-    return record.allowed ? void 0 : { block: true, reason: blockedReason(record) };
+    return record.allowed ? void 0 : { block: true, reason: blockedReason(record, spec) };
   });
 }
 var pi_write_domain_extension_default = installPiWriteDomain;
@@ -236,19 +242,35 @@ function mergeWriteDomainEvidence(audit, submission = {}) {
     reported_violations: Array.isArray(submission?.write_domain_reported_violations) ? submission.write_domain_reported_violations.slice(0, 50) : []
   };
 }
+function gitIgnoredPaths(gitRoot, candidates) {
+  const inside = [...new Set(candidates)].filter((candidate) => gitRoot && candidate !== gitRoot && isInsidePath(gitRoot, candidate));
+  if (!inside.length) return /* @__PURE__ */ new Set();
+  const relative = inside.map((candidate) => path.relative(gitRoot, candidate).split(path.sep).join("/"));
+  const run = spawnSync("git", ["check-ignore", "--stdin", "-z"], {
+    cwd: gitRoot,
+    input: `${relative.join("\0")}\0`,
+    encoding: "utf8",
+    windowsHide: true
+  });
+  if (run.status !== 0) return /* @__PURE__ */ new Set();
+  const hits = new Set(String(run.stdout || "").split("\0").filter(Boolean));
+  return new Set(inside.filter((_, index) => hits.has(relative[index])));
+}
 function evaluateReportedWriteScope(scopeActual, spec, baseDirs = []) {
   const roots = [...new Set(baseDirs.map((item) => String(item || "")).filter(Boolean))];
-  const violations = [];
+  const pending = [];
   for (const field of ["written", "deleted"]) {
     const values = Array.isArray(scopeActual?.[field]) ? scopeActual[field] : [];
     const evaluate = field === "deleted" ? evaluateDeleteDomain : evaluateWriteDomain;
     for (const rawPath of values) {
       const candidates = roots.map((root) => normalizeDomainPath(rawPath, root, spec.caseInsensitive)).filter(Boolean);
-      const matched = candidates.some((candidate) => evaluate(candidate, spec).allowed);
-      if (!matched) violations.push({ field, raw_path: String(rawPath), resolved_candidates: candidates });
+      if (candidates.some((candidate) => evaluate(candidate, spec).allowed)) continue;
+      if (candidates.some((candidate) => evaluatePathSet(candidate, spec.transientRoots || []).allowed)) continue;
+      pending.push({ field, raw_path: String(rawPath), resolved_candidates: candidates });
     }
   }
-  return violations;
+  const ignored = gitIgnoredPaths(spec.gitRoot, pending.flatMap((item) => item.resolved_candidates));
+  return pending.filter((item) => !item.resolved_candidates.some((candidate) => ignored.has(candidate)));
 }
 export {
   PI_CHILD_WRITE_DOMAIN_PROFILE,

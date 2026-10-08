@@ -328,7 +328,8 @@ export function installDelegateWork(pi, { sdk = null, sourceSession = null, core
           reject(selectionError(result.error?.message ?? (stderr || "delegate_work selection failed")));
         } else resolve(result);
       });
-      child.stdin.end(JSON.stringify({ pick, model, effort }));
+      // 来源运行时的 Pi 模型对象供选型桥按 Pi 支持档校验档位。
+      child.stdin.end(JSON.stringify({ pick, model, effort, pi_models: currentSource?.session?.modelRuntime?.getAvailableSnapshot?.() }));
     });
     return response;
   }

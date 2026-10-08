@@ -1,7 +1,9 @@
 // 分身选型桥：pick（或省略）走共享解析器；显式 model + effort 保持现有例外，只校验档位在该模型可选档位内。
+// 请求可带 pi_models（来源运行时的 Pi 模型对象数组），可选档位随之按「笔记 efforts ∩ Pi 支持档」校验。
 import { readFileSync } from "node:fs";
 import { resolveModelConfigSources } from "./model_config.mjs";
 import { loadSelectionConfig, modelEfforts, resolveSelection } from "./dispatch-core/model_selection.mjs";
+import { clampThinkingLevel, piModelDetails } from "./pi_model_catalog.mjs";
 
 const choices = ["luna_xhigh", "luna_max", "sol_high"];
 
@@ -10,9 +12,13 @@ function finish(payload, code = 0) {
   process.exitCode = code;
 }
 
-function explicitChoice(config, model, effort) {
-  const efforts = modelEfforts(config, model);
-  if (!efforts.includes(effort)) throw new Error(`${effort} 不在 ${model} 的可选档位（${efforts.join("/")}）内`);
+function explicitChoice(config, model, effort, piDetails) {
+  const efforts = modelEfforts(config, model, piDetails);
+  if (!efforts.includes(effort)) {
+    const piLevels = piDetails?.[model]?.thinking_levels;
+    const piHint = Array.isArray(piLevels) && !piLevels.includes(effort) ? `；Pi 不支持 ${effort}，会改按 ${clampThinkingLevel(piLevels, effort)} 运行` : "";
+    throw new Error(`${effort} 不在 ${model} 的可选档位（${efforts.join("/") || "无"}）内${piHint}；改选档位后重试`);
+  }
   return {
     requested: { pick: null, model, effort },
     pick: null,
@@ -37,9 +43,10 @@ try {
   } else {
     const sources = resolveModelConfigSources({ roots: [{ root: runtimeRoot, source: "runtime_root" }], projectRoot });
     const config = loadSelectionConfig(sources);
+    const piDetails = Array.isArray(request.pi_models) ? piModelDetails(request.pi_models) : null;
     const choice = request.model
-      ? explicitChoice(config, request.model, request.effort)
-      : resolveSelection(config, { role: "delegate-work", capability: "delegate_work", pick: request.pick, effort: request.effort });
+      ? explicitChoice(config, request.model, request.effort, piDetails)
+      : resolveSelection(config, { role: "delegate-work", capability: "delegate_work", pick: request.pick, effort: request.effort, pi_details: piDetails });
     const slash = choice.resolved_model.indexOf("/");
     if (slash <= 0 || slash === choice.resolved_model.length - 1) {
       finish({ error: { code: "selection_invalid", message: `Model is not provider/id: ${choice.resolved_model}`, alternatives: choices } }, 1);

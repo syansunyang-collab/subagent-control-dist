@@ -32,7 +32,7 @@ node --test tests/pi/*.test.mjs
 ## delegate_work（Pi 原生分身）
 
 - 仅 `goal` 必填，立即返回 `work_id/revision/state`。后台在来源的 cwd、权限和上下文中运行，不修改用户模型设置。
-- 选型：默认 pick `luna_xhigh`；可选 `luna_max`、`sol_high`。三行的模型与档位定义在 `ops/agents/delegate-work.toml` 的 `[[picks]]`，经 `ops/dist/delegate_work_selection.bundle.mjs` 解析。也可同时给出 `model` 与 `effort` 显式选型：不限推荐行与档位范围，只校验 `effort` 在该模型可选档位内（`ops/model-notes.toml` 的 `efforts`），并要求来源运行时能解析该模型。选型在受理前确认，续跑沿用已保存选型。
+- 选型：默认 pick `luna_xhigh`；可选 `luna_max`、`sol_high`。三行的模型与档位定义在 `ops/agents/delegate-work.toml` 的 `[[picks]]`，经 `ops/dist/delegate_work_selection.bundle.mjs` 解析。也可同时给出 `model` 与 `effort` 显式选型：不限推荐行与档位范围，只校验 `effort` 在该模型可选档位内（`ops/model-notes.toml` 的 `efforts` 与来源运行时 Pi 支持档的交集），并要求来源运行时能解析该模型。选型在受理前确认，续跑沿用已保存选型。
 - 来源会话只收到交接结果（completed / needs_decision / failed，按 version）与 failed / interrupted 状态（按 revision），各至多一次；分支派出的叶子与 Fleet 通知留在分支。
 - 原生 CLI 从实际 `argv[1]` 的 `dist/cli.js` 定位同目录 SDK，不回落到 adapter 的旧版 SDK。SDK 嵌入使用 `installDelegateWork(pi, {sdk, sourceSession})`，或组合 `createDelegateWorkCore`、`createNativeBranchFactory`、`nativeWorkSource`。
 - 源码在 `adapters/pi/src/delegate-work-core.mjs`、`adapters/pi/src/delegate-work-extension.mjs`。不依赖 Pi Web；`WORK_TEXT` 是高层工具及工作提示词的文案源。

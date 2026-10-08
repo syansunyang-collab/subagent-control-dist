@@ -1817,6 +1817,110 @@ var init_dispatch_prepare_argv = __esm({
   }
 });
 
+// ops/tools/pi_model_catalog.mjs
+import { spawn, spawnSync as spawnSync2 } from "node:child_process";
+function supportedThinkingLevels(model) {
+  if (!model?.reasoning) return ["off"];
+  const map = model.thinkingLevelMap ?? {};
+  return THINKING_LEVELS.filter((level) => map[level] !== null && (level === "xhigh" || level === "max" ? map[level] !== void 0 : true));
+}
+function clampThinkingLevel(levels, level) {
+  if (levels.includes(level)) return level;
+  const index = THINKING_LEVELS.indexOf(level);
+  if (index < 0) return levels[0] ?? "off";
+  return THINKING_LEVELS.slice(index + 1).find((item) => levels.includes(item)) ?? THINKING_LEVELS.slice(0, index).reverse().find((item) => levels.includes(item)) ?? "off";
+}
+function valid(model) {
+  return model && typeof model.provider === "string" && model.provider && typeof model.id === "string" && model.id;
+}
+function normalizePiModel(model) {
+  const levels = supportedThinkingLevels(model);
+  const map = model.thinkingLevelMap ?? {};
+  return {
+    value: `${model.provider}/${model.id}`,
+    name: typeof model.name === "string" && model.name ? model.name : model.id,
+    supports_vision: Array.isArray(model.input) ? model.input.includes("image") : null,
+    thinking_levels: levels,
+    level_map: Object.fromEntries(levels.filter((level) => typeof map[level] === "string" && map[level] !== level).map((level) => [level, map[level]])),
+    context_window: Number.isFinite(model.contextWindow) ? model.contextWindow : null
+  };
+}
+function piModelDetails(models) {
+  return Object.fromEntries((Array.isArray(models) ? models : []).filter(valid).map((model) => {
+    const { value, ...detail } = normalizePiModel(model);
+    return [value, detail];
+  }));
+}
+function catalogResponse(line) {
+  let record2;
+  try {
+    record2 = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (record2?.type !== "response" || record2.id !== REQUEST_ID || record2.command !== "get_available_models") return null;
+  if (!record2.success || !Array.isArray(record2.data?.models)) {
+    throw new PiCatalogError("PI_RPC_RESPONSE_INVALID", "Pi RPC \u62D2\u7EDD\u76EE\u5F55\u67E5\u8BE2\u6216\u8FD4\u56DE\u683C\u5F0F\u4E0D\u6B63\u786E");
+  }
+  return record2.data.models;
+}
+function invocationOf(command) {
+  return Array.isArray(command) ? command.map(String) : [String(command)];
+}
+function probePiModelsSync({ cwd, command, args = [], timeoutMs = 3e4, runSync = spawnSync2 } = {}) {
+  const invocation = invocationOf(command);
+  const completed = runSync(invocation[0], [...invocation.slice(1), ...BASE_ARGS, ...args], {
+    cwd,
+    input: REQUEST_LINE,
+    encoding: "utf8",
+    timeout: timeoutMs,
+    windowsHide: true,
+    maxBuffer: 4 * OUTPUT_LIMIT,
+    env: childEnv()
+  });
+  for (const line of String(completed.stdout ?? "").split("\n")) {
+    const models = catalogResponse(line.replace(/\r$/, ""));
+    if (models) return models;
+  }
+  if (completed.error) {
+    const timedOut = completed.error.code === "ETIMEDOUT";
+    throw new PiCatalogError(
+      timedOut ? "PI_RPC_TIMEOUT" : "PI_RPC_START_FAILED",
+      timedOut ? `Pi \u6A21\u578B\u76EE\u5F55\u67E5\u8BE2\u8D85\u8FC7 ${timeoutMs} ms` : `Pi \u542F\u52A8\u5931\u8D25\uFF08${completed.error.code || completed.error.message}\uFF09\uFF0C\u68C0\u67E5 Pi \u5B89\u88C5\u8DEF\u5F84`
+    );
+  }
+  const detail = String(completed.stderr || "").trim().slice(0, 500);
+  throw new PiCatalogError("PI_RPC_RESPONSE_MISSING", `Pi \u9000\u51FA\u4F46\u672A\u8FD4\u56DE\u6A21\u578B\u76EE\u5F55\uFF08exit=${completed.status}\uFF09${detail ? `\uFF1A${detail}` : ""}`);
+}
+var THINKING_LEVELS, REQUEST_ID, BASE_ARGS, OUTPUT_LIMIT, REQUEST_LINE, PiCatalogError, childEnv;
+var init_pi_model_catalog = __esm({
+  "ops/tools/pi_model_catalog.mjs"() {
+    THINKING_LEVELS = Object.freeze(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+    REQUEST_ID = "pi-model-catalog";
+    BASE_ARGS = Object.freeze([
+      "--mode",
+      "rpc",
+      "--no-session",
+      "--no-skills",
+      "--no-prompt-templates",
+      "--no-themes",
+      "--no-context-files",
+      "--no-tools"
+    ]);
+    OUTPUT_LIMIT = 16 * 1024 * 1024;
+    REQUEST_LINE = `${JSON.stringify({ id: REQUEST_ID, type: "get_available_models" })}
+`;
+    PiCatalogError = class extends Error {
+      constructor(code, message) {
+        super(message);
+        this.name = "PiCatalogError";
+        this.code = code;
+      }
+    };
+    childEnv = () => ({ ...process.env, NO_COLOR: "1", PI_SKIP_VERSION_CHECK: "1" });
+  }
+});
+
 // ops/tools/dispatch-core/model_selection.mjs
 import { createHash as createHash2 } from "node:crypto";
 import { existsSync as existsSync3, readdirSync, readFileSync as readFileSync4 } from "node:fs";
@@ -1859,17 +1963,14 @@ function loadNotes(file) {
       if (REMOVED_NOTE_KEYS[key]) fail("field_removed", file, `${at}.${key}`, `\u5DF2\u5220\u9664\uFF0C${REMOVED_NOTE_KEYS[key]}`);
       if (!NOTE_KEYS.includes(key)) fail("field_unknown", file, `${at}.${key}`, `\u672A\u77E5\u5B57\u6BB5\uFF1B\u53EF\u7528\u5B57\u6BB5\uFF1A${NOTE_KEYS.join("\u3001")}`);
     }
-    if (value.supports_vision !== void 0 && typeof value.supports_vision !== "boolean") {
-      fail("value_invalid", file, `${at}.supports_vision`, "\u5FC5\u987B\u662F true \u6216 false");
-    }
-    const efforts = value.efforts ?? EFFORT_LEVELS;
-    const ordered = Array.isArray(efforts) && efforts.length > 0 && efforts.every((item, index) => rank(item) >= 0 && (index === 0 || rank(item) > rank(efforts[index - 1])));
+    const { efforts } = value;
+    const ordered = efforts === void 0 || Array.isArray(efforts) && efforts.length > 0 && efforts.every((item, index) => rank(item) >= 0 && (index === 0 || rank(item) > rank(efforts[index - 1])));
     if (!ordered) fail("value_invalid", file, `${at}.efforts`, `\u5FC5\u987B\u662F ${EFFORT_LEVELS.join(" < ")} \u7684\u975E\u7A7A\u5B50\u96C6\uFF0C\u6309\u6863\u4F4D\u987A\u5E8F\u6392\u5217\u4E14\u4E0D\u91CD\u590D`);
     notes.set(model, {
       tag: optionalText(value.tag, file, `${at}.tag`),
-      supports_vision: value.supports_vision ?? null,
       description: optionalText(value.description, file, `${at}.description`),
-      efforts: [...efforts],
+      // 未写 efforts 时为 null：可选档位取 Pi 支持档（见 modelEfforts）。
+      efforts: efforts === void 0 ? null : [...efforts],
       effort_note: optionalText(value.effort_note, file, `${at}.effort_note`)
     });
   }
@@ -2073,8 +2174,11 @@ function loadSelectionConfig(sources) {
     warnings: routes.filter((route) => route.phase_error).map((route) => ({ code: "dispatch_phase_invalid", file: route.file, field: "dispatch_phase", role: route.role, message: route.phase_error }))
   };
 }
-function modelEfforts(config, model) {
-  return [...effortsOf(config.notes, model)];
+function modelEfforts(config, model, piDetails = null) {
+  const pi = piDetails?.[model]?.thinking_levels;
+  const noted = config.notes.get(model)?.efforts;
+  if (!Array.isArray(pi)) return [...noted ?? EFFORT_LEVELS];
+  return noted ? noted.filter((level) => pi.includes(level)) : [...pi];
 }
 function roleRecord(config, role) {
   const found = config.roles.get(role);
@@ -2153,9 +2257,11 @@ function resolveSelection(config, input = {}) {
   const model = requested.model || row.model;
   const effort = requested.effort || row?.effort;
   if (!effort) throw new ToolError(`${model} \u4E0D\u5728 ${role.role} \u9002\u7528\u4E8E ${capability} \u7684\u63A8\u8350\u884C\u91CC\uFF0C\u5FC5\u987B\u663E\u5F0F\u7ED9\u51FA effort`);
-  const efforts = modelEfforts(config, model);
+  const piLevels = input.pi_details?.[model]?.thinking_levels;
+  const efforts = modelEfforts(config, model, input.pi_details);
   if (!efforts.includes(effort)) {
-    throw new ToolError(`${effort} \u4E0D\u5728 ${model} \u7684\u53EF\u9009\u6863\u4F4D\uFF08${efforts.join("/")}\uFF09\u5185\uFF0C\u6388\u6743\u4E0D\u80FD\u89E3\u9664\uFF1B\u6539\u9009\u6863\u4F4D\u6216\u5230\u6A21\u578B\u6863\u4F4D\u9875\u8C03\u6574`);
+    const piHint = Array.isArray(piLevels) && !piLevels.includes(effort) ? `\uFF1BPi \u4E0D\u652F\u6301 ${effort}\uFF0C\u4F1A\u6539\u6309 ${clampThinkingLevel(piLevels, effort)} \u8FD0\u884C` : "";
+    throw new ToolError(`${effort} \u4E0D\u5728 ${model} \u7684\u53EF\u9009\u6863\u4F4D\uFF08${efforts.join("/") || "\u65E0"}\uFF09\u5185${piHint}\uFF0C\u6388\u6743\u4E0D\u80FD\u89E3\u9664\uFF1B\u6539\u9009\u6863\u4F4D\u6216\u5230\u6A21\u578B\u6863\u4F4D\u9875\u8C03\u6574`);
   }
   const pool = [...new Set(role.picks.map((item) => item.model))];
   const needed = [];
@@ -2198,12 +2304,13 @@ var init_model_selection = __esm({
   "ops/tools/dispatch-core/model_selection.mjs"() {
     init_dist();
     init_dispatch_prepare_argv();
+    init_pi_model_catalog();
     init_tool_common();
-    EFFORT_LEVELS = Object.freeze(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+    EFFORT_LEVELS = THINKING_LEVELS;
     ID_RE = /^[a-z0-9_]+$/;
     ROLE_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*\.toml$/;
     PICK_KEYS = Object.freeze(["id", "when", "capability", "model", "effort", "effort_min", "effort_max", "default"]);
-    NOTE_KEYS = Object.freeze(["tag", "supports_vision", "description", "efforts", "effort_note"]);
+    NOTE_KEYS = Object.freeze(["tag", "description", "efforts", "effort_note"]);
     REMOVED_ROLE_KEYS = Object.freeze({
       pi_model: "\u6539\u5199 [[picks]]",
       pi_model_reasoning_effort: "\u6539\u5199 [[picks]]",
@@ -2214,7 +2321,8 @@ var init_model_selection = __esm({
     REMOVED_NOTE_KEYS = Object.freeze({
       max_effort: "\u53EF\u9009\u6863\u4F4D\u6539\u5199 efforts",
       effort_levels: "\u53EF\u9009\u6863\u4F4D\u6539\u5199 efforts\uFF0C\u5B9E\u6D4B\u8BF4\u660E\u5199 effort_note",
-      status: "\u6A21\u578B\u662F\u5426\u53EF\u7528\u4EE5 Pi \u6A21\u578B\u6E05\u5355\u4E3A\u51C6"
+      status: "\u6A21\u578B\u662F\u5426\u53EF\u7528\u4EE5 Pi \u6A21\u578B\u6E05\u5355\u4E3A\u51C6",
+      supports_vision: "\u56FE\u50CF\u8F93\u5165\u4EE5 Pi \u76EE\u5F55\u4E3A\u51C6\uFF0C\u5220\u9664\u8BE5\u5B57\u6BB5"
     });
     WORKER_RESOURCE_LISTS = Object.freeze(["tools", "extensions", "skills"]);
     PROJECT_SKILL_MODES = Object.freeze(["none", "all"]);
@@ -2231,7 +2339,7 @@ import net from "node:net";
 import path5 from "node:path";
 import { homedir } from "node:os";
 import process5 from "node:process";
-import { spawn as spawnChild, spawnSync as spawnSync2 } from "node:child_process";
+import { spawn as spawnChild, spawnSync as spawnSync3 } from "node:child_process";
 function releasedPanelAssetRoot() {
   try {
     return JSON.parse(readFileSync5(path5.join(PANEL_STATE_ROOT, "runtime-root.json"), "utf8")).root;
@@ -2305,7 +2413,7 @@ function spawnDetached(argv, { cwd, env, windowsHide = true } = {}) {
   return { pid: child.pid };
 }
 function runCapture(argv, { cwd } = {}) {
-  const proc = spawnSync2(argv[0], argv.slice(1), {
+  const proc = spawnSync3(argv[0], argv.slice(1), {
     cwd,
     encoding: "utf8",
     windowsHide: true,
@@ -2420,7 +2528,11 @@ function buildRunning({ deps: deps4 } = {}) {
 }
 function runtimeBuildId({ deps: deps4 } = {}) {
   const resolved = resolveDeps(deps4);
-  return resolved.readJson(path5.join(resolved.paths.assetRoot, "ops", "dist", "subagent_service.manifest.json")).build_id ?? null;
+  for (const parts of BUILD_MANIFEST_LOCATIONS) {
+    const buildId = resolved.readJson(path5.join(resolved.paths.assetRoot, ...parts))?.build_id;
+    if (buildId) return buildId;
+  }
+  return null;
 }
 function validManifest({ deps: deps4 } = {}) {
   const resolved = resolveDeps(deps4);
@@ -2483,7 +2595,7 @@ function startBackgroundBuild({ deps: deps4 } = {}) {
   return child.pid;
 }
 function killProcessTree(pid) {
-  if (process5.platform === "win32") spawnSync2("taskkill", ["/F", "/T", "/PID", String(pid)], { windowsHide: true });
+  if (process5.platform === "win32") spawnSync3("taskkill", ["/F", "/T", "/PID", String(pid)], { windowsHide: true });
   else process5.kill(pid, "SIGTERM");
 }
 async function stopStalePanel(resolved) {
@@ -2543,7 +2655,7 @@ function acquireBuildLock({ deps: deps4 } = {}) {
   }
   return null;
 }
-var MONITOR_ROOT, PANEL_STATE_ROOT, PANEL_ASSET_ROOT, PANEL_ROOT, SHELL_ROOT, PROJECT_FILE, RUNTIME_ROOT2, ENDPOINT_PATH, MANIFEST_PATH, BUILD_STATE_PATH, BUILD_LOG_PATH, BUILD_LOCK_PATH, SHELL_STATE_PATH, PORT_BASE, PORT_SPAN, DEFAULT_PATHS, STILL_ACTIVE_LOCK_STALE_SECONDS, PANEL_STOP_TIMEOUT_MS;
+var MONITOR_ROOT, PANEL_STATE_ROOT, PANEL_ASSET_ROOT, PANEL_ROOT, SHELL_ROOT, PROJECT_FILE, RUNTIME_ROOT2, ENDPOINT_PATH, MANIFEST_PATH, BUILD_STATE_PATH, BUILD_LOG_PATH, BUILD_LOCK_PATH, SHELL_STATE_PATH, PORT_BASE, PORT_SPAN, DEFAULT_PATHS, STILL_ACTIVE_LOCK_STALE_SECONDS, BUILD_MANIFEST_LOCATIONS, PANEL_STOP_TIMEOUT_MS;
 var init_agent_panel_launcher = __esm({
   "ops/tools/dispatch-core/agent_panel_launcher.mjs"() {
     init_tool_common();
@@ -2580,6 +2692,10 @@ var init_agent_panel_launcher = __esm({
       buildScript: path5.join(PANEL_ASSET_ROOT, "ops", "dist", "agent_panel_launcher.bundle.mjs")
     });
     STILL_ACTIVE_LOCK_STALE_SECONDS = 600;
+    BUILD_MANIFEST_LOCATIONS = Object.freeze([
+      ["subagent_service.manifest.json"],
+      ["ops", "dist", "subagent_service.manifest.json"]
+    ]);
     PANEL_STOP_TIMEOUT_MS = 5e3;
   }
 });
@@ -4046,7 +4162,7 @@ var init_task_package_build = __esm({
 });
 
 // ops/tools/dispatch-core/review_evidence.mjs
-import { spawnSync as spawnSync3 } from "node:child_process";
+import { spawnSync as spawnSync4 } from "node:child_process";
 import { opendirSync, readdirSync as readdirSync5, statSync as statSync6 } from "node:fs";
 import path9 from "node:path";
 import process6 from "node:process";
@@ -4170,7 +4286,7 @@ function run(argv, cwd, timeout = 30) {
   const started = process6.hrtime.bigint();
   const elapsed = () => Math.round(Number(process6.hrtime.bigint() - started) / 1e6 * 1e3) / 1e3;
   const command = argv.map(String);
-  const completed = spawnSync3(command[0], command.slice(1), {
+  const completed = spawnSync4(command[0], command.slice(1), {
     cwd: String(cwd),
     encoding: "utf8",
     timeout: Math.round(pyFloat(timeout) * 1e3),
@@ -5076,39 +5192,97 @@ function writeCatalogCacheEntry(cacheFile, key, identity, catalog, { now = Date.
 var CATALOG_CACHE_SCHEMA, CATALOG_CACHE_TTL_MS, CATALOG_CACHE_FILE_NAME, CATALOG_CACHE_MAX_ENTRIES;
 var init_model_catalog_cache = __esm({
   "ops/tools/dispatch-core/model_catalog_cache.mjs"() {
-    CATALOG_CACHE_SCHEMA = 1;
+    CATALOG_CACHE_SCHEMA = 2;
     CATALOG_CACHE_TTL_MS = 60 * 1e3;
     CATALOG_CACHE_FILE_NAME = "pi-child-model-catalog.json";
     CATALOG_CACHE_MAX_ENTRIES = 8;
   }
 });
 
-// ops/tools/pi_model_extension_profile.mjs
-import { existsSync as existsSync6 } from "node:fs";
+// ops/tools/pi_settings_packages.mjs
+import { readFileSync as readFileSync8 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import path11 from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
 function resolvePiAgentDir(env = process.env) {
   const configured = String(env.PI_CODING_AGENT_DIR || "").trim();
   return path11.resolve(configured || path11.join(homedir2(), ".pi", "agent"));
 }
+function readJson2(file) {
+  try {
+    return JSON.parse(readFileSync8(file, "utf8").replace(/^\uFEFF/, ""));
+  } catch {
+    return void 0;
+  }
+}
+function packageRoot(raw, agentDir) {
+  if (raw.startsWith("npm:")) {
+    const name = raw.slice(4).trim().match(/^(@[^/@]+\/[^@]+|[^@]+)/)?.[1];
+    return name ? path11.join(agentDir, "npm", "node_modules", ...name.split("/")) : void 0;
+  }
+  const source = raw.trim();
+  if (source.startsWith("file://")) return fileURLToPath2(source);
+  if (source === "~" || source.startsWith("~/") || source.startsWith("~\\")) return path11.join(homedir2(), source.slice(1));
+  if (/^[a-z][a-z0-9+.-]+:/i.test(source)) return void 0;
+  const shell = process.platform === "win32" && !source.includes("\\") && source.match(WINDOWS_SHELL_PATH);
+  return path11.resolve(agentDir, shell ? `${shell[1].toUpperCase()}:\\${shell[2] ?? ""}` : source);
+}
+function registeredPiPackages(agentDir, names) {
+  const packages = readJson2(path11.join(agentDir, "settings.json"))?.packages;
+  const seen = /* @__PURE__ */ new Set();
+  return (Array.isArray(packages) ? packages : []).flatMap((entry) => {
+    const filter = entry && typeof entry === "object" ? entry : {};
+    const source = typeof entry === "string" ? entry : filter.source;
+    if (typeof source !== "string" || !source.trim()) return [];
+    let root;
+    try {
+      root = packageRoot(source, agentDir);
+    } catch {
+      return [];
+    }
+    if (!root || seen.has(root)) return [];
+    seen.add(root);
+    if (Array.isArray(filter.extensions) ? filter.extensions.length === 0 : filter.autoload === false) return [];
+    const manifest = readJson2(path11.join(root, "package.json"));
+    if (!names.includes(manifest?.name) || !Array.isArray(manifest.pi?.extensions)) return [];
+    const extensions = manifest.pi.extensions.filter((file) => typeof file === "string").map((file) => path11.resolve(root, file));
+    return [{ name: manifest.name, source, extensions }];
+  });
+}
+var WINDOWS_SHELL_PATH;
+var init_pi_settings_packages = __esm({
+  "ops/tools/pi_settings_packages.mjs"() {
+    WINDOWS_SHELL_PATH = /^\/(?:mnt\/|cygdrive\/)?([a-z])(?:\/(.*))?$/i;
+  }
+});
+
+// ops/tools/pi_model_extension_profile.mjs
+import { existsSync as existsSync6 } from "node:fs";
+import path12 from "node:path";
 function resolvePiChildModelExtensions(options = {}) {
   const env = options.env || process.env;
   if (String(env.PI_CONTROL_PI || "").trim()) return [];
   const exists = options.exists || existsSync6;
-  const agentDir = path11.resolve(options.agentDir || resolvePiAgentDir(env));
-  return RELATIVE_EXTENSION_PATHS.map((relativePath) => path11.join(agentDir, ...relativePath.split("/"))).filter((candidate) => exists(candidate));
+  const agentDir = path12.resolve(options.agentDir || resolvePiAgentDir(env));
+  return [
+    ...EXTENSION_FILES.map((relativePath) => path12.join(agentDir, ...relativePath.split("/"))),
+    ...registeredPiPackages(agentDir, MODEL_PROVIDER_PACKAGES).flatMap((item) => item.extensions)
+  ].filter((candidate) => exists(candidate));
 }
 function isPiModelExtensionProfileCli(argv1 = process.argv[1]) {
-  return path11.basename(String(argv1 || "")).toLowerCase() === "pi_model_extension_profile.mjs";
+  return path12.basename(String(argv1 || "")).toLowerCase() === "pi_model_extension_profile.mjs";
 }
-var PI_CHILD_MODEL_EXTENSION_PROFILE, RELATIVE_EXTENSION_PATHS;
+var PI_CHILD_MODEL_EXTENSION_PROFILE, EXTENSION_FILES, MODEL_PROVIDER_PACKAGES;
 var init_pi_model_extension_profile = __esm({
   "ops/tools/pi_model_extension_profile.mjs"() {
+    init_pi_settings_packages();
     PI_CHILD_MODEL_EXTENSION_PROFILE = "pi-child-model-extensions/v1";
-    RELATIVE_EXTENSION_PATHS = Object.freeze([
-      "extensions/openai-codex-sol-context-alias.ts",
-      "npm/node_modules/pi-claude-code-provider/extensions/pi-claude-code-provider.ts",
-      "npm/node_modules/@tian.zuo/pi-antigravity/index.ts"
+    EXTENSION_FILES = Object.freeze(["extensions/openai-codex-sol-context-alias.ts"]);
+    MODEL_PROVIDER_PACKAGES = Object.freeze([
+      "pi-claude-code-provider",
+      "@tian.zuo/pi-antigravity",
+      "@local/pi-antigravity-native",
+      "pi-cursor-host"
     ]);
     if (isPiModelExtensionProfileCli()) {
       if (process.argv.slice(2).some((arg) => arg !== "--json")) {
@@ -5134,7 +5308,7 @@ var init_deps = __esm({
 
 // ops/tools/dispatch-core/dispatch-prepare/py-utils.mjs
 import { statSync as statSync8 } from "node:fs";
-import path12 from "node:path";
+import path13 from "node:path";
 import process7 from "node:process";
 function compareCodePoints2(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -5172,11 +5346,11 @@ function shutilWhich(name) {
     for (const item of names) if (isFile3(item)) return item;
     return null;
   }
-  const dirs = String(process7.env.PATH || "").split(path12.delimiter).filter(Boolean);
+  const dirs = String(process7.env.PATH || "").split(path13.delimiter).filter(Boolean);
   if (isWindows) dirs.unshift(process7.cwd());
   for (const dir of dirs) {
     for (const item of names) {
-      const full = path12.join(dir, item);
+      const full = path13.join(dir, item);
       if (isFile3(full)) return full;
     }
   }
@@ -5206,12 +5380,12 @@ var init_state = __esm({
 });
 
 // ops/tools/dispatch-core/dispatch-prepare/catalog.mjs
-import path13 from "node:path";
+import path14 from "node:path";
 import process8 from "node:process";
 function piChildCatalogCommandImpl() {
   const configured = pyStrip(String(process8.env.PI_CONTROL_PI || ""));
   if (configured) {
-    const suffix = path13.extname(configured).toLowerCase();
+    const suffix = path14.extname(configured).toLowerCase();
     if ([".js", ".mjs", ".cjs"].includes(suffix)) {
       const node = shutilWhich("node");
       return node ? [node, configured] : [];
@@ -5249,77 +5423,31 @@ function piChildModelExtensionProfile() {
 function probePiChildModelCatalogUncachedImpl(targetCwd) {
   const command = piChildCatalogCommand();
   const extensionProfile = piChildModelExtensionProfile();
+  const source = `pi rpc get_available_models (${extensionProfile.profile})`;
+  const unavailable = (error) => ({ status: "unavailable", models: [], model_count: 0, source, error });
   if (!command.length || pyTruthy(extensionProfile.error)) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: "pi --list-models (child model profile)",
-      error: pyTruthy(extensionProfile.error) ? extensionProfile.error : "Pi executable not found"
-    };
+    return unavailable(pyTruthy(extensionProfile.error) ? extensionProfile.error : "Pi executable not found");
   }
-  const argv = [...command.slice(1), "-ne", "-ns", "-np", "--no-themes", "-nc", "--no-approve"];
-  for (const extensionPath of extensionProfile.extensions) argv.push("-e", extensionPath);
-  argv.push("--list-models");
-  const completed = pySpawnSync(command[0], argv, {
-    cwd: String(targetCwd),
-    encoding: "utf8",
-    timeout: 3e4,
-    windowsHide: true,
-    maxBuffer: 64 * 1024 * 1024
-  });
-  if (completed.error) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: pySlice(String(completed.error.message ?? completed.error), 500)
-    };
+  let raw;
+  try {
+    raw = probePiModelsSync({
+      cwd: String(targetCwd),
+      command,
+      args: ["--no-extensions", "--no-approve", ...extensionProfile.extensions.flatMap((extensionPath) => ["-e", extensionPath])],
+      runSync: pySpawnSync
+    });
+  } catch (error) {
+    return unavailable(pySlice(String(error?.message ?? error), 500));
   }
-  const stdout = String(completed.stdout ?? "");
-  const stderr = String(completed.stderr ?? "");
-  if (completed.status !== 0) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: pySlice(pyStrip(stderr || stdout), 500)
-    };
-  }
-  const models = /* @__PURE__ */ new Set();
-  const details = {};
-  for (const line of pySplitLines(stdout)) {
-    const columns = line.split(PY_SPLIT_RE).filter((item) => item !== "");
-    if (columns.length < 2 || columns[0].toLowerCase() === "provider") continue;
-    const provider = pyStrip(columns[0]);
-    const modelId = pyStrip(columns[1]);
-    if (!provider || !modelId) continue;
-    const key = `${provider}/${modelId}`;
-    models.add(key);
-    const images = columns.length >= 6 ? pyStrip(columns[5]).toLowerCase() : "";
-    details[key] = {
-      context_window: columns.length >= 3 ? pyStrip(columns[2]) || null : null,
-      supports_vision: images === "yes" ? true : images === "no" ? false : null
-    };
-  }
-  if (!models.size) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: "Pi returned no parseable child models"
-    };
-  }
-  const ordered = sortedStrings(models);
+  const details = Object.fromEntries(Object.entries(piModelDetails(raw)).filter(([key]) => !DENIED_CHILD_MODEL.test(key)));
+  const ordered = sortedStrings(Object.keys(details));
+  if (!ordered.length) return unavailable("Pi returned no child models");
   return {
     status: "ok",
     models: ordered,
     model_details: Object.fromEntries(ordered.map((key) => [key, details[key]])),
     model_count: ordered.length,
-    source: `pi --list-models (${extensionProfile.profile})`,
+    source,
     error: null
   };
 }
@@ -5330,7 +5458,7 @@ function piChildCatalogCacheIdentity(targetCwd) {
   const agentDir = resolvePiAgentDir();
   const configPaths = [
     ...extensions,
-    ...CHILD_CATALOG_CONFIG_SURFACE.map((name) => path13.join(agentDir, ...String(name).split("/")))
+    ...CHILD_CATALOG_CONFIG_SURFACE.map((name) => path14.join(agentDir, ...String(name).split("/")))
   ];
   return {
     schema: CATALOG_CACHE_SCHEMA,
@@ -5348,8 +5476,8 @@ function piChildCatalogCacheIdentity(targetCwd) {
 }
 function piChildCatalogCacheFile() {
   const override = pyStrip(String(process8.env.SUBAGENT_CATALOG_CACHE_DIR || ""));
-  const cacheDir = override ? resolveLikePython(override) : path13.join(ROOT, ".runtime", "cockpit", "cache");
-  return path13.join(cacheDir, CATALOG_CACHE_FILE_NAME);
+  const cacheDir = override ? resolveLikePython(override) : path14.join(ROOT, ".runtime", "cockpit", "cache");
+  return path14.join(cacheDir, CATALOG_CACHE_FILE_NAME);
 }
 function childCatalogFileLayerEnabled() {
   return deps.probePiChildModelCatalogUncached === probePiChildModelCatalogUncachedImpl;
@@ -5405,16 +5533,19 @@ function probePiChildModelCatalogImpl(targetCwd, options = {}) {
   }
   return probePiChildModelCatalogFresh(key, options);
 }
-var CHILD_CATALOG_CONFIG_SURFACE, cacheServedCatalogs;
+var DENIED_CHILD_MODEL, CHILD_CATALOG_CONFIG_SURFACE, cacheServedCatalogs;
 var init_catalog = __esm({
   "ops/tools/dispatch-core/dispatch-prepare/catalog.mjs"() {
     init_tool_common();
     init_py();
     init_model_catalog_cache();
     init_pi_model_extension_profile();
+    init_pi_model_catalog();
+    init_pi_settings_packages();
     init_deps();
     init_py_utils();
     init_state();
+    DENIED_CHILD_MODEL = /fable/i;
     CHILD_CATALOG_CONFIG_SURFACE = Object.freeze([
       "models.json",
       "models-store.json",
@@ -5426,7 +5557,7 @@ var init_catalog = __esm({
 });
 
 // ops/tools/dispatch-core/dispatch-prepare/constants.mjs
-import path14 from "node:path";
+import path15 from "node:path";
 var PREFLIGHT_FILE_THRESHOLD, PREFLIGHT_BYTES_THRESHOLD, PREFLIGHT_LARGE_FILE_BYTES, PREFLIGHT_WALK_SKIP_DIRS, PREFLIGHT_WALK_SKIP_PATHS, PREFLIGHT_GIT_TIMEOUT_SECONDS, PREFLIGHT_STAT_FILE_CAP, PREFLIGHT_BINARY_LIKE_EXTENSIONS, ASYNC_MCP_SERVER_NAME, ASYNC_DISPATCH_CONTRACT_VERSION, PROJECT_ASYNC_TASK_ROOT;
 var init_constants = __esm({
   "ops/tools/dispatch-core/dispatch-prepare/constants.mjs"() {
@@ -5462,7 +5593,7 @@ var init_constants = __esm({
     ]);
     ASYNC_MCP_SERVER_NAME = "asyncSubagent";
     ASYNC_DISPATCH_CONTRACT_VERSION = DISPATCH_CONTRACT_VERSION;
-    PROJECT_ASYNC_TASK_ROOT = path14.join(ROOT, ".runtime", "cockpit", "async_tasks");
+    PROJECT_ASYNC_TASK_ROOT = path15.join(ROOT, ".runtime", "cockpit", "async_tasks");
   }
 });
 
@@ -5479,7 +5610,7 @@ var init_model_selection_guidance = __esm({
 });
 
 // ops/tools/dispatch-core/seed_minimal.mjs
-import path15 from "node:path";
+import path16 from "node:path";
 function deepCopy(value) {
   return structuredClone(value);
 }
@@ -5491,7 +5622,7 @@ function isEmptyMapping(value) {
   return isRecord(value) && Object.keys(value).length === 0;
 }
 function templateSchema(name) {
-  const file = path15.join(RUNTIME_ROOT, "ops", "templates", name);
+  const file = path16.join(RUNTIME_ROOT, "ops", "templates", name);
   if (!schemaCache.has(file)) schemaCache.set(file, JSON.parse(pyReadText(file)));
   return schemaCache.get(file);
 }
@@ -6013,14 +6144,14 @@ var init_seed = __esm({
 });
 
 // ops/tools/dispatch-core/dispatch-prepare/server.mjs
-import { readFileSync as readFileSync8 } from "node:fs";
-import path16 from "node:path";
+import { readFileSync as readFileSync9 } from "node:fs";
+import path17 from "node:path";
 import process9 from "node:process";
 function configSource(_configPath) {
   return "global";
 }
 function configBase(configPath) {
-  return path16.dirname(String(configPath));
+  return path17.dirname(String(configPath));
 }
 function resolveConfigPath(configPath, value) {
   const raw = String(value || ".");
@@ -6048,7 +6179,7 @@ function _serverFromConfig(configPath) {
 }
 function asyncSubagentServerImpl() {
   const envConfig = pyStrip(String(process9.env.COCKPIT_GLOBAL_CONFIG || ""));
-  const globalConfig = deps.globalConfigPath || (envConfig || path16.join(homeDir(), ".codex", "config.toml"));
+  const globalConfig = deps.globalConfigPath || (envConfig || path17.join(homeDir(), ".codex", "config.toml"));
   return _serverFromConfig(globalConfig);
 }
 function asyncSubagentServer() {
@@ -6083,7 +6214,7 @@ function asyncServerEnv(server) {
 function loadToml(target) {
   let text3;
   try {
-    text3 = readFileSync8(String(target), "utf8");
+    text3 = readFileSync9(String(target), "utf8");
   } catch (error) {
     if (error?.code === "ENOENT") return {};
     throw new ToolError(`cannot parse toml: ${rel(target)}: ${error.message}`);
@@ -6252,9 +6383,9 @@ var init_delivery = __esm({
 });
 
 // ops/tools/dispatch-core/dispatch-prepare/scope.mjs
-import { spawnSync as spawnSync4 } from "node:child_process";
+import { spawnSync as spawnSync5 } from "node:child_process";
 import { existsSync as existsSync7, readdirSync as readdirSync6, statSync as statSync9 } from "node:fs";
-import path17 from "node:path";
+import path18 from "node:path";
 function preflightPathIsSkipped(relative, { directory }) {
   const all = pathParts2(relative);
   const parts = directory ? all : all.slice(0, -1);
@@ -6266,7 +6397,7 @@ function preflightPathIsSkipped(relative, { directory }) {
 function preflightGitRoot(baseRoot) {
   let completed;
   try {
-    completed = spawnSync4("git", ["-C", String(baseRoot), "rev-parse", "--show-toplevel"], {
+    completed = spawnSync5("git", ["-C", String(baseRoot), "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
       timeout: PREFLIGHT_GIT_TIMEOUT_SECONDS * 1e3,
       windowsHide: true
@@ -6291,7 +6422,7 @@ function preflightGitFiles(directory, gitRoot) {
   if (relative.length) argv.push("--", relative.join("/"));
   let completed;
   try {
-    completed = spawnSync4("git", argv, {
+    completed = spawnSync5("git", argv, {
       timeout: PREFLIGHT_GIT_TIMEOUT_SECONDS * 1e3,
       windowsHide: true,
       maxBuffer: 256 * 1024 * 1024
@@ -6306,7 +6437,7 @@ function preflightGitFiles(directory, gitRoot) {
   for (const chunk of raw.toString("utf8").split("\0")) {
     if (!chunk) continue;
     if (preflightPathIsSkipped(chunk, { directory: false })) continue;
-    const candidate = path17.join(String(gitRoot), chunk);
+    const candidate = path18.join(String(gitRoot), chunk);
     try {
       relativePartsOrThrow(resolveLikePython(candidate), resolveLikePython(directory));
     } catch {
@@ -6340,7 +6471,7 @@ function* walkDir(top, onError) {
     const frame = { dirpath, dirnames, filenames };
     yield frame;
     for (let index = frame.dirnames.length - 1; index >= 0; index -= 1) {
-      stack.push(path17.join(dirpath, frame.dirnames[index]));
+      stack.push(path18.join(dirpath, frame.dirnames[index]));
     }
   }
 }
@@ -6370,7 +6501,7 @@ function computeScopePreflight(readPaths, { baseRoot = ROOT } = {}) {
     fileCount += 1;
     totalBytes += size;
     if (size > PREFLIGHT_LARGE_FILE_BYTES) largeFileCount += 1;
-    if (PREFLIGHT_BINARY_LIKE_EXTENSIONS.has(path17.extname(String(target)).toLowerCase())) binaryLikeCount += 1;
+    if (PREFLIGHT_BINARY_LIKE_EXTENSIONS.has(path18.extname(String(target)).toLowerCase())) binaryLikeCount += 1;
     return true;
   };
   const recordWalkError = (error, filename) => {
@@ -6423,7 +6554,7 @@ function computeScopePreflight(readPaths, { baseRoot = ROOT } = {}) {
       );
       let stop = false;
       for (const name of frame.filenames) {
-        if (!accountFile(path17.join(frame.dirpath, name))) {
+        if (!accountFile(path18.join(frame.dirpath, name))) {
           stop = true;
           break;
         }
@@ -6458,11 +6589,11 @@ var init_scope = __esm({
 });
 
 // ops/tools/pi_worker_resources.mjs
-import { spawn } from "node:child_process";
-import { existsSync as existsSync8, mkdirSync as mkdirSync6, readFileSync as readFileSync9, statSync as statSync10, writeFileSync as writeFileSync4 } from "node:fs";
+import { spawn as spawn2 } from "node:child_process";
+import { existsSync as existsSync8, mkdirSync as mkdirSync6, readFileSync as readFileSync10, statSync as statSync10, writeFileSync as writeFileSync4 } from "node:fs";
 import { homedir as homedir3 } from "node:os";
-import path18 from "node:path";
-import { fileURLToPath as fileURLToPath2, pathToFileURL } from "node:url";
+import path19 from "node:path";
+import { fileURLToPath as fileURLToPath3, pathToFileURL } from "node:url";
 function configError(code, file, field, message) {
   return Object.assign(new Error(`${file} ${field}\uFF1A${message}`), { code, file, field });
 }
@@ -6474,9 +6605,9 @@ function matches(value, pattern) {
   return new RegExp(`^${escaped}$`, "i").test(value);
 }
 function packageJsonName(dir) {
-  const file = path18.join(dir, "package.json");
+  const file = path19.join(dir, "package.json");
   if (!existsSync8(file)) return null;
-  const name = JSON.parse(readFileSync9(file, "utf8")).name;
+  const name = JSON.parse(readFileSync10(file, "utf8")).name;
   return typeof name === "string" && name.trim() ? name.trim() : null;
 }
 function resourceName(file) {
@@ -6495,10 +6626,26 @@ function resourceName(file) {
   const extensions = parts.lastIndexOf("extensions");
   if (extensions >= 0 && extensions === last - 1) return parts[last].replace(/\.[^.]+$/, "");
   if (extensions >= 0 && extensions < last) return parts[extensions + 1];
+  for (let end = last; end >= Math.max(1, last - 3); end -= 1) {
+    const dir = parts.slice(0, end).join("/");
+    const name = piPackageName(/^[A-Za-z]:$/.test(parts[0]) ? dir : `/${dir}`);
+    if (name) return name;
+  }
   return parts[last].replace(/\.[^.]+$/, "");
 }
+function piPackageName(dir) {
+  const file = path19.join(dir, "package.json");
+  if (!existsSync8(file)) return null;
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync10(file, "utf8"));
+  } catch {
+    return null;
+  }
+  return manifest?.pi && typeof manifest.name === "string" && manifest.name.trim() ? manifest.name.trim() : null;
+}
 function loadWorkerResourcesConfig(configPath = WORKER_RESOURCES_CONFIG) {
-  const raw = JSON.parse(readFileSync9(configPath, "utf8"));
+  const raw = JSON.parse(readFileSync10(configPath, "utf8"));
   for (const [key, hint] of Object.entries(REMOVED_KEYS)) {
     if (raw[key] !== void 0) throw configError("field_removed", configPath, key, `\u5DF2\u5220\u9664\uFF0C${hint}`);
   }
@@ -6549,12 +6696,12 @@ function accessOf(config, section, name) {
 }
 async function discoverWorkerResources({
   cwd = process.cwd(),
-  agentDir = process.env.PI_CODING_AGENT_DIR || path18.join(homedir3(), ".pi", "agent"),
+  agentDir = process.env.PI_CODING_AGENT_DIR || path19.join(homedir3(), ".pi", "agent"),
   piCli = PI_CLI
 } = {}) {
-  const { DefaultPackageManager, SettingsManager } = await import(pathToFileURL(path18.join(path18.dirname(piCli), "index.js")).href);
-  const settingsPath = path18.join(agentDir, "settings.json");
-  const settings = existsSync8(settingsPath) ? JSON.parse(readFileSync9(settingsPath, "utf8")) : {};
+  const { DefaultPackageManager, SettingsManager } = await import(pathToFileURL(path19.join(path19.dirname(piCli), "index.js")).href);
+  const settingsPath = path19.join(agentDir, "settings.json");
+  const settings = existsSync8(settingsPath) ? JSON.parse(readFileSync10(settingsPath, "utf8")) : {};
   const manager = new DefaultPackageManager({ cwd, agentDir, settingsManager: SettingsManager.inMemory(settings) });
   const missing = [];
   const resolved = await manager.resolve(async (source) => {
@@ -6565,14 +6712,14 @@ async function discoverWorkerResources({
   return { settingsPath, extensions: enabled("extensions"), skills: enabled("skills"), missing };
 }
 function probeRegisteredTools({ extensions, piCli = PI_CLI, cacheFile, cwd = process.cwd() }) {
-  const key = JSON.stringify(["registration-only/v1", path18.resolve(cwd), ...[piCli, ...extensions.map((item) => item.path)].map((file) => [file, existsSync8(file) ? statSync10(file).mtimeMs : 0])]);
-  const cached = existsSync8(cacheFile) ? JSON.parse(readFileSync9(cacheFile, "utf8")) : null;
+  const key = JSON.stringify(["registration-only/v1", path19.resolve(cwd), ...[piCli, ...extensions.map((item) => item.path)].map((file) => [file, existsSync8(file) ? statSync10(file).mtimeMs : 0])]);
+  const cached = existsSync8(cacheFile) ? JSON.parse(readFileSync10(cacheFile, "utf8")) : null;
   if (cached?.key === key) return Promise.resolve(cached.tools);
   const id = `${cacheFile}
 ${key}`;
   if (!probes.has(id)) {
     probes.set(id, runToolProbe(extensions, piCli, cwd).then((tools) => {
-      mkdirSync6(path18.dirname(cacheFile), { recursive: true });
+      mkdirSync6(path19.dirname(cacheFile), { recursive: true });
       writeFileSync4(cacheFile, JSON.stringify({ key, tools }));
       return tools;
     }).finally(() => probes.delete(id)));
@@ -6580,9 +6727,9 @@ ${key}`;
   return probes.get(id);
 }
 function runToolProbe(extensions, piCli, cwd) {
-  const loader = path18.join(path18.dirname(piCli), "core", "extensions", "loader.js");
+  const loader = path19.join(path19.dirname(piCli), "core", "extensions", "loader.js");
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["--input-type=module", "-e", PROBE_SCRIPT], {
+    const child = spawn2(process.execPath, ["--input-type=module", "-e", PROBE_SCRIPT], {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -6629,7 +6776,7 @@ async function resolveWorkerResourceCatalog({
   agentDir,
   configPath = WORKER_RESOURCES_CONFIG,
   piCli = PI_CLI,
-  toolCache = path18.join(cwd, ".runtime", "cockpit", "worker-tool-probe.json"),
+  toolCache = path19.join(cwd, ".runtime", "cockpit", "worker-tool-probe.json"),
   probeTools = probeRegisteredTools
 } = {}) {
   const config = loadWorkerResourcesConfig(configPath);
@@ -6666,11 +6813,11 @@ async function resolveWorkerResourceCatalog({
 var WORKER_RESOURCES_CONFIG, IMPORT_ACCESS, BUILTIN_TOOLS, RUNNER_TOOLS, PI_CLI, PROBE_TIMEOUT_MS, PROBE_SCRIPT, probes, SECTIONS, ENTRY_KEYS, REMOVED_KEYS;
 var init_pi_worker_resources = __esm({
   async "ops/tools/pi_worker_resources.mjs"() {
-    WORKER_RESOURCES_CONFIG = path18.resolve(path18.dirname(fileURLToPath2(import.meta.url)), "../templates/worker-resources.json");
+    WORKER_RESOURCES_CONFIG = path19.resolve(path19.dirname(fileURLToPath3(import.meta.url)), "../templates/worker-resources.json");
     IMPORT_ACCESS = Object.freeze(["off", "optional", "default_on"]);
     BUILTIN_TOOLS = Object.freeze(["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"]);
     RUNNER_TOOLS = Object.freeze(["research_search", "research_fetch", "command_job"]);
-    PI_CLI = path18.join(process.env.APPDATA || path18.join(homedir3(), "AppData", "Roaming"), "npm/node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
+    PI_CLI = path19.join(process.env.APPDATA || path19.join(homedir3(), "AppData", "Roaming"), "npm/node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
     PROBE_TIMEOUT_MS = 6e4;
     PROBE_SCRIPT = `import { pathToFileURL } from "node:url";
 const { loadExtensions } = await import(pathToFileURL(process.env.PI_TOOL_PROBE_LOADER).href);
@@ -6687,7 +6834,7 @@ console.log(JSON.stringify([...new Set(extensions.flatMap((extension) => [...ext
       main_only_skills: '\u6539\u5199\u4E3A skills \u4E2D access = "off" \u7684\u6761\u76EE',
       force_excluded_tools: '\u6539\u5199\u4E3A tools \u4E2D access = "off" \u7684\u6761\u76EE'
     });
-    if (path18.basename(process.argv[1] || "") === "pi_worker_resources.mjs") {
+    if (path19.basename(process.argv[1] || "") === "pi_worker_resources.mjs") {
       if (process.argv.slice(2).some((arg) => arg !== "--json")) {
         console.error("Usage: node ops/tools/pi_worker_resources.mjs --json");
         process.exitCode = 2;
@@ -6737,7 +6884,8 @@ function resolveFromPicks(agentType, capability, options = {}) {
     pick: options.pick || null,
     model: options.model || null,
     effort: options.effort || null,
-    authorization: options.authorization || null
+    authorization: options.authorization || null,
+    pi_details: options.piDetails || null
   });
   return {
     agent_type: agentType,
@@ -6758,7 +6906,8 @@ function resolveRoleModelSelection(agentTypeRaw, modelOverride, effortOverride, 
     model: modelOverride,
     effort: effortOverride,
     pick: options.pick,
-    authorization: options.authorization
+    authorization: options.authorization,
+    piDetails: options.piDetails
   });
 }
 var init_runtime = __esm({
@@ -6883,7 +7032,7 @@ var init_dispatch_prepare = __esm({
 });
 
 // ops/tools/dispatch-core/fleet_manifest_check.mjs
-import path19 from "node:path";
+import path20 from "node:path";
 function compareCodePoints3(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
@@ -6902,7 +7051,7 @@ function deepCopy2(value) {
 }
 function purePathParts(value) {
   const raw = String(value);
-  const root = path19.parse(raw).root;
+  const root = path20.parse(raw).root;
   const rest = raw.slice(root.length).split(/[\\/]+/).filter((part) => part && part !== ".");
   return root ? [root, ...rest] : rest;
 }
@@ -8307,13 +8456,13 @@ var init_file_lock = __esm({
 });
 
 // ops/tools/dispatch-core/fleet/constants.mjs
-import path20 from "node:path";
+import path21 from "node:path";
 var DEFAULT_STATE_ROOT, DEFAULT_ASYNC_TASK_ROOT, TERMINAL_STATES, ASYNC_TERMINAL_STATES, ACTIVE_STATES, FAILED_DEPENDENCY_STATES, SUMMARY_NODE_LIMIT, SUMMARY_EVENT_LIMIT, SAFE_ID_RE, INITIAL_LIVENESS_GRACE_SECONDS, RUN_LOCK_TIMEOUT_SECONDS, LIVENESS_RECHECK_SECONDS, DISPATCH_PREPARE_TIMEOUT_SECONDS, MAX_RUNTIME_EVIDENCE_BYTES, MAX_RUNTIME_USAGE_VALUE, RUNTIME_USAGE_FIELDS, ROUTE_KEYS;
 var init_constants2 = __esm({
   "ops/tools/dispatch-core/fleet/constants.mjs"() {
     init_tool_common();
-    DEFAULT_STATE_ROOT = path20.join(ROOT, ".runtime", "cockpit", "fleet_runs");
-    DEFAULT_ASYNC_TASK_ROOT = path20.join(ROOT, ".runtime", "cockpit", "async_tasks");
+    DEFAULT_STATE_ROOT = path21.join(ROOT, ".runtime", "cockpit", "fleet_runs");
+    DEFAULT_ASYNC_TASK_ROOT = path21.join(ROOT, ".runtime", "cockpit", "async_tasks");
     TERMINAL_STATES = /* @__PURE__ */ new Set(["done", "failed", "cancelled", "blocked", "needs_parent_review"]);
     ASYNC_TERMINAL_STATES = /* @__PURE__ */ new Set(["done", "failed", "cancelled"]);
     ACTIVE_STATES = /* @__PURE__ */ new Set(["submitted", "queued", "running", "cancel_requested"]);
@@ -8349,7 +8498,7 @@ var init_deps2 = __esm({
 
 // ops/tools/dispatch-core/fleet/paths.mjs
 import { mkdirSync as mkdirSync7, writeFileSync as writeFileSync5 } from "node:fs";
-import path21 from "node:path";
+import path22 from "node:path";
 function utcAfter(seconds) {
   const now = utcNow();
   const match = /^(.*?)(?:\.(\d{1,6}))?\+00:00$/.exec(now);
@@ -8373,7 +8522,7 @@ function safeId(value) {
   return cleaned || "fleet-run";
 }
 function writeJson2(target, data) {
-  mkdirSync7(path21.dirname(target), { recursive: true });
+  mkdirSync7(path22.dirname(target), { recursive: true });
   writeFileSync5(target, `${canonicalJson(data)}
 `, "utf8");
   return null;
@@ -8391,28 +8540,28 @@ function stateRoot(value) {
   return requireRepoInternal(resolved, "state root");
 }
 function runDir(root, runId) {
-  return path21.join(pyStr(root), safeId(runId));
+  return path22.join(pyStr(root), safeId(runId));
 }
 function statePath(root, runId) {
-  return path21.join(runDir(root, runId), "state.json");
+  return path22.join(runDir(root, runId), "state.json");
 }
 function manifestSnapshotPath(root, runId) {
-  return path21.join(runDir(root, runId), "manifest.json");
+  return path22.join(runDir(root, runId), "manifest.json");
 }
 function seedPath(root, runId, nodeIdValue) {
-  return path21.join(runDir(root, runId), "seeds", `${safeId(nodeIdValue)}.json`);
+  return path22.join(runDir(root, runId), "seeds", `${safeId(nodeIdValue)}.json`);
 }
 function dependencyResultIndexPath(root, runId, nodeIdValue) {
-  return path21.join(runDir(root, runId), "dependency-results", `${safeId(nodeIdValue)}.json`);
+  return path22.join(runDir(root, runId), "dependency-results", `${safeId(nodeIdValue)}.json`);
 }
 function driverStatusPath(root, runId) {
-  return path21.join(runDir(root, runId), "driver.json");
+  return path22.join(runDir(root, runId), "driver.json");
 }
 function driverLogPath(root, runId) {
-  return path21.join(runDir(root, runId), "driver.log");
+  return path22.join(runDir(root, runId), "driver.log");
 }
 function runLockPath(root, runId) {
-  return path21.join(runDir(root, runId), "scheduler.lock");
+  return path22.join(runDir(root, runId), "scheduler.lock");
 }
 var init_paths = __esm({
   "ops/tools/dispatch-core/fleet/paths.mjs"() {
@@ -8425,7 +8574,7 @@ var init_paths = __esm({
 
 // ops/tools/dispatch-core/fleet/locks.mjs
 import { mkdirSync as mkdirSync8 } from "node:fs";
-import path22 from "node:path";
+import path23 from "node:path";
 import process11 from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 function runMutationLock(root, runId, fn, { timeoutSeconds = RUN_LOCK_TIMEOUT_SECONDS } = {}) {
@@ -8444,7 +8593,7 @@ function runMutationLock(root, runId, fn, { timeoutSeconds = RUN_LOCK_TIMEOUT_SE
 }
 function acquireRunLock(root, runId, timeoutSeconds = RUN_LOCK_TIMEOUT_SECONDS) {
   const target = runLockPath(root, runId);
-  mkdirSync8(path22.dirname(target), { recursive: true });
+  mkdirSync8(path23.dirname(target), { recursive: true });
   const deadline = deps3.monotonic() + Math.max(0, timeoutSeconds);
   for (; ; ) {
     const lock = tryFileLock(target);
@@ -8455,7 +8604,7 @@ function acquireRunLock(root, runId, timeoutSeconds = RUN_LOCK_TIMEOUT_SECONDS) 
 }
 async function acquireRunLockAsync(root, runId, timeoutSeconds = RUN_LOCK_TIMEOUT_SECONDS) {
   const target = runLockPath(root, runId);
-  mkdirSync8(path22.dirname(target), { recursive: true });
+  mkdirSync8(path23.dirname(target), { recursive: true });
   const deadline = deps3.monotonic() + Math.max(0, timeoutSeconds);
   for (; ; ) {
     const lock = tryFileLock(target);
@@ -8640,8 +8789,8 @@ var init_route = __esm({
 });
 
 // ops/tools/dispatch-core/fleet/async-runtime.mjs
-import { existsSync as existsSync9, readdirSync as readdirSync7, readFileSync as readFileSync10, statSync as statSync12 } from "node:fs";
-import path23 from "node:path";
+import { existsSync as existsSync9, readdirSync as readdirSync7, readFileSync as readFileSync11, statSync as statSync12 } from "node:fs";
+import path24 from "node:path";
 function runCommandImpl(cmd, cwd, { stdin = null, timeout = 60 } = {}) {
   const argv = cmd.map((item) => pyStr(item));
   const proc = pySpawnSync(argv[0], argv.slice(1), {
@@ -8682,11 +8831,11 @@ function parseJsonStdout(result, label) {
   return data;
 }
 function nodeTaskRoot(state, node) {
-  const defaultRoot = path23.join(runDir(pyStr(state.state_root), pyStr(state.run_id)), "async_tasks");
+  const defaultRoot = path24.join(runDir(pyStr(state.state_root), pyStr(state.run_id)), "async_tasks");
   return pyStr(node.task_root || defaultRoot);
 }
 function asyncCompletionInbox(taskRoot) {
-  return path23.join(path23.dirname(resolveLikePython(taskRoot)), "async_inbox");
+  return path24.join(path24.dirname(resolveLikePython(taskRoot)), "async_inbox");
 }
 function runtimeTaskDir(node) {
   const lastStatus = isRecord(node.last_status) ? node.last_status : {};
@@ -8705,7 +8854,7 @@ function runtimeTaskDir(node) {
 function readBoundedRuntimeJson(target) {
   try {
     if (!isFile4(target) || statSync12(target).size > MAX_RUNTIME_EVIDENCE_BYTES) return null;
-    const raw = readFileSync10(target);
+    const raw = readFileSync11(target);
     if (raw.length > MAX_RUNTIME_EVIDENCE_BYTES) return null;
     const data = pyJsonLoads(new TextDecoder("utf-8", { fatal: true }).decode(raw));
     return isRecord(data) ? data : null;
@@ -8718,8 +8867,8 @@ function readTerminalRuntimeArtifacts(node) {
   if (taskDir === null) return {};
   const artifacts = {};
   for (const name of ["status.json", "child-task-live.json", "child-task-result.json"]) {
-    const target = resolveLikePython(path23.join(taskDir, name));
-    if (!pySamePath(path23.dirname(target), taskDir)) continue;
+    const target = resolveLikePython(path24.join(taskDir, name));
+    if (!pySamePath(path24.dirname(target), taskDir)) continue;
     const data = readBoundedRuntimeJson(target);
     if (data !== null) artifacts[name] = data;
   }
@@ -8852,7 +9001,7 @@ function readCompletionNotices(taskRoot, taskIds) {
   const names = sortedStrings2(readdirSync7(inbox).filter((name) => name.endsWith(".json")));
   for (const name of names) {
     if (name.endsWith(".stall.json") || name.endsWith(".attention.json")) continue;
-    const noticePath = path23.join(inbox, name);
+    const noticePath = path24.join(inbox, name);
     let notice;
     try {
       notice = pyJsonLoads(pyReadText(noticePath));
@@ -9127,7 +9276,7 @@ var init_async_runtime = __esm({
 
 // ops/tools/dispatch-core/fleet/dispatch.mjs
 import { existsSync as existsSync10, mkdirSync as mkdirSync9, writeFileSync as writeFileSync6 } from "node:fs";
-import path24 from "node:path";
+import path25 from "node:path";
 import process12 from "node:process";
 function commandNodeCwd(spec) {
   const declared = pyStrip(pyStr(spec.cwd || ""));
@@ -9151,7 +9300,7 @@ function commandNodeEnv(state, node, manifestNode) {
   if (nodeDependencyPolicy(manifestNode) === "all_settled") {
     env.FLEET_DEPENDENCY_RESULT_INDEX = api.writeDependencyResultIndex(state, node, manifestNode, entries);
   }
-  if (artifacts.length) env.FLEET_DEPENDENCY_ARTIFACTS = artifacts.join(path24.delimiter);
+  if (artifacts.length) env.FLEET_DEPENDENCY_ARTIFACTS = artifacts.join(path25.delimiter);
   return env;
 }
 function executeCommandNode(state, node, manifestNode, { dryRun = false } = {}) {
@@ -9201,17 +9350,17 @@ function executeCommandNode(state, node, manifestNode, { dryRun = false } = {}) 
   }
   const attempt = positiveInt(node.command_attempts) + 1;
   node.command_attempts = attempt;
-  const logsDir = path24.join(runDir(root, runId), "commands");
+  const logsDir = path25.join(runDir(root, runId), "commands");
   mkdirSync9(logsDir, { recursive: true });
-  const stdoutPath = path24.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.stdout.log`);
-  const stderrPath = path24.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.stderr.log`);
+  const stdoutPath = path25.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.stdout.log`);
+  const stderrPath = path25.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.stderr.log`);
   const startedAt = deps3.monotonic();
   let failure = null;
   let exitCode = null;
   let stdoutText = "";
   let stderrText = "";
-  const workerResultPath = path24.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.process.json`);
-  const workerSpecPath = path24.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.spec.json`);
+  const workerResultPath = path25.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.process.json`);
+  const workerSpecPath = path25.join(logsDir, `${safeId(pyStr(node.id))}.attempt-${attempt}.spec.json`);
   writeJson2(workerSpecPath, { argv, cwd, timeout_ms: timeout * 1e3, cancel_path: api.cancellationPath(root, runId), result_path: workerResultPath });
   const proc = pySpawnSync(process12.execPath, [hostPaths.SCHEDULER_CLI_PATH, "command-worker", "--spec", workerSpecPath], {
     cwd,
@@ -9366,7 +9515,7 @@ function dispatchNodeImpl(state, manifest, node, manifestNode, { dryRun = false 
   writeJson2(seedFile, seed);
   let dispatchCwd = ROOT;
   if (node.isolation === "worktree") {
-    dispatchCwd = dryRun ? path24.join(runDir(root, runId), "worktrees", safeId(pyStr(node.id))) : api.ensureWorktree(state, node);
+    dispatchCwd = dryRun ? path25.join(runDir(root, runId), "worktrees", safeId(pyStr(node.id))) : api.ensureWorktree(state, node);
   }
   const cmd = [
     process12.execPath,
@@ -9520,8 +9669,8 @@ var init_dispatch = __esm({
 });
 
 // ops/tools/dispatch-core/fleet/driver.mjs
-import { closeSync as closeSync5, existsSync as existsSync11, mkdirSync as mkdirSync10, openSync as openSync5, readFileSync as readFileSync11, rmSync as rmSync4 } from "node:fs";
-import path25 from "node:path";
+import { closeSync as closeSync5, existsSync as existsSync11, mkdirSync as mkdirSync10, openSync as openSync5, readFileSync as readFileSync12, rmSync as rmSync4 } from "node:fs";
+import path26 from "node:path";
 import process13 from "node:process";
 import { setTimeout as delay2 } from "node:timers/promises";
 function tickRun(runId, root, dryRun, verbose = false, { forceReconcile = false } = {}) {
@@ -9998,7 +10147,7 @@ async function launchDriverLocked(runId, root, waitMs) {
     };
   }
   const logPath = driverLogPath(resolvedRoot, runId);
-  mkdirSync10(path25.dirname(logPath), { recursive: true });
+  mkdirSync10(path26.dirname(logPath), { recursive: true });
   const command = [
     process13.execPath,
     hostPaths.SCHEDULER_CLI_PATH,
@@ -10036,7 +10185,7 @@ async function launchDriverLocked(runId, root, waitMs) {
     if (existsSync11(statusFile) && loadJson(statusFile).pid === child.pid) break;
   }
   if (failedToStart()) {
-    const tail2 = readFileSync11(logPath, "utf8").slice(-1200);
+    const tail2 = readFileSync12(logPath, "utf8").slice(-1200);
     throw new ToolError(`fleet driver failed to start: ${spawnError?.message || child.signalCode || ""}${tail2}`);
   }
   const latest = existsSync11(statusFile) ? loadJson(statusFile) : {};
@@ -10091,7 +10240,7 @@ var init_driver = __esm({
 
 // ops/tools/dispatch-core/fleet/state.mjs
 import { existsSync as existsSync12, mkdirSync as mkdirSync11, rmSync as rmSync5 } from "node:fs";
-import path26 from "node:path";
+import path27 from "node:path";
 function createInitialState(manifest, manifestPath, runId, root, dispatchOverrides = null) {
   const nodes = [];
   for (const node of Array.isArray(manifest.nodes) ? manifest.nodes : []) {
@@ -10261,7 +10410,7 @@ function startRun(manifestFile, runIdArg, root, force, dispatchOverrides = null)
   if (validation.status !== "ok") {
     throw new ToolError(`fleet manifest failed validation: ${validation.errors.join("; ")}`);
   }
-  const stem = path26.basename(pyStr(manifestFile)).replace(/\.[^.\\/]*$/, "");
+  const stem = path27.basename(pyStr(manifestFile)).replace(/\.[^.\\/]*$/, "");
   const runId = safeId(runIdArg || pyStr(manifest.run_id || stem));
   const directory = runDir(resolvedRoot, runId);
   if (existsSync12(directory) && !force) throw new ToolError(`fleet run already exists: ${rel(directory)}`);
@@ -10327,7 +10476,7 @@ var init_state2 = __esm({
 });
 
 // ops/tools/dispatch-core/fleet/dag.mjs
-import path27 from "node:path";
+import path28 from "node:path";
 function acceptanceLeafExpectedIds(manifestNode) {
   const seed = nodeSeed(manifestNode);
   const contract = isRecord(seed.contract) ? seed.contract : {};
@@ -10383,7 +10532,7 @@ function enforceAcceptanceResultsGate(state, manifestById, { reportRoot = null }
     const taskId = pyStr(node.task_id || "");
     if (!taskId || node.acceptance_results_checked === taskId) continue;
     const slug = pyStr(nodeSeed(manifestNode).slug || "");
-    const reportPath = path27.join(reportRoot || path27.join(ROOT, "notes", "verify"), `${slug}.md`);
+    const reportPath = path28.join(reportRoot || path28.join(ROOT, "notes", "verify"), `${slug}.md`);
     const issue = acceptanceResultsBlockIssue(reportPath, expectedIds);
     node.acceptance_results_checked = taskId;
     if (issue === null) {
@@ -10543,7 +10692,7 @@ var init_shared = __esm({
 
 // ops/tools/dispatch-core/fleet/cancel.mjs
 import { existsSync as existsSync13, writeFileSync as writeFileSync7 } from "node:fs";
-import path28 from "node:path";
+import path29 from "node:path";
 import process14 from "node:process";
 function settleFleetIfNeeded(state) {
   const terminal = (Array.isArray(state.nodes) ? state.nodes : []).every(
@@ -10576,7 +10725,7 @@ function settleFleetIfNeeded(state) {
   return true;
 }
 function cancellationPath(root, runId) {
-  return path28.join(runDir(root, runId), "cancel-request.json");
+  return path29.join(runDir(root, runId), "cancel-request.json");
 }
 function cancelRun(runId, root, reason) {
   const resolvedRoot = requireRepoInternal(root, "state root");
@@ -10606,7 +10755,7 @@ function missingTaskStoppedByReboot(state, node, taskRoot, failures) {
     return false;
   }
   if (lookup?.error !== `Unknown task_id: ${node.task_id}`) return false;
-  if (existsSync13(path28.join(taskRoot, node.task_id))) return false;
+  if (existsSync13(path29.join(taskRoot, node.task_id))) return false;
   const started = (state.events || []).filter((event) => event.type === "agent_started" && event.node_id === node.id && event.task_id === node.task_id);
   if (started.length !== 1) return false;
   const dispatchedAt = Date.parse(started[0].at || started[0].timestamp || "");
@@ -11163,7 +11312,7 @@ var init_review = __esm({
 
 // ops/tools/dispatch-core/fleet/admission.mjs
 import { existsSync as existsSync16 } from "node:fs";
-import path29 from "node:path";
+import path30 from "node:path";
 function activeWriteScopes(state) {
   const scopes = [];
   for (const node of Array.isArray(state.nodes) ? state.nodes : []) {
@@ -11225,8 +11374,8 @@ function budgetAllows(node, state, submittedThisTick) {
   return [true, ""];
 }
 function ensureWorktree(state, node) {
-  const worktreeRoot = path29.join(runDir(pyStr(state.state_root), state.run_id), "worktrees");
-  const worktree = path29.join(worktreeRoot, safeId(pyStr(node.id)));
+  const worktreeRoot = path30.join(runDir(pyStr(state.state_root), state.run_id), "worktrees");
+  const worktree = path30.join(worktreeRoot, safeId(pyStr(node.id)));
   if (node.worktree_path) return pyStr(node.worktree_path);
   if (existsSync16(worktree)) throw new ToolError(`worktree path already exists before dispatch: ${rel(worktree)}`);
   const result = deps3.runCommand(["git", "worktree", "add", "--detach", worktree, "HEAD"], ROOT, { timeout: 120 });
@@ -11447,10 +11596,10 @@ var init_admission = __esm({
 
 // ops/tools/dispatch-core/fleet/pause.mjs
 import { existsSync as existsSync17, rmSync as rmSync6 } from "node:fs";
-import path30 from "node:path";
+import path31 from "node:path";
 import process15 from "node:process";
 function pauseRequestPath(root, runId) {
-  return path30.join(runDir(root, runId), "pause-request.json");
+  return path31.join(runDir(root, runId), "pause-request.json");
 }
 function readPauseIntent(root, runId) {
   const target = pauseRequestPath(root, runId);
@@ -11718,12 +11867,12 @@ var init_pause = __esm({
 });
 
 // ops/tools/dispatch-core/fleet_scheduler.mjs
-import { spawn as spawn2 } from "node:child_process";
+import { spawn as spawn3 } from "node:child_process";
 import { existsSync as existsSync18 } from "node:fs";
-import path31 from "node:path";
+import path32 from "node:path";
 import { uptime } from "node:os";
 import process16 from "node:process";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
+import { fileURLToPath as fileURLToPath4 } from "node:url";
 var SCHEDULER_CLI_PATH, DISPATCH_PREPARE_PATH, ASYNC_SERVICE_PATH;
 var init_fleet_scheduler = __esm({
   async "ops/tools/dispatch-core/fleet_scheduler.mjs"() {
@@ -11751,9 +11900,9 @@ var init_fleet_scheduler = __esm({
     await init_driver();
     await init_summary();
     init_py_utils2();
-    SCHEDULER_CLI_PATH = process16.argv[1] && /^fleet_scheduler(?:\.bundle)?\.mjs$/.test(path31.basename(process16.argv[1])) ? path31.resolve(process16.argv[1]) : path31.join(path31.dirname(path31.dirname(fileURLToPath3(import.meta.url))), "fleet_scheduler.mjs");
-    DISPATCH_PREPARE_PATH = existsSync18(path31.join(RUNTIME_ROOT, "ops/dist/dispatch_prepare.bundle.mjs")) ? path31.join(RUNTIME_ROOT, "ops/dist/dispatch_prepare.bundle.mjs") : path31.join(RUNTIME_ROOT, "ops/tools/dispatch_prepare.mjs");
-    ASYNC_SERVICE_PATH = existsSync18(path31.join(RUNTIME_ROOT, "ops/tools/subagent_service.mjs")) ? path31.join(RUNTIME_ROOT, "ops/tools/subagent_service.mjs") : path31.join(RUNTIME_ROOT, "ops/dist/subagent_service.bundle.mjs");
+    SCHEDULER_CLI_PATH = process16.argv[1] && /^fleet_scheduler(?:\.bundle)?\.mjs$/.test(path32.basename(process16.argv[1])) ? path32.resolve(process16.argv[1]) : path32.join(path32.dirname(path32.dirname(fileURLToPath4(import.meta.url))), "fleet_scheduler.mjs");
+    DISPATCH_PREPARE_PATH = existsSync18(path32.join(RUNTIME_ROOT, "ops/dist/dispatch_prepare.bundle.mjs")) ? path32.join(RUNTIME_ROOT, "ops/dist/dispatch_prepare.bundle.mjs") : path32.join(RUNTIME_ROOT, "ops/tools/dispatch_prepare.mjs");
+    ASYNC_SERVICE_PATH = existsSync18(path32.join(RUNTIME_ROOT, "ops/tools/subagent_service.mjs")) ? path32.join(RUNTIME_ROOT, "ops/tools/subagent_service.mjs") : path32.join(RUNTIME_ROOT, "ops/dist/subagent_service.bundle.mjs");
     hostPaths.SCHEDULER_CLI_PATH = SCHEDULER_CLI_PATH;
     hostPaths.DISPATCH_PREPARE_PATH = DISPATCH_PREPARE_PATH;
     hostPaths.ASYNC_SERVICE_PATH = ASYNC_SERVICE_PATH;
@@ -11764,7 +11913,7 @@ var init_fleet_scheduler = __esm({
       bootTimeMs: () => Date.now() - Math.round(uptime() * 1e3),
       dispatchNode: dispatchNodeImpl,
       launchDriver: launchDriverImpl,
-      spawnDriver: spawn2,
+      spawnDriver: spawn3,
       sleep: sleepSeconds,
       monotonic: monotonicSeconds
     });
@@ -11773,7 +11922,7 @@ var init_fleet_scheduler = __esm({
 
 // ops/tools/fleet_scheduler.selftest.mjs
 import { existsSync as existsSync19, mkdirSync as mkdirSync12, mkdtempSync, rmSync as rmSync7, writeFileSync as writeFileSync8 } from "node:fs";
-import path32 from "node:path";
+import path33 from "node:path";
 import process17 from "node:process";
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
@@ -11847,19 +11996,19 @@ function stPrimaryRun(root, manifestFile, reviewEvidence) {
   const compactOutcomeSample = compactDispatchOutcome(fullOutcomeSample);
   const state = loadJson(statePath(root, started.run_id));
   const scanA = indexNodes(state)["scan-a"];
-  const taskRoot = path32.join(runDir(root, started.run_id), "async_tasks");
+  const taskRoot = path33.join(runDir(root, started.run_id), "async_tasks");
   scanA.state = "running";
   scanA.task_id = "task-self-test-a";
   scanA.task_root = taskRoot;
   const inbox = asyncCompletionInbox(taskRoot);
   mkdirSync12(inbox, { recursive: true });
-  writeJson2(path32.join(inbox, "task-self-test-a.json"), {
+  writeJson2(path33.join(inbox, "task-self-test-a.json"), {
     task_id: "task-self-test-a",
     state: "done",
     write_domain_scope_compliant: false,
     requires_parent_review: true,
-    report_path: path32.join(root, "report.md"),
-    handoff_path: path32.join(root, "handoff.md")
+    report_path: path33.join(root, "report.md"),
+    handoff_path: path33.join(root, "handoff.md")
   });
   const waitedNotice = waitForCompletionNotices(state, 0);
   const timeoutState = {
@@ -11916,23 +12065,23 @@ function stPrimaryRun(root, manifestFile, reviewEvidence) {
 }
 function stBatchGetTelemetry(root) {
   const listRunId = "fleet-scheduler-list-self-test";
-  const listTaskRoot = path32.join(runDir(root, listRunId), "async_tasks");
-  const listTaskDir = path32.join(listTaskRoot, "task-self-test-list");
+  const listTaskRoot = path33.join(runDir(root, listRunId), "async_tasks");
+  const listTaskDir = path33.join(listTaskRoot, "task-self-test-list");
   mkdirSync12(listTaskDir, { recursive: true });
-  writeJson2(path32.join(listTaskDir, "task.json"), {
+  writeJson2(path33.join(listTaskDir, "task.json"), {
     task_id: "task-self-test-list",
     task_root: listTaskRoot,
     task_dir: listTaskDir,
     target_cwd: ROOT
   });
-  writeJson2(path32.join(listTaskDir, "status.json"), {
+  writeJson2(path33.join(listTaskDir, "status.json"), {
     task_id: "task-self-test-list",
     state: "running",
     created_at: utcNow(),
     updated_at: utcNow(),
     requires_parent_review: false
   });
-  writeJson2(path32.join(listTaskDir, "child-task-live.json"), {
+  writeJson2(path33.join(listTaskDir, "child-task-live.json"), {
     rev: 5,
     status: "running",
     phase: "tool_call",
@@ -11989,7 +12138,7 @@ function stCriticality(root) {
       }
     ]
   };
-  const criticalManifestFile = path32.join(root, "critical-manifest.json");
+  const criticalManifestFile = path33.join(root, "critical-manifest.json");
   writeJson2(criticalManifestFile, criticalManifest);
   const criticalStarted = startRun(criticalManifestFile, "", root, false);
   const criticalTicked = tickRun(criticalStarted.run_id, root, true);
@@ -12038,20 +12187,20 @@ function stReviewRequeue(root, manifestFile, reviewEvidence) {
   const requeuedState = loadJson(statePath(root, requeueStarted.run_id));
   const requeuedScanA = indexNodes(requeuedState)["scan-a"];
   const requeueResetVerified = requeuedReview.node_state === "pending" && requeuedScanA.task_id === null && requeuedScanA.dispatch === null && requeuedScanA.last_status === null && requeuedScanA.review_required === false && requeuedScanA.review_decision === null && Array.isArray(requeuedScanA.review_history) && requeuedScanA.review_history[requeuedScanA.review_history.length - 1].decision === "requeued" && requeuedScanA.superseded_task_ids[requeuedScanA.superseded_task_ids.length - 1] === "task-review-requeue";
-  const requeueTaskRoot = path32.join(runDir(root, requeueStarted.run_id), "async_tasks");
+  const requeueTaskRoot = path33.join(runDir(root, requeueStarted.run_id), "async_tasks");
   requeuedScanA.task_root = requeueTaskRoot;
   const requeueInbox = asyncCompletionInbox(requeueTaskRoot);
   mkdirSync12(requeueInbox, { recursive: true });
   requeuedScanA.state = "running";
   requeuedScanA.task_id = "task-review-requeue-fresh";
   requeuedScanA.receipt_task_id = "task-review-requeue-fresh";
-  writeJson2(path32.join(requeueInbox, "task-review-requeue.json"), {
+  writeJson2(path33.join(requeueInbox, "task-review-requeue.json"), {
     task_id: "task-review-requeue",
     state: "done"
   });
   const staleReceiptRefresh = refreshActiveNodes(requeuedState);
   const staleReceiptIgnored = staleReceiptRefresh.inbox === 0 && requeuedScanA.state === "running" && (requeuedScanA.last_status ?? null) === null;
-  writeJson2(path32.join(requeueInbox, "task-review-requeue-fresh.json"), {
+  writeJson2(path33.join(requeueInbox, "task-review-requeue-fresh.json"), {
     task_id: "task-review-requeue-fresh",
     state: "done"
   });
@@ -12169,7 +12318,7 @@ function stDriverOutcomes() {
   };
 }
 function stDependencyArtifacts(root, manifest) {
-  const dependencyReport = path32.join(root, "dependency-report.md");
+  const dependencyReport = path33.join(root, "dependency-report.md");
   writeFileSync8(dependencyReport, "# dependency report\n", "utf8");
   const artifactState = {
     nodes: [
@@ -12210,7 +12359,7 @@ function stDependencyArtifacts(root, manifest) {
   };
 }
 function stAllSettled(root, manifest) {
-  const settledReport = path32.join(root, "settled-partial-report.md");
+  const settledReport = path33.join(root, "settled-partial-report.md");
   writeFileSync8(settledReport, "# partial but consumable\n", "utf8");
   const settledState = {
     state_root: root,
@@ -12302,7 +12451,7 @@ function stAllSettled(root, manifest) {
 function stStateRootGuard() {
   let rejected;
   try {
-    stateRoot(path32.dirname(ROOT));
+    stateRoot(path33.dirname(ROOT));
     rejected = false;
   } catch (error) {
     if (error?.name !== "ToolError") throw error;
@@ -12311,7 +12460,7 @@ function stStateRootGuard() {
   return { external_state_root_rejected: rejected };
 }
 function stAcceptanceGate() {
-  const gateRoot = mkdtempSync(path32.join(selfTestRoot(), "fleet-acceptance-gate-"));
+  const gateRoot = mkdtempSync(path33.join(selfTestRoot(), "fleet-acceptance-gate-"));
   try {
     const gateManifestById = {
       "verify-a": {
@@ -12370,7 +12519,7 @@ function stAcceptanceGate() {
       2
     );
     writeFileSync8(
-      path32.join(gateRoot, "gate-leaf.md"),
+      path33.join(gateRoot, "gate-leaf.md"),
       `# report
 
 \`\`\`json acceptance_results
@@ -12406,7 +12555,7 @@ function stCompaction() {
   };
 }
 function stCommandNodes(root) {
-  const marker = path32.join(root, "command-marker.txt");
+  const marker = path33.join(root, "command-marker.txt");
   const manifest = {
     schema_version: MANIFEST_SCHEMA_VERSION,
     run_id: "fleet-command-self-test",
@@ -12438,7 +12587,7 @@ function stCommandNodes(root) {
       }
     ]
   };
-  const manifestFile = path32.join(root, "command-manifest.json");
+  const manifestFile = path33.join(root, "command-manifest.json");
   writeJson2(manifestFile, manifest);
   const dryStarted = startRun(manifestFile, "fleet-command-dry-self-test", root, false);
   const dryTick = tickRun(dryStarted.run_id, root, true, true);
@@ -12462,12 +12611,12 @@ function stCommandNodes(root) {
       }
     ]
   };
-  const failFile = path32.join(root, "command-fail-manifest.json");
+  const failFile = path33.join(root, "command-fail-manifest.json");
   writeJson2(failFile, failManifest);
   const failStarted = startRun(failFile, "", root, false);
   tickRun(failStarted.run_id, root, false);
   const boom = indexNodes(loadJson(statePath(root, failStarted.run_id))).boom;
-  const dependencyReport = path32.join(root, "command-dependency-report.md");
+  const dependencyReport = path33.join(root, "command-dependency-report.md");
   writeFileSync8(dependencyReport, "# upstream report\n", "utf8");
   const indexState = {
     state_root: root,
@@ -12522,9 +12671,9 @@ function stGateNodes(root) {
       }
     ]
   });
-  const evidence = path32.join(root, "gate-review-evidence.md");
+  const evidence = path33.join(root, "gate-review-evidence.md");
   writeFileSync8(evidence, "# gate decision evidence\n", "utf8");
-  const acceptFile = path32.join(root, "gate-accept-manifest.json");
+  const acceptFile = path33.join(root, "gate-accept-manifest.json");
   writeJson2(acceptFile, gateManifest("fleet-gate-accept-self-test"));
   const started = startRun(acceptFile, "", root, false);
   tickRun(started.run_id, root, false);
@@ -12536,7 +12685,7 @@ function stGateNodes(root) {
   const accepted = reviewRun(started.run_id, root, "confirm", "accepted", evidence, "gate accept");
   tickRun(started.run_id, root, false);
   const finalState = loadJson(statePath(root, started.run_id));
-  const blockFile = path32.join(root, "gate-block-manifest.json");
+  const blockFile = path33.join(root, "gate-block-manifest.json");
   writeJson2(blockFile, gateManifest("fleet-gate-block-self-test"));
   const blockStarted = startRun(blockFile, "", root, false);
   tickRun(blockStarted.run_id, root, false);
@@ -12573,9 +12722,9 @@ function stGateAllSettled(root) {
       }
     ]
   });
-  const evidence = path32.join(root, "gate-all-settled-evidence.md");
+  const evidence = path33.join(root, "gate-all-settled-evidence.md");
   writeFileSync8(evidence, "# gate all_settled evidence\n", "utf8");
-  const acceptFile = path32.join(root, "gate-all-settled-manifest.json");
+  const acceptFile = path33.join(root, "gate-all-settled-manifest.json");
   writeJson2(acceptFile, bypassManifest("fleet-gate-all-settled-self-test"));
   const started = startRun(acceptFile, "", root, false);
   tickRun(started.run_id, root, false);
@@ -12595,7 +12744,7 @@ function stGateAllSettled(root) {
   for (const entry of indexData.dependencies ?? []) entries[entry.node_id] = entry;
   const beforeEntry = entries.before ?? {};
   const confirmEntry = entries.confirm ?? {};
-  const blockFile = path32.join(root, "gate-all-settled-block-manifest.json");
+  const blockFile = path33.join(root, "gate-all-settled-block-manifest.json");
   writeJson2(blockFile, bypassManifest("fleet-gate-all-settled-block-self-test"));
   const blockStarted = startRun(blockFile, "", root, false);
   tickRun(blockStarted.run_id, root, false);
@@ -12630,7 +12779,7 @@ function stDriverChain(root) {
       }
     ]
   };
-  const manifestFile = path32.join(root, "driver-chain-manifest.json");
+  const manifestFile = path33.join(root, "driver-chain-manifest.json");
   writeJson2(manifestFile, manifest);
   const started = startRun(manifestFile, "", root, false);
   const outcome = driveRun(started.run_id, root, 1e3);
@@ -12640,18 +12789,18 @@ function stDriverChain(root) {
   };
 }
 function selfTestRoot() {
-  const testRoot = path32.join(ROOT, ".runtime", "self-tests", "migration-lock");
+  const testRoot = path33.join(ROOT, ".runtime", "self-tests", "migration-lock");
   mkdirSync12(testRoot, { recursive: true });
   return testRoot;
 }
 function selfTest() {
   const manifest = selfTestTwoNodeManifest();
   const testRoot = selfTestRoot();
-  const root = mkdtempSync(path32.join(testRoot, "fleet-self-test-"));
+  const root = mkdtempSync(path33.join(testRoot, "fleet-self-test-"));
   try {
-    const manifestFile = path32.join(root, "manifest.json");
+    const manifestFile = path33.join(root, "manifest.json");
     writeJson2(manifestFile, manifest);
-    const reviewEvidence = path32.join(root, "review-evidence.md");
+    const reviewEvidence = path33.join(root, "review-evidence.md");
     writeFileSync8(reviewEvidence, "self-test review evidence\n", "utf8");
     const scenarios = [
       () => stMutationLock(root),
@@ -12714,8 +12863,8 @@ await init_fleet_scheduler_selftest();
 import process18 from "node:process";
 
 // ops/tools/dispatch-core/fleet-command-worker.mjs
-import { spawn as spawn4 } from "node:child_process";
-import { existsSync as existsSync20, readFileSync as readFileSync12, writeFileSync as writeFileSync9 } from "node:fs";
+import { spawn as spawn5 } from "node:child_process";
+import { existsSync as existsSync20, readFileSync as readFileSync13, writeFileSync as writeFileSync9 } from "node:fs";
 
 // ops/tools/pi_child_bash_process_tree.mjs
 import * as piChildBashProcess from "node:child_process";
@@ -12793,12 +12942,12 @@ function spawnFleetCommand(argv, options) {
       const text3 = String(value);
       return /[\s"^&|<>()%!]/.test(text3) ? `"${text3.replace(/"/g, '\\"')}"` : text3;
     };
-    return spawn4([command, ...args].map(quote).join(" "), [], { ...options, shell: true });
+    return spawn5([command, ...args].map(quote).join(" "), [], { ...options, shell: true });
   }
-  return spawn4(command, args, options);
+  return spawn5(command, args, options);
 }
 async function runFleetCommand(specPath) {
-  const spec = JSON.parse(readFileSync12(specPath, "utf8"));
+  const spec = JSON.parse(readFileSync13(specPath, "utf8"));
   if (existsSync20(spec.cancel_path)) {
     writeFileSync9(spec.result_path, JSON.stringify({ cancelled: true, confirmed: true, not_executed: true }));
     return 0;

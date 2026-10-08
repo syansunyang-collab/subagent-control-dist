@@ -38,11 +38,13 @@
 //           PI_CONTROL_EFFORT、PI_CONTROL_HOME → defaultControlHome()。
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseToml } from "smol-toml";
 import { EFFORT_LEVELS, loadSelectionConfig, modelEfforts, resolveWorkerResources } from "./dispatch-core/model_selection.mjs";
 import { ModelConfigError, resolveModelConfigSources } from "./model_config.mjs";
+import { clampThinkingLevel, piModelDetails } from "./pi_model_catalog.mjs";
 import {
   PI_CHILD_MODEL_EXTENSION_PROFILE,
   resolvePiChildModelExtensions,
@@ -60,6 +62,7 @@ import {
 } from "./pi_worker_resources.mjs";
 import { readCommandJobsState } from "./pi_child_command_jobs.mjs";
 import {
+  PI_CHILD_BASH_DEFAULT_SCRATCH,
   PI_CHILD_BASH_PROCESS_TREE_PROFILE,
   renderPiChildBashProcessTreeSource,
   resolveChildBash,
@@ -222,6 +225,13 @@ const childCwd = path.resolve(childCwdArg || childCwdDefault);
 const cwd = childCwd;
 const outDir = path.resolve(stringArg(args, "outDir", path.join(controlHome, "runs", runId)));
 const artifactsDir = path.resolve(stringArg(args, "artifactsDir", path.join(controlHome, "artifacts", runId)));
+// bash 与后台命令的 TEMP 指向本任务独享的临时目录：首次起命令时才建，写域放行、任务结束清空；基底沿用 09-18 的短路径 scratch。
+const scratchDir = process.platform === "win32"
+  ? path.join(
+    String(process.env.PI_CONTROL_BASH_SCRATCH || "").trim() || PI_CHILD_BASH_DEFAULT_SCRATCH,
+    `${path.basename(outDir)}-${process.pid}`,
+  )
+  : null;
 const livePath = path.join(outDir, "child-task-live.json");
 const liveEventsPath = path.join(outDir, "child-task-events.jsonl");
 const reviewResultPath = path.join(outDir, "review-result.json");
@@ -770,8 +780,11 @@ if (writeDomainSpecPath) {
       taskId: input.task_id || null,
       allowed: input.paths,
       deleteAllowed: Array.isArray(input.delete_paths) ? input.delete_paths : [],
-      // 与提示词口径一致:产物目录与本次证据目录都可写；运行包只读，任何任务都不因 marker/链接自动扩权。
-      roots: [artifactsDir, outDir],
+      // 与提示词口径一致:产物目录、本次证据目录与临时目录都可写可删；运行包只读，任何任务都不因 marker/链接自动扩权。
+      roots: [artifactsDir, outDir, ...(scratchDir ? [scratchDir] : [])],
+      // 申报落在系统临时目录、scratch 基底或目标仓 gitignore 范围内，按临时副作用处理，不计越界。
+      transientRoots: [os.tmpdir(), ...(scratchDir ? [path.dirname(scratchDir)] : [])],
+      gitRoot: targetCwd,
       runtimeRoot: existsSync(path.join(runtimeRoot, "consumer-release-manifest.json")) ? runtimeRoot : null,
       log: writeDomainAuditPath,
       caseInsensitive: input.case_insensitive === true,
@@ -900,6 +913,7 @@ const handoffPrompt = fillTemplate(template, taskText, {
   targetCwd,
   artifactsDir,
   outDir,
+  scratchDir,
   runtimeName: RUNTIME_NAME,
   taskReminder: taskHeadline ? `再次确认：本次任务是「${taskHeadline}」。按任务卡的完成条件全部做完再交付。` : "",
 });
@@ -1366,6 +1380,7 @@ const childExtensionEnv = {
   // 双根显式下传：worker 侧项目面一律以 targetCwd 为本，运行面只读资产以 runtimeRoot 为本。
   SUBAGENT_PROJECT_ROOT: targetCwd,
   SUBAGENT_RUNTIME_ROOT: runtimeRoot,
+  ...(scratchDir ? { PI_CONTROL_BASH_SCRATCH: scratchDir } : {}),
   PI_WORKER_TASK_PACKAGE_PATH: reviewTaskPackage ? reviewTaskPackagePath : "",
   // runner 自有的结果与审计通道先置空，本次启用时再覆盖。子进程环境是 {...process.env, ...本对象}：
   // 子代理在任务里跑测试、测试再拉起 runner 时，不置空就会继承外层任务的通道，把假数据写进外层的
@@ -1849,6 +1864,17 @@ try {
     .call("get_available_thinking_levels", {}, { timeoutMs: Math.max(1, Math.min(COMMAND_TIMEOUT_MS, remainingGlobalMs())) })
     .catch(() => null);
   result.selection.availableThinking = Array.isArray(thinkingLevels?.levels) ? thinkingLevels.levels : [];
+  // 未冻结的选型在此补上 Pi 详情：档位须在「笔记 efforts ∩ Pi 支持档」内，否则在发送任务前失败（冻结选型已在派发时核对）。
+  if (effort && !frozenSelection) {
+    const piDetails = piModelDetails(catalogModels);
+    const efforts = modelEfforts(loadSelectionConfig(modelConfigSources), model, piDetails);
+    if (!efforts.includes(effort)) {
+      result.failure_type = "invalid_model_effort";
+      result.orchestration.failure_type = "invalid_model_effort";
+      throw new Error(`--effort ${effort} 不在 ${model} 的可选档位（${efforts.join("/") || "无"}）内，Pi 会改按 `
+        + `${clampThinkingLevel(piDetails[model]?.thinking_levels ?? [], effort)} 运行；任务未发送，改选档位后重试。`);
+    }
+  }
   if (effort && result.selection.availableThinking.length > 0 && !result.selection.availableThinking.includes(effort)) {
     result.warnings.push(
       `--effort ${effort} 不在 pi thinkingLevel 值域(${result.selection.availableThinking.join(", ")})内;以身份回读结果为准。`,
@@ -2187,6 +2213,14 @@ try {
   }
   result.cleanup.tree_confirmed = treeConfirmed;
   result.cleanup.remaining_pids = [...remainingPids];
+  // 进程树确认回收且不是暂停（续跑可能还要用）时清空本任务临时目录。
+  if (scratchDir && treeConfirmed && externalCancellation.type !== "pause") {
+    try {
+      rmSync(scratchDir, { recursive: true, force: true, maxRetries: 3 });
+    } catch (error) {
+      result.warnings.push(`临时目录未能清空：${scratchDir}：${error?.message || error}`);
+    }
+  }
   result.cleanup.bash_evidence_path = existsSync(bashCleanupPath) ? bashCleanupPath : null;
   // settled/idle 只是 Pi 已停下；收到正常退出且 Bash 后代已确认回收才证明收尾完成。
   if (externalCancellation.requested) {

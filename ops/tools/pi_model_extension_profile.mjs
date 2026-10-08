@@ -1,21 +1,20 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import path from "node:path";
+
+import { registeredPiPackages, resolvePiAgentDir } from "./pi_settings_packages.mjs";
 
 export const PI_CHILD_MODEL_EXTENSION_PROFILE = "pi-child-model-extensions/v1";
 
 // 目录探针及受控 worker 分支显式加载模型适配器；普通 worker 由 pi_worker_resources 目录加载 base 扩展与角色白名单资源。
-const RELATIVE_EXTENSION_PATHS = Object.freeze([
-  "extensions/openai-codex-sol-context-alias.ts",
-  "npm/node_modules/pi-claude-code-provider/extensions/pi-claude-code-provider.ts",
-  "npm/node_modules/@tian.zuo/pi-antigravity/index.ts",
+const EXTENSION_FILES = Object.freeze(["extensions/openai-codex-sol-context-alias.ts"]);
+// 模型适配器包按 settings.json 实际登记的来源取（如 Antigravity 改装本地原生包后随之切换）。
+const MODEL_PROVIDER_PACKAGES = Object.freeze([
+  "pi-claude-code-provider",
+  "@tian.zuo/pi-antigravity",
+  "@local/pi-antigravity-native",
+  "pi-cursor-host",
 ]);
-
-export function resolvePiAgentDir(env = process.env) {
-  const configured = String(env.PI_CODING_AGENT_DIR || "").trim();
-  return path.resolve(configured || path.join(homedir(), ".pi", "agent"));
-}
 
 export function resolvePiChildModelExtensions(options = {}) {
   const env = options.env || process.env;
@@ -23,9 +22,10 @@ export function resolvePiChildModelExtensions(options = {}) {
   if (String(env.PI_CONTROL_PI || "").trim()) return [];
   const exists = options.exists || existsSync;
   const agentDir = path.resolve(options.agentDir || resolvePiAgentDir(env));
-  return RELATIVE_EXTENSION_PATHS
-    .map((relativePath) => path.join(agentDir, ...relativePath.split("/")))
-    .filter((candidate) => exists(candidate));
+  return [
+    ...EXTENSION_FILES.map((relativePath) => path.join(agentDir, ...relativePath.split("/"))),
+    ...registeredPiPackages(agentDir, MODEL_PROVIDER_PACKAGES).flatMap((item) => item.extensions),
+  ].filter((candidate) => exists(candidate));
 }
 
 export function isPiModelExtensionProfileCli(argv1 = process.argv[1]) {

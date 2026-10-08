@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { copyFileSync, existsSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -11,6 +11,7 @@ import { createConfigSync } from "./config-sync.mjs";
 import { patchDocument, TomlWritebackError } from "./toml-blocks.mjs";
 import { loadSelectionConfig, projectCatalog } from "../../../../ops/tools/dispatch-core/model_selection.mjs";
 import { loadWorkerResourcesConfig, resolveWorkerResourceCatalog } from "../../../../ops/tools/pi_worker_resources.mjs";
+import { isPiModel, normalizePiModel, PiCatalogError, probePiModels } from "../../../../ops/tools/pi_model_catalog.mjs";
 
 export const CONFIG_CONTRACT_VERSION = "panel-config/v1";
 
@@ -193,65 +194,6 @@ export function resolveDefaultPiCommand(options = {}) {
   return ["pi"];
 }
 
-export function defaultPiModelProbe({ cwd, piCommand = resolveDefaultPiCommand(), timeoutMs = 30000, signal } = {}) {
-  const invocation = Array.isArray(piCommand) ? piCommand.map(String) : [String(piCommand)];
-  const args = [
-    "--mode", "rpc", "--no-session", "--no-skills", "--no-prompt-templates",
-    "--no-themes", "--no-context-files", "--no-tools",
-  ];
-  const requestId = "agent-panel-model-catalog";
-  return new Promise((resolve, reject) => {
-    const child = spawn(invocation[0], [...invocation.slice(1), ...args], {
-      cwd, windowsHide: true,
-      env: { ...process.env, NO_COLOR: "1", PI_SKIP_VERSION_CHECK: "1" },
-    });
-    const closed = new Promise((resolveClose) => child.once("close", resolveClose));
-    let buffer = "";
-    let bytes = 0;
-    let settled = false;
-    const finish = (error, models) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", abort);
-      // 该进程只查询目录，没有生成或业务任务；完成、超时和服务退出都回收它。
-      child.kill();
-      closed.then(() => { if (error) reject(error); else resolve(models); });
-    };
-    const abort = () => finish(new ConfigError("PI_RPC_CANCELLED", "模型目录查询已取消", { status: 503 }));
-    const timer = setTimeout(() => finish(new ConfigError("PI_RPC_TIMEOUT", `Pi 模型目录查询超过 ${timeoutMs} ms，点击重试目录`, { status: 503 })), timeoutMs);
-    signal?.addEventListener("abort", abort, { once: true });
-    child.once("error", (error) => finish(new ConfigError("PI_RPC_START_FAILED", `Pi 启动失败（${error.code || "unknown"}），检查 Pi 安装路径`, { status: 503 })));
-    child.stdin.on("error", () => finish(new ConfigError("PI_RPC_INPUT_FAILED", "Pi RPC 输入管道已关闭", { status: 503 })));
-    child.stderr.resume(); // 不保留可能含凭据的扩展启动输出。
-    child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
-      if (settled) return;
-      bytes += Buffer.byteLength(chunk);
-      if (bytes > 16 * 1024 * 1024) {
-        finish(new ConfigError("PI_RPC_OUTPUT_LIMIT", "Pi RPC 输出超过 16 MiB", { status: 503 }));
-        return;
-      }
-      buffer += chunk;
-      let newline;
-      while ((newline = buffer.indexOf("\n")) !== -1) {
-        const line = buffer.slice(0, newline).replace(/\r$/, "");
-        buffer = buffer.slice(newline + 1);
-        let record;
-        try { record = JSON.parse(line); } catch { continue; }
-        if (record?.type !== "response" || record.id !== requestId || record.command !== "get_available_models") continue;
-        if (!record.success || !Array.isArray(record.data?.models)) {
-          finish(new ConfigError("PI_RPC_RESPONSE_INVALID", "Pi RPC 拒绝目录查询或返回格式不正确", { status: 503 }));
-        } else finish(null, record.data.models);
-        return;
-      }
-    });
-    child.once("close", (code) => finish(new ConfigError("PI_RPC_RESPONSE_MISSING", `Pi 退出但未返回模型目录（exit=${code}）`, { status: 503 })));
-    if (signal?.aborted) abort();
-    else child.stdin.end(`${JSON.stringify({ id: requestId, type: "get_available_models" })}\n`);
-  });
-}
-
 async function loadPiScopeSdk(piCommand) {
   const invocation = Array.isArray(piCommand) ? piCommand : [piCommand];
   const cli = invocation.find((part) => typeof part === "string" && /\.[cm]?js$/i.test(part));
@@ -284,21 +226,15 @@ export async function scopePiModels(models, { cwd, piCommand = resolveDefaultPiC
 async function loadPiCatalog(probe, scopeModels, controlRoot, piCommand, signal, timeoutMs) {
   let mainModels;
   try {
-    mainModels = await probe({ cwd: controlRoot, profile: "main", piCommand, signal, timeoutMs });
+    mainModels = await probe({ cwd: controlRoot, command: piCommand, signal, timeoutMs });
     if (!Array.isArray(mainModels)) throw new ConfigError("PI_RPC_RESPONSE_INVALID", "Pi RPC 返回的模型目录不是数组");
     mainModels = await scopeModels(mainModels, { cwd: controlRoot, piCommand });
     if (!Array.isArray(mainModels)) throw new ConfigError("PI_MODEL_SCOPE_INVALID", "Pi 白名单解析结果不是数组");
   } catch (error) {
-    return { available: false, error: error instanceof ConfigError ? error.message : "Pi 模型目录读取失败，请重试目录", error_code: error instanceof ConfigError ? error.code : "PI_RPC_FAILED", source: "pi-rpc/get_available_models", models: [] };
+    const known = error instanceof ConfigError || error instanceof PiCatalogError;
+    return { available: false, error: known ? error.message : "Pi 模型目录读取失败，请重试目录", error_code: known ? error.code : "PI_RPC_FAILED", source: "pi-rpc/get_available_models", models: [] };
   }
-  const models = mainModels
-    .filter((model) => model && typeof model.provider === "string" && model.provider && typeof model.id === "string" && model.id)
-    .map((model) => ({
-      ...model,
-      value: `${model.provider}/${model.id}`,
-      name: typeof model.name === "string" && model.name ? model.name : model.id,
-      context_window: Number.isFinite(model.contextWindow) ? model.contextWindow : null,
-    }));
+  const models = mainModels.filter(isPiModel).map((model) => ({ ...model, ...normalizePiModel(model) }));
   return { available: true, error: "", source: "pi-rpc/get_available_models", models };
 }
 
@@ -383,7 +319,7 @@ export function createConfigStore(options = {}) {
   let configSources = null;
   let agentsRoot = path.join(controlRoot, "ops", "agents");
   const pythonCommand = resolvePythonCommand(controlRoot, options.pythonCommand);
-  const piModelProbe = options.piModelProbe || defaultPiModelProbe;
+  const piModelProbe = options.piModelProbe || probePiModels;
   const piModelScope = options.piModelScope || scopePiModels;
   const piCommand = options.piCommand || resolveDefaultPiCommand();
   const faultInjector = options.faultInjector ?? null;

@@ -23,7 +23,7 @@ id = "executability"
 when = "计划可执行性"
 model = "openai-codex/gpt-6-astra"
 effort = "medium"
-effort_min = "off"
+effort_min = "low"
 effort_max = "medium"
 default = true
 
@@ -39,8 +39,8 @@ effort_max = "xhigh"
 id = "small"
 when = "集中小审查"
 model = "openai-codex/gpt-6-luna"
-effort = "medium"
-effort_min = "off"
+effort = "high"
+effort_min = "high"
 effort_max = "max"
 
 [[picks]]
@@ -49,6 +49,6 @@ when = "规格颗粒度与跨面"
 capability = "requirement-granularity-review"
 model = "openai-codex/gpt-6-astra"
 effort = "medium"
-effort_min = "off"
+effort_min = "low"
 effort_max = "medium"
 default = true

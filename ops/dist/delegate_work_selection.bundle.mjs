@@ -942,6 +942,55 @@ var DISPATCH_PREPARE_OVERRIDE_FLAGS = Object.freeze({
   origin_id: "--origin-id"
 });
 
+// ops/tools/pi_model_catalog.mjs
+var THINKING_LEVELS = Object.freeze(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+var REQUEST_ID = "pi-model-catalog";
+var BASE_ARGS = Object.freeze([
+  "--mode",
+  "rpc",
+  "--no-session",
+  "--no-skills",
+  "--no-prompt-templates",
+  "--no-themes",
+  "--no-context-files",
+  "--no-tools"
+]);
+var OUTPUT_LIMIT = 16 * 1024 * 1024;
+var REQUEST_LINE = `${JSON.stringify({ id: REQUEST_ID, type: "get_available_models" })}
+`;
+function supportedThinkingLevels(model) {
+  if (!model?.reasoning) return ["off"];
+  const map = model.thinkingLevelMap ?? {};
+  return THINKING_LEVELS.filter((level) => map[level] !== null && (level === "xhigh" || level === "max" ? map[level] !== void 0 : true));
+}
+function clampThinkingLevel(levels, level) {
+  if (levels.includes(level)) return level;
+  const index = THINKING_LEVELS.indexOf(level);
+  if (index < 0) return levels[0] ?? "off";
+  return THINKING_LEVELS.slice(index + 1).find((item) => levels.includes(item)) ?? THINKING_LEVELS.slice(0, index).reverse().find((item) => levels.includes(item)) ?? "off";
+}
+function valid(model) {
+  return model && typeof model.provider === "string" && model.provider && typeof model.id === "string" && model.id;
+}
+function normalizePiModel(model) {
+  const levels = supportedThinkingLevels(model);
+  const map = model.thinkingLevelMap ?? {};
+  return {
+    value: `${model.provider}/${model.id}`,
+    name: typeof model.name === "string" && model.name ? model.name : model.id,
+    supports_vision: Array.isArray(model.input) ? model.input.includes("image") : null,
+    thinking_levels: levels,
+    level_map: Object.fromEntries(levels.filter((level) => typeof map[level] === "string" && map[level] !== level).map((level) => [level, map[level]])),
+    context_window: Number.isFinite(model.contextWindow) ? model.contextWindow : null
+  };
+}
+function piModelDetails(models) {
+  return Object.fromEntries((Array.isArray(models) ? models : []).filter(valid).map((model) => {
+    const { value, ...detail } = normalizePiModel(model);
+    return [value, detail];
+  }));
+}
+
 // ops/tools/dispatch-core/_tool_common.mjs
 import {
   closeSync,
@@ -1058,11 +1107,11 @@ var ROOT = projectRoot();
 var RUNTIME_ROOT = runtimeRoot();
 
 // ops/tools/dispatch-core/model_selection.mjs
-var EFFORT_LEVELS = Object.freeze(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+var EFFORT_LEVELS = THINKING_LEVELS;
 var ID_RE = /^[a-z0-9_]+$/;
 var ROLE_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*\.toml$/;
 var PICK_KEYS = Object.freeze(["id", "when", "capability", "model", "effort", "effort_min", "effort_max", "default"]);
-var NOTE_KEYS = Object.freeze(["tag", "supports_vision", "description", "efforts", "effort_note"]);
+var NOTE_KEYS = Object.freeze(["tag", "description", "efforts", "effort_note"]);
 var REMOVED_ROLE_KEYS = Object.freeze({
   pi_model: "\u6539\u5199 [[picks]]",
   pi_model_reasoning_effort: "\u6539\u5199 [[picks]]",
@@ -1073,7 +1122,8 @@ var REMOVED_ROLE_KEYS = Object.freeze({
 var REMOVED_NOTE_KEYS = Object.freeze({
   max_effort: "\u53EF\u9009\u6863\u4F4D\u6539\u5199 efforts",
   effort_levels: "\u53EF\u9009\u6863\u4F4D\u6539\u5199 efforts\uFF0C\u5B9E\u6D4B\u8BF4\u660E\u5199 effort_note",
-  status: "\u6A21\u578B\u662F\u5426\u53EF\u7528\u4EE5 Pi \u6A21\u578B\u6E05\u5355\u4E3A\u51C6"
+  status: "\u6A21\u578B\u662F\u5426\u53EF\u7528\u4EE5 Pi \u6A21\u578B\u6E05\u5355\u4E3A\u51C6",
+  supports_vision: "\u56FE\u50CF\u8F93\u5165\u4EE5 Pi \u76EE\u5F55\u4E3A\u51C6\uFF0C\u5220\u9664\u8BE5\u5B57\u6BB5"
 });
 var WORKER_RESOURCE_LISTS = Object.freeze(["tools", "extensions", "skills"]);
 var PROJECT_SKILL_MODES = Object.freeze(["none", "all"]);
@@ -1118,17 +1168,14 @@ function loadNotes(file) {
       if (REMOVED_NOTE_KEYS[key]) fail("field_removed", file, `${at}.${key}`, `\u5DF2\u5220\u9664\uFF0C${REMOVED_NOTE_KEYS[key]}`);
       if (!NOTE_KEYS.includes(key)) fail("field_unknown", file, `${at}.${key}`, `\u672A\u77E5\u5B57\u6BB5\uFF1B\u53EF\u7528\u5B57\u6BB5\uFF1A${NOTE_KEYS.join("\u3001")}`);
     }
-    if (value.supports_vision !== void 0 && typeof value.supports_vision !== "boolean") {
-      fail("value_invalid", file, `${at}.supports_vision`, "\u5FC5\u987B\u662F true \u6216 false");
-    }
-    const efforts = value.efforts ?? EFFORT_LEVELS;
-    const ordered = Array.isArray(efforts) && efforts.length > 0 && efforts.every((item, index) => rank(item) >= 0 && (index === 0 || rank(item) > rank(efforts[index - 1])));
+    const { efforts } = value;
+    const ordered = efforts === void 0 || Array.isArray(efforts) && efforts.length > 0 && efforts.every((item, index) => rank(item) >= 0 && (index === 0 || rank(item) > rank(efforts[index - 1])));
     if (!ordered) fail("value_invalid", file, `${at}.efforts`, `\u5FC5\u987B\u662F ${EFFORT_LEVELS.join(" < ")} \u7684\u975E\u7A7A\u5B50\u96C6\uFF0C\u6309\u6863\u4F4D\u987A\u5E8F\u6392\u5217\u4E14\u4E0D\u91CD\u590D`);
     notes.set(model, {
       tag: optionalText(value.tag, file, `${at}.tag`),
-      supports_vision: value.supports_vision ?? null,
       description: optionalText(value.description, file, `${at}.description`),
-      efforts: [...efforts],
+      // 未写 efforts 时为 null：可选档位取 Pi 支持档（见 modelEfforts）。
+      efforts: efforts === void 0 ? null : [...efforts],
       effort_note: optionalText(value.effort_note, file, `${at}.effort_note`)
     });
   }
@@ -1332,8 +1379,11 @@ function loadSelectionConfig(sources) {
     warnings: routes.filter((route) => route.phase_error).map((route) => ({ code: "dispatch_phase_invalid", file: route.file, field: "dispatch_phase", role: route.role, message: route.phase_error }))
   };
 }
-function modelEfforts(config, model) {
-  return [...effortsOf(config.notes, model)];
+function modelEfforts(config, model, piDetails = null) {
+  const pi = piDetails?.[model]?.thinking_levels;
+  const noted = config.notes.get(model)?.efforts;
+  if (!Array.isArray(pi)) return [...noted ?? EFFORT_LEVELS];
+  return noted ? noted.filter((level) => pi.includes(level)) : [...pi];
 }
 function roleRecord(config, role) {
   const found = config.roles.get(role);
@@ -1412,9 +1462,11 @@ function resolveSelection(config, input = {}) {
   const model = requested.model || row.model;
   const effort = requested.effort || row?.effort;
   if (!effort) throw new ToolError(`${model} \u4E0D\u5728 ${role.role} \u9002\u7528\u4E8E ${capability} \u7684\u63A8\u8350\u884C\u91CC\uFF0C\u5FC5\u987B\u663E\u5F0F\u7ED9\u51FA effort`);
-  const efforts = modelEfforts(config, model);
+  const piLevels = input.pi_details?.[model]?.thinking_levels;
+  const efforts = modelEfforts(config, model, input.pi_details);
   if (!efforts.includes(effort)) {
-    throw new ToolError(`${effort} \u4E0D\u5728 ${model} \u7684\u53EF\u9009\u6863\u4F4D\uFF08${efforts.join("/")}\uFF09\u5185\uFF0C\u6388\u6743\u4E0D\u80FD\u89E3\u9664\uFF1B\u6539\u9009\u6863\u4F4D\u6216\u5230\u6A21\u578B\u6863\u4F4D\u9875\u8C03\u6574`);
+    const piHint = Array.isArray(piLevels) && !piLevels.includes(effort) ? `\uFF1BPi \u4E0D\u652F\u6301 ${effort}\uFF0C\u4F1A\u6539\u6309 ${clampThinkingLevel(piLevels, effort)} \u8FD0\u884C` : "";
+    throw new ToolError(`${effort} \u4E0D\u5728 ${model} \u7684\u53EF\u9009\u6863\u4F4D\uFF08${efforts.join("/") || "\u65E0"}\uFF09\u5185${piHint}\uFF0C\u6388\u6743\u4E0D\u80FD\u89E3\u9664\uFF1B\u6539\u9009\u6863\u4F4D\u6216\u5230\u6A21\u578B\u6863\u4F4D\u9875\u8C03\u6574`);
   }
   const pool = [...new Set(role.picks.map((item) => item.model))];
   const needed = [];
@@ -1459,9 +1511,13 @@ function finish(payload, code = 0) {
   process.stdout.write(JSON.stringify(payload));
   process.exitCode = code;
 }
-function explicitChoice(config, model, effort) {
-  const efforts = modelEfforts(config, model);
-  if (!efforts.includes(effort)) throw new Error(`${effort} \u4E0D\u5728 ${model} \u7684\u53EF\u9009\u6863\u4F4D\uFF08${efforts.join("/")}\uFF09\u5185`);
+function explicitChoice(config, model, effort, piDetails) {
+  const efforts = modelEfforts(config, model, piDetails);
+  if (!efforts.includes(effort)) {
+    const piLevels = piDetails?.[model]?.thinking_levels;
+    const piHint = Array.isArray(piLevels) && !piLevels.includes(effort) ? `\uFF1BPi \u4E0D\u652F\u6301 ${effort}\uFF0C\u4F1A\u6539\u6309 ${clampThinkingLevel(piLevels, effort)} \u8FD0\u884C` : "";
+    throw new Error(`${effort} \u4E0D\u5728 ${model} \u7684\u53EF\u9009\u6863\u4F4D\uFF08${efforts.join("/") || "\u65E0"}\uFF09\u5185${piHint}\uFF1B\u6539\u9009\u6863\u4F4D\u540E\u91CD\u8BD5`);
+  }
   return {
     requested: { pick: null, model, effort },
     pick: null,
@@ -1485,7 +1541,8 @@ try {
   } else {
     const sources = resolveModelConfigSources({ roots: [{ root: runtimeRoot2, source: "runtime_root" }], projectRoot: projectRoot2 });
     const config = loadSelectionConfig(sources);
-    const choice = request.model ? explicitChoice(config, request.model, request.effort) : resolveSelection(config, { role: "delegate-work", capability: "delegate_work", pick: request.pick, effort: request.effort });
+    const piDetails = Array.isArray(request.pi_models) ? piModelDetails(request.pi_models) : null;
+    const choice = request.model ? explicitChoice(config, request.model, request.effort, piDetails) : resolveSelection(config, { role: "delegate-work", capability: "delegate_work", pick: request.pick, effort: request.effort, pi_details: piDetails });
     const slash = choice.resolved_model.indexOf("/");
     if (slash <= 0 || slash === choice.resolved_model.length - 1) {
       finish({ error: { code: "selection_invalid", message: `Model is not provider/id: ${choice.resolved_model}`, alternatives: choices } }, 1);

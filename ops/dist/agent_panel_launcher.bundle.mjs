@@ -453,9 +453,17 @@ function buildRunning({ deps } = {}) {
   const state = resolved.readJson(resolved.paths.buildStatePath);
   return state?.status === "running" && resolved.isProcessAlive(state.pid);
 }
+var BUILD_MANIFEST_LOCATIONS = Object.freeze([
+  ["subagent_service.manifest.json"],
+  ["ops", "dist", "subagent_service.manifest.json"]
+]);
 function runtimeBuildId({ deps } = {}) {
   const resolved = resolveDeps(deps);
-  return resolved.readJson(path2.join(resolved.paths.assetRoot, "ops", "dist", "subagent_service.manifest.json")).build_id ?? null;
+  for (const parts of BUILD_MANIFEST_LOCATIONS) {
+    const buildId = resolved.readJson(path2.join(resolved.paths.assetRoot, ...parts))?.build_id;
+    if (buildId) return buildId;
+  }
+  return null;
 }
 function validManifest({ deps } = {}) {
   const resolved = resolveDeps(deps);

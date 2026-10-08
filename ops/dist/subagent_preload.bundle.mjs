@@ -2322,7 +2322,11 @@ function buildRunning({ deps: deps2 } = {}) {
 }
 function runtimeBuildId({ deps: deps2 } = {}) {
   const resolved = resolveDeps(deps2);
-  return resolved.readJson(path5.join(resolved.paths.assetRoot, "ops", "dist", "subagent_service.manifest.json")).build_id ?? null;
+  for (const parts of BUILD_MANIFEST_LOCATIONS) {
+    const buildId = resolved.readJson(path5.join(resolved.paths.assetRoot, ...parts))?.build_id;
+    if (buildId) return buildId;
+  }
+  return null;
 }
 function validManifest({ deps: deps2 } = {}) {
   const resolved = resolveDeps(deps2);
@@ -2445,7 +2449,7 @@ function acquireBuildLock({ deps: deps2 } = {}) {
   }
   return null;
 }
-var MONITOR_ROOT, PANEL_STATE_ROOT, PANEL_ASSET_ROOT, PANEL_ROOT, SHELL_ROOT, PROJECT_FILE, RUNTIME_ROOT2, ENDPOINT_PATH, MANIFEST_PATH, BUILD_STATE_PATH, BUILD_LOG_PATH, BUILD_LOCK_PATH, SHELL_STATE_PATH, PORT_BASE, PORT_SPAN, DEFAULT_PATHS, STILL_ACTIVE_LOCK_STALE_SECONDS, PANEL_STOP_TIMEOUT_MS;
+var MONITOR_ROOT, PANEL_STATE_ROOT, PANEL_ASSET_ROOT, PANEL_ROOT, SHELL_ROOT, PROJECT_FILE, RUNTIME_ROOT2, ENDPOINT_PATH, MANIFEST_PATH, BUILD_STATE_PATH, BUILD_LOG_PATH, BUILD_LOCK_PATH, SHELL_STATE_PATH, PORT_BASE, PORT_SPAN, DEFAULT_PATHS, STILL_ACTIVE_LOCK_STALE_SECONDS, BUILD_MANIFEST_LOCATIONS, PANEL_STOP_TIMEOUT_MS;
 var init_agent_panel_launcher = __esm({
   "ops/tools/dispatch-core/agent_panel_launcher.mjs"() {
     init_tool_common();
@@ -2482,6 +2486,10 @@ var init_agent_panel_launcher = __esm({
       buildScript: path5.join(PANEL_ASSET_ROOT, "ops", "dist", "agent_panel_launcher.bundle.mjs")
     });
     STILL_ACTIVE_LOCK_STALE_SECONDS = 600;
+    BUILD_MANIFEST_LOCATIONS = Object.freeze([
+      ["subagent_service.manifest.json"],
+      ["ops", "dist", "subagent_service.manifest.json"]
+    ]);
     PANEL_STOP_TIMEOUT_MS = 5e3;
   }
 });
@@ -4775,39 +4783,97 @@ function writeCatalogCacheEntry(cacheFile, key, identity, catalog, { now = Date.
 var CATALOG_CACHE_SCHEMA, CATALOG_CACHE_TTL_MS, CATALOG_CACHE_FILE_NAME, CATALOG_CACHE_MAX_ENTRIES;
 var init_model_catalog_cache = __esm({
   "ops/tools/dispatch-core/model_catalog_cache.mjs"() {
-    CATALOG_CACHE_SCHEMA = 1;
+    CATALOG_CACHE_SCHEMA = 2;
     CATALOG_CACHE_TTL_MS = 60 * 1e3;
     CATALOG_CACHE_FILE_NAME = "pi-child-model-catalog.json";
     CATALOG_CACHE_MAX_ENTRIES = 8;
   }
 });
 
-// ops/tools/pi_model_extension_profile.mjs
-import { existsSync as existsSync3 } from "node:fs";
+// ops/tools/pi_settings_packages.mjs
+import { readFileSync as readFileSync7 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import path10 from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
 function resolvePiAgentDir(env = process.env) {
   const configured = String(env.PI_CODING_AGENT_DIR || "").trim();
   return path10.resolve(configured || path10.join(homedir2(), ".pi", "agent"));
 }
+function readJson2(file) {
+  try {
+    return JSON.parse(readFileSync7(file, "utf8").replace(/^\uFEFF/, ""));
+  } catch {
+    return void 0;
+  }
+}
+function packageRoot(raw, agentDir) {
+  if (raw.startsWith("npm:")) {
+    const name = raw.slice(4).trim().match(/^(@[^/@]+\/[^@]+|[^@]+)/)?.[1];
+    return name ? path10.join(agentDir, "npm", "node_modules", ...name.split("/")) : void 0;
+  }
+  const source = raw.trim();
+  if (source.startsWith("file://")) return fileURLToPath2(source);
+  if (source === "~" || source.startsWith("~/") || source.startsWith("~\\")) return path10.join(homedir2(), source.slice(1));
+  if (/^[a-z][a-z0-9+.-]+:/i.test(source)) return void 0;
+  const shell = process.platform === "win32" && !source.includes("\\") && source.match(WINDOWS_SHELL_PATH);
+  return path10.resolve(agentDir, shell ? `${shell[1].toUpperCase()}:\\${shell[2] ?? ""}` : source);
+}
+function registeredPiPackages(agentDir, names) {
+  const packages = readJson2(path10.join(agentDir, "settings.json"))?.packages;
+  const seen = /* @__PURE__ */ new Set();
+  return (Array.isArray(packages) ? packages : []).flatMap((entry) => {
+    const filter = entry && typeof entry === "object" ? entry : {};
+    const source = typeof entry === "string" ? entry : filter.source;
+    if (typeof source !== "string" || !source.trim()) return [];
+    let root;
+    try {
+      root = packageRoot(source, agentDir);
+    } catch {
+      return [];
+    }
+    if (!root || seen.has(root)) return [];
+    seen.add(root);
+    if (Array.isArray(filter.extensions) ? filter.extensions.length === 0 : filter.autoload === false) return [];
+    const manifest = readJson2(path10.join(root, "package.json"));
+    if (!names.includes(manifest?.name) || !Array.isArray(manifest.pi?.extensions)) return [];
+    const extensions = manifest.pi.extensions.filter((file) => typeof file === "string").map((file) => path10.resolve(root, file));
+    return [{ name: manifest.name, source, extensions }];
+  });
+}
+var WINDOWS_SHELL_PATH;
+var init_pi_settings_packages = __esm({
+  "ops/tools/pi_settings_packages.mjs"() {
+    WINDOWS_SHELL_PATH = /^\/(?:mnt\/|cygdrive\/)?([a-z])(?:\/(.*))?$/i;
+  }
+});
+
+// ops/tools/pi_model_extension_profile.mjs
+import { existsSync as existsSync3 } from "node:fs";
+import path11 from "node:path";
 function resolvePiChildModelExtensions(options = {}) {
   const env = options.env || process.env;
   if (String(env.PI_CONTROL_PI || "").trim()) return [];
   const exists = options.exists || existsSync3;
-  const agentDir = path10.resolve(options.agentDir || resolvePiAgentDir(env));
-  return RELATIVE_EXTENSION_PATHS.map((relativePath) => path10.join(agentDir, ...relativePath.split("/"))).filter((candidate) => exists(candidate));
+  const agentDir = path11.resolve(options.agentDir || resolvePiAgentDir(env));
+  return [
+    ...EXTENSION_FILES.map((relativePath) => path11.join(agentDir, ...relativePath.split("/"))),
+    ...registeredPiPackages(agentDir, MODEL_PROVIDER_PACKAGES).flatMap((item) => item.extensions)
+  ].filter((candidate) => exists(candidate));
 }
 function isPiModelExtensionProfileCli(argv1 = process.argv[1]) {
-  return path10.basename(String(argv1 || "")).toLowerCase() === "pi_model_extension_profile.mjs";
+  return path11.basename(String(argv1 || "")).toLowerCase() === "pi_model_extension_profile.mjs";
 }
-var PI_CHILD_MODEL_EXTENSION_PROFILE, RELATIVE_EXTENSION_PATHS;
+var PI_CHILD_MODEL_EXTENSION_PROFILE, EXTENSION_FILES, MODEL_PROVIDER_PACKAGES;
 var init_pi_model_extension_profile = __esm({
   "ops/tools/pi_model_extension_profile.mjs"() {
+    init_pi_settings_packages();
     PI_CHILD_MODEL_EXTENSION_PROFILE = "pi-child-model-extensions/v1";
-    RELATIVE_EXTENSION_PATHS = Object.freeze([
-      "extensions/openai-codex-sol-context-alias.ts",
-      "npm/node_modules/pi-claude-code-provider/extensions/pi-claude-code-provider.ts",
-      "npm/node_modules/@tian.zuo/pi-antigravity/index.ts"
+    EXTENSION_FILES = Object.freeze(["extensions/openai-codex-sol-context-alias.ts"]);
+    MODEL_PROVIDER_PACKAGES = Object.freeze([
+      "pi-claude-code-provider",
+      "@tian.zuo/pi-antigravity",
+      "@local/pi-antigravity-native",
+      "pi-cursor-host"
     ]);
     if (isPiModelExtensionProfileCli()) {
       if (process.argv.slice(2).some((arg) => arg !== "--json")) {
@@ -4823,6 +4889,104 @@ var init_pi_model_extension_profile = __esm({
   }
 });
 
+// ops/tools/pi_model_catalog.mjs
+import { spawn, spawnSync as spawnSync4 } from "node:child_process";
+function supportedThinkingLevels(model) {
+  if (!model?.reasoning) return ["off"];
+  const map = model.thinkingLevelMap ?? {};
+  return THINKING_LEVELS.filter((level) => map[level] !== null && (level === "xhigh" || level === "max" ? map[level] !== void 0 : true));
+}
+function valid(model) {
+  return model && typeof model.provider === "string" && model.provider && typeof model.id === "string" && model.id;
+}
+function normalizePiModel(model) {
+  const levels = supportedThinkingLevels(model);
+  const map = model.thinkingLevelMap ?? {};
+  return {
+    value: `${model.provider}/${model.id}`,
+    name: typeof model.name === "string" && model.name ? model.name : model.id,
+    supports_vision: Array.isArray(model.input) ? model.input.includes("image") : null,
+    thinking_levels: levels,
+    level_map: Object.fromEntries(levels.filter((level) => typeof map[level] === "string" && map[level] !== level).map((level) => [level, map[level]])),
+    context_window: Number.isFinite(model.contextWindow) ? model.contextWindow : null
+  };
+}
+function piModelDetails(models) {
+  return Object.fromEntries((Array.isArray(models) ? models : []).filter(valid).map((model) => {
+    const { value, ...detail } = normalizePiModel(model);
+    return [value, detail];
+  }));
+}
+function catalogResponse(line) {
+  let record;
+  try {
+    record = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (record?.type !== "response" || record.id !== REQUEST_ID || record.command !== "get_available_models") return null;
+  if (!record.success || !Array.isArray(record.data?.models)) {
+    throw new PiCatalogError("PI_RPC_RESPONSE_INVALID", "Pi RPC \u62D2\u7EDD\u76EE\u5F55\u67E5\u8BE2\u6216\u8FD4\u56DE\u683C\u5F0F\u4E0D\u6B63\u786E");
+  }
+  return record.data.models;
+}
+function invocationOf(command) {
+  return Array.isArray(command) ? command.map(String) : [String(command)];
+}
+function probePiModelsSync({ cwd, command, args = [], timeoutMs = 3e4, runSync = spawnSync4 } = {}) {
+  const invocation = invocationOf(command);
+  const completed = runSync(invocation[0], [...invocation.slice(1), ...BASE_ARGS, ...args], {
+    cwd,
+    input: REQUEST_LINE,
+    encoding: "utf8",
+    timeout: timeoutMs,
+    windowsHide: true,
+    maxBuffer: 4 * OUTPUT_LIMIT,
+    env: childEnv()
+  });
+  for (const line of String(completed.stdout ?? "").split("\n")) {
+    const models = catalogResponse(line.replace(/\r$/, ""));
+    if (models) return models;
+  }
+  if (completed.error) {
+    const timedOut = completed.error.code === "ETIMEDOUT";
+    throw new PiCatalogError(
+      timedOut ? "PI_RPC_TIMEOUT" : "PI_RPC_START_FAILED",
+      timedOut ? `Pi \u6A21\u578B\u76EE\u5F55\u67E5\u8BE2\u8D85\u8FC7 ${timeoutMs} ms` : `Pi \u542F\u52A8\u5931\u8D25\uFF08${completed.error.code || completed.error.message}\uFF09\uFF0C\u68C0\u67E5 Pi \u5B89\u88C5\u8DEF\u5F84`
+    );
+  }
+  const detail = String(completed.stderr || "").trim().slice(0, 500);
+  throw new PiCatalogError("PI_RPC_RESPONSE_MISSING", `Pi \u9000\u51FA\u4F46\u672A\u8FD4\u56DE\u6A21\u578B\u76EE\u5F55\uFF08exit=${completed.status}\uFF09${detail ? `\uFF1A${detail}` : ""}`);
+}
+var THINKING_LEVELS, REQUEST_ID, BASE_ARGS, OUTPUT_LIMIT, REQUEST_LINE, PiCatalogError, childEnv;
+var init_pi_model_catalog = __esm({
+  "ops/tools/pi_model_catalog.mjs"() {
+    THINKING_LEVELS = Object.freeze(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+    REQUEST_ID = "pi-model-catalog";
+    BASE_ARGS = Object.freeze([
+      "--mode",
+      "rpc",
+      "--no-session",
+      "--no-skills",
+      "--no-prompt-templates",
+      "--no-themes",
+      "--no-context-files",
+      "--no-tools"
+    ]);
+    OUTPUT_LIMIT = 16 * 1024 * 1024;
+    REQUEST_LINE = `${JSON.stringify({ id: REQUEST_ID, type: "get_available_models" })}
+`;
+    PiCatalogError = class extends Error {
+      constructor(code, message) {
+        super(message);
+        this.name = "PiCatalogError";
+        this.code = code;
+      }
+    };
+    childEnv = () => ({ ...process.env, NO_COLOR: "1", PI_SKIP_VERSION_CHECK: "1" });
+  }
+});
+
 // ops/tools/dispatch-core/dispatch-prepare/deps.mjs
 var deps;
 var init_deps = __esm({
@@ -4833,7 +4997,7 @@ var init_deps = __esm({
 
 // ops/tools/dispatch-core/dispatch-prepare/py-utils.mjs
 import { statSync as statSync8 } from "node:fs";
-import path11 from "node:path";
+import path12 from "node:path";
 import process7 from "node:process";
 function compareCodePoints2(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -4865,11 +5029,11 @@ function shutilWhich(name) {
     for (const item of names) if (isFile4(item)) return item;
     return null;
   }
-  const dirs = String(process7.env.PATH || "").split(path11.delimiter).filter(Boolean);
+  const dirs = String(process7.env.PATH || "").split(path12.delimiter).filter(Boolean);
   if (isWindows) dirs.unshift(process7.cwd());
   for (const dir of dirs) {
     for (const item of names) {
-      const full = path11.join(dir, item);
+      const full = path12.join(dir, item);
       if (isFile4(full)) return full;
     }
   }
@@ -4899,12 +5063,12 @@ var init_state = __esm({
 });
 
 // ops/tools/dispatch-core/dispatch-prepare/catalog.mjs
-import path12 from "node:path";
+import path13 from "node:path";
 import process8 from "node:process";
 function piChildCatalogCommandImpl() {
   const configured = pyStrip(String(process8.env.PI_CONTROL_PI || ""));
   if (configured) {
-    const suffix = path12.extname(configured).toLowerCase();
+    const suffix = path13.extname(configured).toLowerCase();
     if ([".js", ".mjs", ".cjs"].includes(suffix)) {
       const node = shutilWhich("node");
       return node ? [node, configured] : [];
@@ -4942,77 +5106,31 @@ function piChildModelExtensionProfile() {
 function probePiChildModelCatalogUncachedImpl(targetCwd) {
   const command = piChildCatalogCommand();
   const extensionProfile = piChildModelExtensionProfile();
+  const source = `pi rpc get_available_models (${extensionProfile.profile})`;
+  const unavailable = (error) => ({ status: "unavailable", models: [], model_count: 0, source, error });
   if (!command.length || pyTruthy(extensionProfile.error)) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: "pi --list-models (child model profile)",
-      error: pyTruthy(extensionProfile.error) ? extensionProfile.error : "Pi executable not found"
-    };
+    return unavailable(pyTruthy(extensionProfile.error) ? extensionProfile.error : "Pi executable not found");
   }
-  const argv = [...command.slice(1), "-ne", "-ns", "-np", "--no-themes", "-nc", "--no-approve"];
-  for (const extensionPath of extensionProfile.extensions) argv.push("-e", extensionPath);
-  argv.push("--list-models");
-  const completed = pySpawnSync(command[0], argv, {
-    cwd: String(targetCwd),
-    encoding: "utf8",
-    timeout: 3e4,
-    windowsHide: true,
-    maxBuffer: 64 * 1024 * 1024
-  });
-  if (completed.error) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: pySlice(String(completed.error.message ?? completed.error), 500)
-    };
+  let raw;
+  try {
+    raw = probePiModelsSync({
+      cwd: String(targetCwd),
+      command,
+      args: ["--no-extensions", "--no-approve", ...extensionProfile.extensions.flatMap((extensionPath) => ["-e", extensionPath])],
+      runSync: pySpawnSync
+    });
+  } catch (error) {
+    return unavailable(pySlice(String(error?.message ?? error), 500));
   }
-  const stdout = String(completed.stdout ?? "");
-  const stderr = String(completed.stderr ?? "");
-  if (completed.status !== 0) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: pySlice(pyStrip(stderr || stdout), 500)
-    };
-  }
-  const models = /* @__PURE__ */ new Set();
-  const details = {};
-  for (const line of pySplitLines(stdout)) {
-    const columns = line.split(PY_SPLIT_RE).filter((item) => item !== "");
-    if (columns.length < 2 || columns[0].toLowerCase() === "provider") continue;
-    const provider = pyStrip(columns[0]);
-    const modelId = pyStrip(columns[1]);
-    if (!provider || !modelId) continue;
-    const key = `${provider}/${modelId}`;
-    models.add(key);
-    const images = columns.length >= 6 ? pyStrip(columns[5]).toLowerCase() : "";
-    details[key] = {
-      context_window: columns.length >= 3 ? pyStrip(columns[2]) || null : null,
-      supports_vision: images === "yes" ? true : images === "no" ? false : null
-    };
-  }
-  if (!models.size) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: "Pi returned no parseable child models"
-    };
-  }
-  const ordered = sortedStrings(models);
+  const details = Object.fromEntries(Object.entries(piModelDetails(raw)).filter(([key]) => !DENIED_CHILD_MODEL.test(key)));
+  const ordered = sortedStrings(Object.keys(details));
+  if (!ordered.length) return unavailable("Pi returned no child models");
   return {
     status: "ok",
     models: ordered,
     model_details: Object.fromEntries(ordered.map((key) => [key, details[key]])),
     model_count: ordered.length,
-    source: `pi --list-models (${extensionProfile.profile})`,
+    source,
     error: null
   };
 }
@@ -5023,7 +5141,7 @@ function piChildCatalogCacheIdentity(targetCwd) {
   const agentDir = resolvePiAgentDir();
   const configPaths = [
     ...extensions,
-    ...CHILD_CATALOG_CONFIG_SURFACE.map((name) => path12.join(agentDir, ...String(name).split("/")))
+    ...CHILD_CATALOG_CONFIG_SURFACE.map((name) => path13.join(agentDir, ...String(name).split("/")))
   ];
   return {
     schema: CATALOG_CACHE_SCHEMA,
@@ -5041,8 +5159,8 @@ function piChildCatalogCacheIdentity(targetCwd) {
 }
 function piChildCatalogCacheFile() {
   const override = pyStrip(String(process8.env.SUBAGENT_CATALOG_CACHE_DIR || ""));
-  const cacheDir = override ? resolveLikePython(override) : path12.join(ROOT, ".runtime", "cockpit", "cache");
-  return path12.join(cacheDir, CATALOG_CACHE_FILE_NAME);
+  const cacheDir = override ? resolveLikePython(override) : path13.join(ROOT, ".runtime", "cockpit", "cache");
+  return path13.join(cacheDir, CATALOG_CACHE_FILE_NAME);
 }
 function childCatalogFileLayerEnabled() {
   return deps.probePiChildModelCatalogUncached === probePiChildModelCatalogUncachedImpl;
@@ -5098,16 +5216,19 @@ function probePiChildModelCatalogImpl(targetCwd, options = {}) {
   }
   return probePiChildModelCatalogFresh(key, options);
 }
-var CHILD_CATALOG_CONFIG_SURFACE, cacheServedCatalogs;
+var DENIED_CHILD_MODEL, CHILD_CATALOG_CONFIG_SURFACE, cacheServedCatalogs;
 var init_catalog = __esm({
   "ops/tools/dispatch-core/dispatch-prepare/catalog.mjs"() {
     init_tool_common();
     init_py();
     init_model_catalog_cache();
     init_pi_model_extension_profile();
+    init_pi_model_catalog();
+    init_pi_settings_packages();
     init_deps();
     init_py_utils();
     init_state();
+    DENIED_CHILD_MODEL = /fable/i;
     CHILD_CATALOG_CONFIG_SURFACE = Object.freeze([
       "models.json",
       "models-store.json",
@@ -5119,7 +5240,7 @@ var init_catalog = __esm({
 });
 
 // ops/tools/dispatch-core/dispatch-prepare/constants.mjs
-import path13 from "node:path";
+import path14 from "node:path";
 var PREFLIGHT_BYTES_THRESHOLD, PREFLIGHT_LARGE_FILE_BYTES, ASYNC_MCP_SERVER_NAME, ASYNC_DISPATCH_CONTRACT_VERSION, PROJECT_ASYNC_TASK_ROOT;
 var init_constants = __esm({
   "ops/tools/dispatch-core/dispatch-prepare/constants.mjs"() {
@@ -5129,7 +5250,7 @@ var init_constants = __esm({
     PREFLIGHT_LARGE_FILE_BYTES = 2 * 1024 * 1024;
     ASYNC_MCP_SERVER_NAME = "asyncSubagent";
     ASYNC_DISPATCH_CONTRACT_VERSION = DISPATCH_CONTRACT_VERSION;
-    PROJECT_ASYNC_TASK_ROOT = path13.join(ROOT, ".runtime", "cockpit", "async_tasks");
+    PROJECT_ASYNC_TASK_ROOT = path14.join(ROOT, ".runtime", "cockpit", "async_tasks");
   }
 });
 
@@ -5192,15 +5313,15 @@ var init_dispatch_prepare_argv = __esm({
 });
 
 // ops/tools/dispatch-core/model_selection.mjs
-var EFFORT_LEVELS, PICK_KEYS, NOTE_KEYS, REMOVED_ROLE_KEYS, REMOVED_NOTE_KEYS, WORKER_RESOURCE_LISTS, PROJECT_SKILL_MODES;
+var PICK_KEYS, NOTE_KEYS, REMOVED_ROLE_KEYS, REMOVED_NOTE_KEYS, WORKER_RESOURCE_LISTS, PROJECT_SKILL_MODES;
 var init_model_selection = __esm({
   "ops/tools/dispatch-core/model_selection.mjs"() {
     init_dist();
     init_dispatch_prepare_argv();
+    init_pi_model_catalog();
     init_tool_common();
-    EFFORT_LEVELS = Object.freeze(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
     PICK_KEYS = Object.freeze(["id", "when", "capability", "model", "effort", "effort_min", "effort_max", "default"]);
-    NOTE_KEYS = Object.freeze(["tag", "supports_vision", "description", "efforts", "effort_note"]);
+    NOTE_KEYS = Object.freeze(["tag", "description", "efforts", "effort_note"]);
     REMOVED_ROLE_KEYS = Object.freeze({
       pi_model: "\u6539\u5199 [[picks]]",
       pi_model_reasoning_effort: "\u6539\u5199 [[picks]]",
@@ -5211,7 +5332,8 @@ var init_model_selection = __esm({
     REMOVED_NOTE_KEYS = Object.freeze({
       max_effort: "\u53EF\u9009\u6863\u4F4D\u6539\u5199 efforts",
       effort_levels: "\u53EF\u9009\u6863\u4F4D\u6539\u5199 efforts\uFF0C\u5B9E\u6D4B\u8BF4\u660E\u5199 effort_note",
-      status: "\u6A21\u578B\u662F\u5426\u53EF\u7528\u4EE5 Pi \u6A21\u578B\u6E05\u5355\u4E3A\u51C6"
+      status: "\u6A21\u578B\u662F\u5426\u53EF\u7528\u4EE5 Pi \u6A21\u578B\u6E05\u5355\u4E3A\u51C6",
+      supports_vision: "\u56FE\u50CF\u8F93\u5165\u4EE5 Pi \u76EE\u5F55\u4E3A\u51C6\uFF0C\u5220\u9664\u8BE5\u5B57\u6BB5"
     });
     WORKER_RESOURCE_LISTS = Object.freeze(["tools", "extensions", "skills"]);
     PROJECT_SKILL_MODES = Object.freeze(["none", "all"]);
@@ -5255,14 +5377,14 @@ var init_seed = __esm({
 });
 
 // ops/tools/dispatch-core/dispatch-prepare/server.mjs
-import { readFileSync as readFileSync7 } from "node:fs";
-import path14 from "node:path";
+import { readFileSync as readFileSync8 } from "node:fs";
+import path15 from "node:path";
 import process9 from "node:process";
 function configSource(_configPath) {
   return "global";
 }
 function configBase(configPath) {
-  return path14.dirname(String(configPath));
+  return path15.dirname(String(configPath));
 }
 function resolveConfigPath(configPath, value) {
   const raw = String(value || ".");
@@ -5290,7 +5412,7 @@ function _serverFromConfig(configPath) {
 }
 function asyncSubagentServerImpl() {
   const envConfig = pyStrip(String(process9.env.COCKPIT_GLOBAL_CONFIG || ""));
-  const globalConfig = deps.globalConfigPath || (envConfig || path14.join(homeDir(), ".codex", "config.toml"));
+  const globalConfig = deps.globalConfigPath || (envConfig || path15.join(homeDir(), ".codex", "config.toml"));
   return _serverFromConfig(globalConfig);
 }
 function asyncSubagentServer() {
@@ -5325,7 +5447,7 @@ function asyncServerEnv(server) {
 function loadToml(target) {
   let text2;
   try {
-    text2 = readFileSync7(String(target), "utf8");
+    text2 = readFileSync8(String(target), "utf8");
   } catch (error) {
     if (error?.code === "ENOENT") return {};
     throw new ToolError(`cannot parse toml: ${rel(target)}: ${error.message}`);
@@ -5495,7 +5617,7 @@ var init_delivery = __esm({
 
 // ops/tools/dispatch-core/dispatch-prepare/scope.mjs
 import { existsSync as existsSync4, readdirSync as readdirSync4, statSync as statSync9 } from "node:fs";
-import path15 from "node:path";
+import path16 from "node:path";
 function* walkDir(top, onError) {
   const stack = [String(top)];
   while (stack.length) {
@@ -5516,7 +5638,7 @@ function* walkDir(top, onError) {
     const frame = { dirpath, dirnames, filenames };
     yield frame;
     for (let index = frame.dirnames.length - 1; index >= 0; index -= 1) {
-      stack.push(path15.join(dirpath, frame.dirnames[index]));
+      stack.push(path16.join(dirpath, frame.dirnames[index]));
     }
   }
 }
@@ -5531,11 +5653,11 @@ var init_scope = __esm({
 });
 
 // ops/tools/pi_worker_resources.mjs
-import { spawn } from "node:child_process";
-import { existsSync as existsSync5, mkdirSync as mkdirSync5, readFileSync as readFileSync8, statSync as statSync10, writeFileSync as writeFileSync3 } from "node:fs";
+import { spawn as spawn2 } from "node:child_process";
+import { existsSync as existsSync5, mkdirSync as mkdirSync5, readFileSync as readFileSync9, statSync as statSync10, writeFileSync as writeFileSync3 } from "node:fs";
 import { homedir as homedir3 } from "node:os";
-import path16 from "node:path";
-import { fileURLToPath as fileURLToPath2, pathToFileURL } from "node:url";
+import path17 from "node:path";
+import { fileURLToPath as fileURLToPath3, pathToFileURL } from "node:url";
 function configError(code, file, field, message) {
   return Object.assign(new Error(`${file} ${field}\uFF1A${message}`), { code, file, field });
 }
@@ -5547,9 +5669,9 @@ function matches(value, pattern) {
   return new RegExp(`^${escaped}$`, "i").test(value);
 }
 function packageJsonName(dir) {
-  const file = path16.join(dir, "package.json");
+  const file = path17.join(dir, "package.json");
   if (!existsSync5(file)) return null;
-  const name = JSON.parse(readFileSync8(file, "utf8")).name;
+  const name = JSON.parse(readFileSync9(file, "utf8")).name;
   return typeof name === "string" && name.trim() ? name.trim() : null;
 }
 function resourceName(file) {
@@ -5568,10 +5690,26 @@ function resourceName(file) {
   const extensions = parts.lastIndexOf("extensions");
   if (extensions >= 0 && extensions === last - 1) return parts[last].replace(/\.[^.]+$/, "");
   if (extensions >= 0 && extensions < last) return parts[extensions + 1];
+  for (let end = last; end >= Math.max(1, last - 3); end -= 1) {
+    const dir = parts.slice(0, end).join("/");
+    const name = piPackageName(/^[A-Za-z]:$/.test(parts[0]) ? dir : `/${dir}`);
+    if (name) return name;
+  }
   return parts[last].replace(/\.[^.]+$/, "");
 }
+function piPackageName(dir) {
+  const file = path17.join(dir, "package.json");
+  if (!existsSync5(file)) return null;
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync9(file, "utf8"));
+  } catch {
+    return null;
+  }
+  return manifest?.pi && typeof manifest.name === "string" && manifest.name.trim() ? manifest.name.trim() : null;
+}
 function loadWorkerResourcesConfig(configPath = WORKER_RESOURCES_CONFIG) {
-  const raw = JSON.parse(readFileSync8(configPath, "utf8"));
+  const raw = JSON.parse(readFileSync9(configPath, "utf8"));
   for (const [key, hint] of Object.entries(REMOVED_KEYS)) {
     if (raw[key] !== void 0) throw configError("field_removed", configPath, key, `\u5DF2\u5220\u9664\uFF0C${hint}`);
   }
@@ -5622,12 +5760,12 @@ function accessOf(config, section, name) {
 }
 async function discoverWorkerResources({
   cwd = process.cwd(),
-  agentDir = process.env.PI_CODING_AGENT_DIR || path16.join(homedir3(), ".pi", "agent"),
+  agentDir = process.env.PI_CODING_AGENT_DIR || path17.join(homedir3(), ".pi", "agent"),
   piCli = PI_CLI
 } = {}) {
-  const { DefaultPackageManager, SettingsManager } = await import(pathToFileURL(path16.join(path16.dirname(piCli), "index.js")).href);
-  const settingsPath = path16.join(agentDir, "settings.json");
-  const settings = existsSync5(settingsPath) ? JSON.parse(readFileSync8(settingsPath, "utf8")) : {};
+  const { DefaultPackageManager, SettingsManager } = await import(pathToFileURL(path17.join(path17.dirname(piCli), "index.js")).href);
+  const settingsPath = path17.join(agentDir, "settings.json");
+  const settings = existsSync5(settingsPath) ? JSON.parse(readFileSync9(settingsPath, "utf8")) : {};
   const manager = new DefaultPackageManager({ cwd, agentDir, settingsManager: SettingsManager.inMemory(settings) });
   const missing = [];
   const resolved = await manager.resolve(async (source) => {
@@ -5638,14 +5776,14 @@ async function discoverWorkerResources({
   return { settingsPath, extensions: enabled("extensions"), skills: enabled("skills"), missing };
 }
 function probeRegisteredTools({ extensions, piCli = PI_CLI, cacheFile, cwd = process.cwd() }) {
-  const key = JSON.stringify(["registration-only/v1", path16.resolve(cwd), ...[piCli, ...extensions.map((item) => item.path)].map((file) => [file, existsSync5(file) ? statSync10(file).mtimeMs : 0])]);
-  const cached = existsSync5(cacheFile) ? JSON.parse(readFileSync8(cacheFile, "utf8")) : null;
+  const key = JSON.stringify(["registration-only/v1", path17.resolve(cwd), ...[piCli, ...extensions.map((item) => item.path)].map((file) => [file, existsSync5(file) ? statSync10(file).mtimeMs : 0])]);
+  const cached = existsSync5(cacheFile) ? JSON.parse(readFileSync9(cacheFile, "utf8")) : null;
   if (cached?.key === key) return Promise.resolve(cached.tools);
   const id = `${cacheFile}
 ${key}`;
   if (!probes.has(id)) {
     probes.set(id, runToolProbe(extensions, piCli, cwd).then((tools) => {
-      mkdirSync5(path16.dirname(cacheFile), { recursive: true });
+      mkdirSync5(path17.dirname(cacheFile), { recursive: true });
       writeFileSync3(cacheFile, JSON.stringify({ key, tools }));
       return tools;
     }).finally(() => probes.delete(id)));
@@ -5653,9 +5791,9 @@ ${key}`;
   return probes.get(id);
 }
 function runToolProbe(extensions, piCli, cwd) {
-  const loader = path16.join(path16.dirname(piCli), "core", "extensions", "loader.js");
+  const loader = path17.join(path17.dirname(piCli), "core", "extensions", "loader.js");
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["--input-type=module", "-e", PROBE_SCRIPT], {
+    const child = spawn2(process.execPath, ["--input-type=module", "-e", PROBE_SCRIPT], {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -5702,7 +5840,7 @@ async function resolveWorkerResourceCatalog({
   agentDir,
   configPath = WORKER_RESOURCES_CONFIG,
   piCli = PI_CLI,
-  toolCache = path16.join(cwd, ".runtime", "cockpit", "worker-tool-probe.json"),
+  toolCache = path17.join(cwd, ".runtime", "cockpit", "worker-tool-probe.json"),
   probeTools = probeRegisteredTools
 } = {}) {
   const config = loadWorkerResourcesConfig(configPath);
@@ -5739,11 +5877,11 @@ async function resolveWorkerResourceCatalog({
 var WORKER_RESOURCES_CONFIG, IMPORT_ACCESS, BUILTIN_TOOLS, RUNNER_TOOLS, PI_CLI, PROBE_TIMEOUT_MS, PROBE_SCRIPT, probes, SECTIONS, ENTRY_KEYS, REMOVED_KEYS;
 var init_pi_worker_resources = __esm({
   async "ops/tools/pi_worker_resources.mjs"() {
-    WORKER_RESOURCES_CONFIG = path16.resolve(path16.dirname(fileURLToPath2(import.meta.url)), "../templates/worker-resources.json");
+    WORKER_RESOURCES_CONFIG = path17.resolve(path17.dirname(fileURLToPath3(import.meta.url)), "../templates/worker-resources.json");
     IMPORT_ACCESS = Object.freeze(["off", "optional", "default_on"]);
     BUILTIN_TOOLS = Object.freeze(["read", "bash", "powershell", "edit", "write", "grep", "find", "ls"]);
     RUNNER_TOOLS = Object.freeze(["research_search", "research_fetch", "command_job"]);
-    PI_CLI = path16.join(process.env.APPDATA || path16.join(homedir3(), "AppData", "Roaming"), "npm/node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
+    PI_CLI = path17.join(process.env.APPDATA || path17.join(homedir3(), "AppData", "Roaming"), "npm/node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
     PROBE_TIMEOUT_MS = 6e4;
     PROBE_SCRIPT = `import { pathToFileURL } from "node:url";
 const { loadExtensions } = await import(pathToFileURL(process.env.PI_TOOL_PROBE_LOADER).href);
@@ -5760,7 +5898,7 @@ console.log(JSON.stringify([...new Set(extensions.flatMap((extension) => [...ext
       main_only_skills: '\u6539\u5199\u4E3A skills \u4E2D access = "off" \u7684\u6761\u76EE',
       force_excluded_tools: '\u6539\u5199\u4E3A tools \u4E2D access = "off" \u7684\u6761\u76EE'
     });
-    if (path16.basename(process.argv[1] || "") === "pi_worker_resources.mjs") {
+    if (path17.basename(process.argv[1] || "") === "pi_worker_resources.mjs") {
       if (process.argv.slice(2).some((arg) => arg !== "--json")) {
         console.error("Usage: node ops/tools/pi_worker_resources.mjs --json");
         process.exitCode = 2;
@@ -5927,16 +6065,16 @@ init_tool_common();
 init_subagent_preload();
 await init_dispatch_prepare();
 import { mkdirSync as mkdirSync6, rmSync as rmSync4, writeFileSync as writeFileSync4 } from "node:fs";
-import path17 from "node:path";
+import path18 from "node:path";
 var rolePrompt = (role) => String(agentConfigEntry(role).developer_instructions || "").trim();
 function selfTest() {
-  const fixtureDir = path17.join(ROOT, "tmp", "subagent-preload-self-test");
+  const fixtureDir = path18.join(ROOT, "tmp", "subagent-preload-self-test");
   mkdirSync6(fixtureDir, { recursive: true });
-  const packagePath = path17.join(fixtureDir, "preload-self-test.task-package.json");
-  const evidencePath = path17.join(fixtureDir, "preload-self-test.review-evidence.json");
+  const packagePath = path18.join(fixtureDir, "preload-self-test.task-package.json");
+  const evidencePath = path18.join(fixtureDir, "preload-self-test.review-evidence.json");
   const evidenceText = '{"schema_version": 1, "complete": true, "fact": "mechanical"}\n';
   writeFileSync4(evidencePath, evidenceText, "utf8");
-  const evidenceRelative = path17.relative(ROOT, evidencePath).replaceAll("\\", "/");
+  const evidenceRelative = path18.relative(ROOT, evidencePath).replaceAll("\\", "/");
   const generalCapability = "ops/agent-prompts/general-agent/general-default.md";
   const reviewCommonPrompt = "ops/agent-prompts/_review-common.md";
   const driftCapability = "ops/agent-prompts/semantic-review-agent/contract-drift-inspection.md";
@@ -5960,7 +6098,7 @@ function selfTest() {
   writeFileSync4(packagePath, `${JSON.stringify(pkg, null, 2)}
 `, "utf8");
   const rendered = renderTaskMaterialFile(packagePath);
-  const compactPath = path17.join(fixtureDir, "preload-self-test-evidence-only.task-package.json");
+  const compactPath = path18.join(fixtureDir, "preload-self-test-evidence-only.task-package.json");
   const compactPackage = JSON.parse(JSON.stringify(pkg));
   compactPackage.task_package.agent = {
     role: "semantic-review-agent",
@@ -5989,12 +6127,12 @@ function selfTest() {
   const compactToollessRendered = renderTaskMaterialFile(compactPath);
   delete compactPackage.task_package.tool_contract;
   compactPackage.task_package.scope.read = [];
-  const semanticPath = path17.join(fixtureDir, "preload-self-test-semantic.task-package.json");
+  const semanticPath = path18.join(fixtureDir, "preload-self-test-semantic.task-package.json");
   const semanticPackage = JSON.parse(JSON.stringify(compactPackage));
   semanticPackage.task_package.extensions.review_execution = { profile: "semantic_review_v2", material_mode: "index" };
   writeFileSync4(semanticPath, JSON.stringify(semanticPackage), "utf8");
   const semanticRendered = renderTaskMaterialFile(semanticPath);
-  const acceptancePath = path17.join(fixtureDir, "preload-self-test-acceptance.task-package.json");
+  const acceptancePath = path18.join(fixtureDir, "preload-self-test-acceptance.task-package.json");
   const acceptancePackage = JSON.parse(JSON.stringify(compactPackage));
   acceptancePackage.task_package.agent = {
     role: "verify-agent",
@@ -6009,13 +6147,13 @@ function selfTest() {
   };
   writeFileSync4(acceptancePath, JSON.stringify(acceptancePackage), "utf8");
   const acceptanceRendered = renderTaskMaterialFile(acceptancePath);
-  const consultPath = path17.join(fixtureDir, "preload-self-test-consult.task-package.json");
+  const consultPath = path18.join(fixtureDir, "preload-self-test-consult.task-package.json");
   const consultPackage = JSON.parse(JSON.stringify(pkg));
   consultPackage.task_package.scope.read = [evidenceRelative];
   consultPackage.task_package.tool_contract = { allowed: [] };
   writeFileSync4(consultPath, JSON.stringify(consultPackage), "utf8");
   const consultRendered = renderTaskMaterialFile(consultPath);
-  consultPackage.task_package.scope.read = [path17.relative(ROOT, fixtureDir).replaceAll("\\", "/")];
+  consultPackage.task_package.scope.read = [path18.relative(ROOT, fixtureDir).replaceAll("\\", "/")];
   writeFileSync4(consultPath, JSON.stringify(consultPackage), "utf8");
   const consultDirRendered = renderTaskMaterialFile(consultPath);
   consultPackage.task_package.tool_contract = { allowed: [" read "] };
@@ -6031,7 +6169,7 @@ function selfTest() {
   const checks = {
     render_opens_with_task: rendered.startsWith("\u672C\u6B21\u4EFB\u52A1\uFF1Aself test"),
     render_ends_with_task_card: rendered.includes("## \u4EFB\u52A1\u5361") && rendered.indexOf("## \u4EFB\u52A1\u5361") > rendered.indexOf("## \u80FD\u529B\u89C4\u5219"),
-    render_points_to_package_file: rendered.includes("`preload-self-test`") && rendered.includes(path17.resolve(packagePath)),
+    render_points_to_package_file: rendered.includes("`preload-self-test`") && rendered.includes(path18.resolve(packagePath)),
     render_omits_inline_package: !rendered.includes('"package_id"'),
     render_omits_role_prompt: !rendered.includes(rolePrompt("general-agent")),
     render_omits_manual_handoff_template: !rendered.includes("FINAL_HANDOFF:"),

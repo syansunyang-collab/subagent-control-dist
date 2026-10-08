@@ -8,6 +8,16 @@ import { randomUUID } from "node:crypto";
 import * as piChildBashFs from "node:fs";
 import * as piChildBashProcess from "node:child_process";
 import piChildBashPath from "node:path";
+var PI_CHILD_BASH_DEFAULT_SCRATCH = "C:\\tmp\\agent-scratch";
+function childBashSpawnEnv(baseEnv, platform = process.platform) {
+  const env = { ...baseEnv || {} };
+  if (platform !== "win32") return env;
+  const scratch = String(env.PI_CONTROL_BASH_SCRATCH || "").trim() || PI_CHILD_BASH_DEFAULT_SCRATCH;
+  env.TMP = scratch;
+  env.TEMP = scratch;
+  env.TMPDIR = scratch;
+  return env;
+}
 function resolveChildBash(options = {}) {
   const platform = options.platform || process.platform;
   const env = options.env || process.env;
@@ -353,9 +363,11 @@ function createCommandJobs({
     items.set(job_id, item);
     persist();
     try {
+      const jobEnv = childBashSpawnEnv(env);
+      if (process.platform === "win32" && jobEnv.TEMP) fs.mkdirSync(jobEnv.TEMP, { recursive: true });
       const child = spawnFn(shell, ["-c", command], {
         cwd,
-        env: { ...env, PI_COMMAND_JOB_ID: job_id },
+        env: { ...jobEnv, PI_COMMAND_JOB_ID: job_id },
         detached: process.platform !== "win32",
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true

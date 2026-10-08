@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -96,6 +97,10 @@ export function parseWriteDomainSpec(raw, { baseDir = process.cwd() } = {}) {
   const allowed = list(parsed.allowed ?? [], "allowed");
   const roots = list(parsed.roots ?? [], "roots");
   const deleteAllowed = list(parsed.deleteAllowed ?? [], "deleteAllowed");
+  // 系统临时目录等临时区：申报落在这里只是测试与工具的临时副作用，不算越界；不放宽 write/edit 守门。
+  const transientRoots = list(parsed.transientRoots ?? [], "transientRoots");
+  // 目标仓根：申报落在其 gitignore 范围内（tmp/、.runtime/ 等）同样按临时副作用处理。
+  const gitRoot = parsed.gitRoot ? normalizeDomainPath(parsed.gitRoot, baseDir, caseInsensitive) : null;
   // 只读运行包：即使落在某个已授权根内（例如项目链接指向共享包），常规 write/edit 也必须拒绝。
   const runtimeRoot = parsed.runtimeRoot
     ? normalizeDomainPath(parsed.runtimeRoot, baseDir, caseInsensitive)
@@ -106,6 +111,8 @@ export function parseWriteDomainSpec(raw, { baseDir = process.cwd() } = {}) {
     allowed,
     roots,
     deleteAllowed,
+    transientRoots,
+    gitRoot,
     runtimeRoot,
     log,
     caseInsensitive,
@@ -132,8 +139,9 @@ export function evaluateWriteDomain(resolvedPath, spec) {
   return evaluatePathSet(resolvedPath, [...spec.allowed, ...spec.roots]);
 }
 
+// 任务自有目录（产物、证据、临时目录）可写也可删；业务文件仍只按 scope.delete 授权删除。
 export function evaluateDeleteDomain(resolvedPath, spec) {
-  return evaluatePathSet(resolvedPath, spec.deleteAllowed || []);
+  return evaluatePathSet(resolvedPath, [...(spec.deleteAllowed || []), ...(spec.roots || [])]);
 }
 
 export function guardToolCall(event, cwd, spec) {
@@ -168,11 +176,12 @@ function appendAuditRecord(logPath, record) {
   }
 }
 
-function blockedReason(record) {
+function blockedReason(record, spec) {
   return [
     `write domain violation: ${record.tool} target ${record.raw_path ?? "(missing path)"} is outside this task's declared write scope.`,
-    "Use a path listed in task_package scope.write/write_extra, the task artifacts directory, or the evidence directory; scope.delete does not authorize write/edit.",
-    "Do not retry the same path through another tool; report the required scope change to the parent.",
+    "Write business changes only to paths listed in task_package scope.write/write_extra;",
+    `scripts, fixtures, logs and temporary files go under this task's own directories, where creating and deleting are free: ${(spec.roots || []).join(", ")}.`,
+    "scope.delete does not authorize write/edit. Do not retry the same path through another tool; report the required scope change to the parent.",
   ].join(" ");
 }
 
@@ -197,7 +206,7 @@ function installPiWriteDomain(pi) {
         reason: `write domain audit unavailable; ${record.tool} was blocked before execution: ${logError}`,
       };
     }
-    return record.allowed ? undefined : { block: true, reason: blockedReason(record) };
+    return record.allowed ? undefined : { block: true, reason: blockedReason(record, spec) };
   });
 }
 
@@ -279,17 +288,36 @@ export function mergeWriteDomainEvidence(audit, submission = {}) {
   };
 }
 
+// 目标仓 gitignore 命中的路径集合；git 不可用或出错时一个都不豁免。已跟踪文件不算被忽略（不加 --no-index）。
+function gitIgnoredPaths(gitRoot, candidates) {
+  const inside = [...new Set(candidates)].filter((candidate) => gitRoot && candidate !== gitRoot && isInsidePath(gitRoot, candidate));
+  if (!inside.length) return new Set();
+  const relative = inside.map((candidate) => path.relative(gitRoot, candidate).split(path.sep).join("/"));
+  const run = spawnSync("git", ["check-ignore", "--stdin", "-z"], {
+    cwd: gitRoot,
+    input: `${relative.join("\0")}\0`,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (run.status !== 0) return new Set();
+  const hits = new Set(String(run.stdout || "").split("\0").filter(Boolean));
+  return new Set(inside.filter((_, index) => hits.has(relative[index])));
+}
+
+// 申报里落在写域内、临时区或目标仓 gitignore 范围内的路径不算越界：后两类是测试与工具的临时副作用。
 export function evaluateReportedWriteScope(scopeActual, spec, baseDirs = []) {
   const roots = [...new Set(baseDirs.map((item) => String(item || "")).filter(Boolean))];
-  const violations = [];
+  const pending = [];
   for (const field of ["written", "deleted"]) {
     const values = Array.isArray(scopeActual?.[field]) ? scopeActual[field] : [];
     const evaluate = field === "deleted" ? evaluateDeleteDomain : evaluateWriteDomain;
     for (const rawPath of values) {
       const candidates = roots.map((root) => normalizeDomainPath(rawPath, root, spec.caseInsensitive)).filter(Boolean);
-      const matched = candidates.some((candidate) => evaluate(candidate, spec).allowed);
-      if (!matched) violations.push({ field, raw_path: String(rawPath), resolved_candidates: candidates });
+      if (candidates.some((candidate) => evaluate(candidate, spec).allowed)) continue;
+      if (candidates.some((candidate) => evaluatePathSet(candidate, spec.transientRoots || []).allowed)) continue;
+      pending.push({ field, raw_path: String(rawPath), resolved_candidates: candidates });
     }
   }
-  return violations;
+  const ignored = gitIgnoredPaths(spec.gitRoot, pending.flatMap((item) => item.resolved_candidates));
+  return pending.filter((item) => !item.resolved_candidates.some((candidate) => ignored.has(candidate)));
 }

@@ -7,14 +7,15 @@ import path from "node:path";
 import { parse as parseToml } from "smol-toml";
 
 import { AUTHORIZATION_OVERRIDES } from "../_dispatch-prepare-argv.mjs";
+import { clampThinkingLevel, THINKING_LEVELS } from "../pi_model_catalog.mjs";
 import { ToolError } from "./_tool_common.mjs";
 
-export const EFFORT_LEVELS = Object.freeze(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+export const EFFORT_LEVELS = THINKING_LEVELS;
 
 const ID_RE = /^[a-z0-9_]+$/;
 const ROLE_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*\.toml$/;
 const PICK_KEYS = Object.freeze(["id", "when", "capability", "model", "effort", "effort_min", "effort_max", "default"]);
-const NOTE_KEYS = Object.freeze(["tag", "supports_vision", "description", "efforts", "effort_note"]);
+const NOTE_KEYS = Object.freeze(["tag", "description", "efforts", "effort_note"]);
 const REMOVED_ROLE_KEYS = Object.freeze({
   pi_model: "改写 [[picks]]",
   pi_model_reasoning_effort: "改写 [[picks]]",
@@ -26,6 +27,7 @@ const REMOVED_NOTE_KEYS = Object.freeze({
   max_effort: "可选档位改写 efforts",
   effort_levels: "可选档位改写 efforts，实测说明写 effort_note",
   status: "模型是否可用以 Pi 模型清单为准",
+  supports_vision: "图像输入以 Pi 目录为准，删除该字段",
 });
 const WORKER_RESOURCE_LISTS = Object.freeze(["tools", "extensions", "skills"]);
 const PROJECT_SKILL_MODES = Object.freeze(["none", "all"]);
@@ -78,18 +80,15 @@ function loadNotes(file) {
       if (REMOVED_NOTE_KEYS[key]) fail("field_removed", file, `${at}.${key}`, `已删除，${REMOVED_NOTE_KEYS[key]}`);
       if (!NOTE_KEYS.includes(key)) fail("field_unknown", file, `${at}.${key}`, `未知字段；可用字段：${NOTE_KEYS.join("、")}`);
     }
-    if (value.supports_vision !== undefined && typeof value.supports_vision !== "boolean") {
-      fail("value_invalid", file, `${at}.supports_vision`, "必须是 true 或 false");
-    }
-    const efforts = value.efforts ?? EFFORT_LEVELS;
-    const ordered = Array.isArray(efforts) && efforts.length > 0
-      && efforts.every((item, index) => rank(item) >= 0 && (index === 0 || rank(item) > rank(efforts[index - 1])));
+    const { efforts } = value;
+    const ordered = efforts === undefined || (Array.isArray(efforts) && efforts.length > 0
+      && efforts.every((item, index) => rank(item) >= 0 && (index === 0 || rank(item) > rank(efforts[index - 1]))));
     if (!ordered) fail("value_invalid", file, `${at}.efforts`, `必须是 ${EFFORT_LEVELS.join(" < ")} 的非空子集，按档位顺序排列且不重复`);
     notes.set(model, {
       tag: optionalText(value.tag, file, `${at}.tag`),
-      supports_vision: value.supports_vision ?? null,
       description: optionalText(value.description, file, `${at}.description`),
-      efforts: [...efforts],
+      // 未写 efforts 时为 null：可选档位取 Pi 支持档（见 modelEfforts）。
+      efforts: efforts === undefined ? null : [...efforts],
       effort_note: optionalText(value.effort_note, file, `${at}.effort_note`),
     });
   }
@@ -322,9 +321,16 @@ export function loadSelectionConfig(sources) {
   };
 }
 
-/** 模型的可选档位：模型档位页维护；没有笔记或笔记未写 efforts 时七档全开。 */
-export function modelEfforts(config, model) {
-  return [...effortsOf(config.notes, model)];
+/**
+ * 模型的可选档位 = 笔记 efforts ∩ Pi 支持档；笔记未写 efforts 时取 Pi 支持档。
+ * piDetails 是 Pi 目录详情 { "provider/id": { thinking_levels, ... } }；取不到目录或模型不在目录时
+ * 退回笔记 efforts，再无则七档。
+ */
+export function modelEfforts(config, model, piDetails = null) {
+  const pi = piDetails?.[model]?.thinking_levels;
+  const noted = config.notes.get(model)?.efforts;
+  if (!Array.isArray(pi)) return [...(noted ?? EFFORT_LEVELS)];
+  return noted ? noted.filter((level) => pi.includes(level)) : [...pi];
 }
 
 function roleRecord(config, role) {
@@ -397,7 +403,7 @@ function readAuthorization(value) {
 /**
  * pick 与 model 至多给一个，effort 可显式给出；都不给时取本任务类型的有效默认行。
  * 只给 model 时先看有效默认行是否同模型，再按顺序找本任务类型适用的同模型行；找不到须显式给 effort。
- * 模型可选档位之外直接拒绝；越出所在行 [effort_min, effort_max] 需授权 effort_range；
+ * 模型可选档位之外直接拒绝（input.pi_details 给出 Pi 目录详情时按笔记 ∩ Pi 支持档）；越出所在行 [effort_min, effort_max] 需授权 effort_range；
  * 模型不在该角色任何一行里需授权 outside_pool。授权只对本次 model + effort 生效。
  */
 export function resolveSelection(config, input = {}) {
@@ -427,9 +433,11 @@ export function resolveSelection(config, input = {}) {
   const model = requested.model || row.model;
   const effort = requested.effort || row?.effort;
   if (!effort) throw new ToolError(`${model} 不在 ${role.role} 适用于 ${capability} 的推荐行里，必须显式给出 effort`);
-  const efforts = modelEfforts(config, model);
+  const piLevels = input.pi_details?.[model]?.thinking_levels;
+  const efforts = modelEfforts(config, model, input.pi_details);
   if (!efforts.includes(effort)) {
-    throw new ToolError(`${effort} 不在 ${model} 的可选档位（${efforts.join("/")}）内，授权不能解除；改选档位或到模型档位页调整`);
+    const piHint = Array.isArray(piLevels) && !piLevels.includes(effort) ? `；Pi 不支持 ${effort}，会改按 ${clampThinkingLevel(piLevels, effort)} 运行` : "";
+    throw new ToolError(`${effort} 不在 ${model} 的可选档位（${efforts.join("/") || "无"}）内${piHint}，授权不能解除；改选档位或到模型档位页调整`);
   }
   const pool = [...new Set(role.picks.map((item) => item.model))];
   const needed = [];
@@ -478,21 +486,25 @@ function capabilityRow(role, id) {
 }
 
 /**
- * 面板、list 与模板共用的只读投影。piModels 为当前 Pi 模型清单（string[]），取不到目录时为 null；
- * role / capability 只给 list 与模板收窄用。
+ * 面板、list 与模板共用的只读投影。piDetails 为当前 Pi 目录 { "provider/id": { supports_vision, thinking_levels,
+ * level_map } }（键即 Pi 模型清单），取不到目录时为 null；role / capability 只给 list 与模板收窄用。
+ * 模型的 supports_vision、pi_levels、level_map 来自 Pi，不在 Pi 目录时为 null。
  */
-export function projectCatalog(config, { piModels = null, role: roleFilter = "", capability = "" } = {}) {
-  const pi = piModels ? new Set(piModels) : null;
+export function projectCatalog(config, { piDetails = null, role: roleFilter = "", capability = "" } = {}) {
+  const pi = piDetails ? new Set(Object.keys(piDetails)) : null;
   const picked = [...config.roles.values()].flatMap((role) => role.picks.map((pick) => pick.model));
-  const models = [...new Set([...(piModels ?? []), ...config.notes.keys(), ...picked])].map((model) => {
+  const models = [...new Set([...(pi ?? []), ...config.notes.keys(), ...picked])].map((model) => {
     const note = config.notes.get(model);
+    const detail = piDetails?.[model];
     return {
       model,
       tag: note?.tag ?? "",
-      supports_vision: note?.supports_vision ?? null,
-      efforts: modelEfforts(config, model),
+      supports_vision: detail?.supports_vision ?? null,
+      efforts: modelEfforts(config, model, piDetails),
       effort_note: note?.effort_note ?? "",
       in_pi: pi ? pi.has(model) : null,
+      pi_levels: Array.isArray(detail?.thinking_levels) ? [...detail.thinking_levels] : null,
+      level_map: Array.isArray(detail?.thinking_levels) ? { ...detail.level_map } : null,
     };
   });
   const warnings = [...config.warnings];

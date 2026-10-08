@@ -485,6 +485,7 @@ if (process.argv[1] && path.basename(process.argv[1]).toLowerCase() === "task_re
 }
 
 // ops/tools/pi_write_domain_extension.mjs
+import { spawnSync as spawnSync2 } from "node:child_process";
 import { appendFileSync, existsSync as existsSync2, mkdirSync as mkdirSync2, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import path2 from "node:path";
@@ -573,6 +574,8 @@ function parseWriteDomainSpec(raw, { baseDir = process.cwd() } = {}) {
   const allowed = list(parsed.allowed ?? [], "allowed");
   const roots = list(parsed.roots ?? [], "roots");
   const deleteAllowed = list(parsed.deleteAllowed ?? [], "deleteAllowed");
+  const transientRoots = list(parsed.transientRoots ?? [], "transientRoots");
+  const gitRoot = parsed.gitRoot ? normalizeDomainPath(parsed.gitRoot, baseDir, caseInsensitive) : null;
   const runtimeRoot = parsed.runtimeRoot ? normalizeDomainPath(parsed.runtimeRoot, baseDir, caseInsensitive) : null;
   return {
     version,
@@ -580,6 +583,8 @@ function parseWriteDomainSpec(raw, { baseDir = process.cwd() } = {}) {
     allowed,
     roots,
     deleteAllowed,
+    transientRoots,
+    gitRoot,
     runtimeRoot,
     log,
     caseInsensitive
@@ -599,7 +604,7 @@ function evaluateWriteDomain(resolvedPath, spec) {
   return evaluatePathSet(resolvedPath, [...spec.allowed, ...spec.roots]);
 }
 function evaluateDeleteDomain(resolvedPath, spec) {
-  return evaluatePathSet(resolvedPath, spec.deleteAllowed || []);
+  return evaluatePathSet(resolvedPath, [...spec.deleteAllowed || [], ...spec.roots || []]);
 }
 function readWriteDomainAudit(logPath) {
   if (!logPath || !existsSync2(logPath)) return { ready: [], records: [], errors: [] };
@@ -648,19 +653,35 @@ function summarizeWriteDomainAudit({ logPath, observedToolCalls = null, requireR
     violations: violations.slice(0, 50)
   };
 }
+function gitIgnoredPaths(gitRoot, candidates) {
+  const inside = [...new Set(candidates)].filter((candidate) => gitRoot && candidate !== gitRoot && isInsidePath(gitRoot, candidate));
+  if (!inside.length) return /* @__PURE__ */ new Set();
+  const relative = inside.map((candidate) => path2.relative(gitRoot, candidate).split(path2.sep).join("/"));
+  const run = spawnSync2("git", ["check-ignore", "--stdin", "-z"], {
+    cwd: gitRoot,
+    input: `${relative.join("\0")}\0`,
+    encoding: "utf8",
+    windowsHide: true
+  });
+  if (run.status !== 0) return /* @__PURE__ */ new Set();
+  const hits = new Set(String(run.stdout || "").split("\0").filter(Boolean));
+  return new Set(inside.filter((_, index) => hits.has(relative[index])));
+}
 function evaluateReportedWriteScope(scopeActual, spec, baseDirs = []) {
   const roots = [...new Set(baseDirs.map((item) => String(item || "")).filter(Boolean))];
-  const violations = [];
+  const pending = [];
   for (const field of ["written", "deleted"]) {
     const values = Array.isArray(scopeActual?.[field]) ? scopeActual[field] : [];
     const evaluate = field === "deleted" ? evaluateDeleteDomain : evaluateWriteDomain;
     for (const rawPath of values) {
       const candidates = roots.map((root) => normalizeDomainPath(rawPath, root, spec.caseInsensitive)).filter(Boolean);
-      const matched = candidates.some((candidate) => evaluate(candidate, spec).allowed);
-      if (!matched) violations.push({ field, raw_path: String(rawPath), resolved_candidates: candidates });
+      if (candidates.some((candidate) => evaluate(candidate, spec).allowed)) continue;
+      if (candidates.some((candidate) => evaluatePathSet(candidate, spec.transientRoots || []).allowed)) continue;
+      pending.push({ field, raw_path: String(rawPath), resolved_candidates: candidates });
     }
   }
-  return violations;
+  const ignored = gitIgnoredPaths(spec.gitRoot, pending.flatMap((item) => item.resolved_candidates));
+  return pending.filter((item) => !item.resolved_candidates.some((candidate) => ignored.has(candidate)));
 }
 
 // ops/tools/pi_task_result_extension.mjs

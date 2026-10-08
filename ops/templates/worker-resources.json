@@ -195,6 +195,10 @@
       "access": "default_on",
       "label": "模型接入：Antigravity"
     },
+    "@local/pi-antigravity-native": {
+      "access": "default_on",
+      "label": "模型接入：Antigravity（本机原生包）"
+    },
     "pi-cursor-host": {
       "access": "default_on",
       "label": "模型接入：Cursor"
@@ -206,10 +210,6 @@
     "pi-compaction-model*": {
       "access": "default_on",
       "label": "压缩失败恢复"
-    },
-    "search-route-policy": {
-      "access": "default_on",
-      "label": "搜索路由"
     },
     "search-effort-patch": {
       "access": "default_on",

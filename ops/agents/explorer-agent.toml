@@ -23,8 +23,8 @@ developer_instructions = """
 id = "evidence"
 when = "机械取证"
 model = "openai-codex/gpt-6-luna"
-effort = "medium"
-effort_min = "medium"
+effort = "high"
+effort_min = "high"
 effort_max = "max"
 
 [[picks]]

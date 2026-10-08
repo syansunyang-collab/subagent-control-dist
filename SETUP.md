@@ -40,7 +40,7 @@
    依次完成：
    - `npm ci`（`ops`、`adapters/pi`、`src/agent-panel`）
    - 在 `~/.claude.json` 与 `~/.codex/config.toml` 建 `asyncSubagent` 注册；两处都由发布切到发布槽，未装 Codex 也需要后者
-   - 部署 Pi 插件与补丁（见「Pi 插件与配置」），登记到 `~/.pi/agent/settings.json` 的 `packages`，合并 `~/.pi/agent/models.json` 的快速模型定义，写入压缩设置与联网搜索配置
+   - 部署 Pi 插件与补丁（见「Pi 插件与配置」），登记到 `~/.pi/agent/settings.json` 的 `packages`，合并 `~/.pi/agent/models.json` 的 Grok 快速型号与 Codex 别名型号定义，写入压缩设置与联网搜索配置
    - 把技能目录加入 `~/.pi/agent/settings.json` 的 `skills`
    - 登记本仓为本机发布源（`~/.subagent-control/bridge-producer.json`）
    - 发布：构建后部署 Pi 扩展、MCP 服务、consumer 包，并把技能链接到 `~/.claude/skills/`
@@ -56,9 +56,11 @@
 | 组 | 内容 | 作用 |
 | --- | --- | --- |
 | Grok 快速型号 | `models.json` 的 `xai/grok-4.7-build-fast`（由 manifest 的 `pi_models` 登记） | 控制面 `/fast` 自动切换 Grok 4.7；按快版真实单价记账（普通版两倍）；已有同 id 不同定义保留并报 conflict |
-| 型号别名 | `extensions/openai-codex-sol-context-alias.ts` | 只改写 `gpt-5.6-sol-500k`、`gpt-6.1-sol-500k`、`gpt-6-astra-500k`、`gpt-6-luna-fast-700k` 四个固定 ID；前三个只换上游型号，只有 `gpt-6-luna-fast-700k` 加 `service_tier=priority` |
+| 型号别名 | `extensions/openai-codex-sol-context-alias.ts`；四个型号的定义（上下文窗口、单价、档位映射）由 manifest 的 `pi_models` 登记进 `models.json` | 只改写 `gpt-5.6-sol-500k`、`gpt-6.1-sol-500k`、`gpt-6-astra-500k`、`gpt-6-luna-fast-700k` 四个固定 ID；前三个只换上游型号，只有 `gpt-6-luna-fast-700k` 加 `service_tier=priority` |
 | 压缩链 | npm `pi-midrun-compact` 与 `extensions/pi-midrun-compact/config.json`（上下文 90% 时中途压缩并自动续跑）；本地包 `pi-compaction-model-recovery`；设置 `compaction.enabled=false`、`compactionModel`（`openai-codex/gpt-6-luna-fast-700k` @xhigh） | 压缩交给指定型号，不占用当前会话型号 |
-| 联网搜索 | npm `pi-web-access@0.21.0`；补丁 `extensions/search-effort-patch/`（给 OpenAI 搜索注入 `openaiSearchModel` 的档位后缀）、`extensions/search-route-policy.ts`（与 `pi-web-access` 同时存在时隐藏 Claude 搜索工具）；`~/.pi/web-search.json` 的 `searchRouting`、`workflow`、`openaiSearchModel`、`pageAnswer` | 调研类子代理联网；不配密钥时走 Exa 与 Codex 登录态，Brave、Tavily 等需在 `~/.pi/web-search.json` 自行补 key |
+| 联网搜索 | npm `pi-web-access@0.21.0`；补丁 `extensions/search-effort-patch/`（给 OpenAI 搜索注入 `openaiSearchModel` 的档位后缀）；`~/.pi/web-search.json` 的 `searchRouting`、`workflow`、`openaiSearchModel`、`pageAnswer` | 调研类子代理联网；不配密钥时走 Exa 与 Codex 登录态，Brave、Tavily 等需在 `~/.pi/web-search.json` 自行补 key |
+
+本机另装了 Pi 插件 `pi-claude-code-provider`（0.6.0 起）时，设置用户环境变量 `PI_CLAUDE_CODE_PROVIDER_WEB_SEARCH=off`，它就不再注册自带的 Claude 搜索工具，搜索统一走 `web_search`；不设时两个搜索工具同时出现在提示词里。bootstrap 不写这个变量，设置后重启 Pi 生效。
 
 ## 验证
 

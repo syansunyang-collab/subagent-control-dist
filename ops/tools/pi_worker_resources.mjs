@@ -90,7 +90,25 @@ export function resourceName(file) {
   const extensions = parts.lastIndexOf("extensions");
   if (extensions >= 0 && extensions === last - 1) return parts[last].replace(/\.[^.]+$/, "");
   if (extensions >= 0 && extensions < last) return parts[extensions + 1];
+  // A Pi package installed from a local path (for example a generated runtime) is named by its manifest.
+  for (let end = last; end >= Math.max(1, last - 3); end -= 1) {
+    const dir = parts.slice(0, end).join("/");
+    const name = piPackageName(/^[A-Za-z]:$/.test(parts[0]) ? dir : `/${dir}`);
+    if (name) return name;
+  }
   return parts[last].replace(/\.[^.]+$/, "");
+}
+
+function piPackageName(dir) {
+  const file = path.join(dir, "package.json");
+  if (!existsSync(file)) return null;
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return null; // An unrelated broken package.json above a resource must not fail discovery.
+  }
+  return manifest?.pi && typeof manifest.name === "string" && manifest.name.trim() ? manifest.name.trim() : null;
 }
 
 /** Read and validate the version 2 import scope; old keys fail with the field that replaces them. */

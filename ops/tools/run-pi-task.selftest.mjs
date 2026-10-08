@@ -42,6 +42,7 @@ export const PI_STUB_DEFAULT_FINAL_TEXT = [
 //   PI_STUB_ARGV_OUT      收到的 argv 落盘,供 spawn 规格断言
 //   PI_STUB_COMMANDS_OUT  逐条 RPC 命令名追加落盘,供命令序列断言
 //   PI_STUB_WORKER_ENV_OUT  仅记录 worker 清单路径与继承标志,供环境透传断言
+//   PI_STUB_SCRATCH_OUT   记录本任务临时目录、启动时是否已存在与写域规格,并往临时目录写一个文件模拟命令用过它
 //   PI_STUB_SETTINGS_PATH set_auto_compaction / set_auto_retry 的持久化落点,供设置污染断言
 //   PI_STUB_SUBMIT_VERDICT  交卷记录的 verdict,缺省 done
 //   PI_STUB_FAILED_TOOL   为 1 时 submitted_failure_words 追加一次失败的 read 调用
@@ -63,7 +64,7 @@ export const PI_STUB_DEFAULT_FINAL_TEXT = [
 //       tool_loop_numbered_files(cat file1.txt…cat file20.txt 后正常收尾)。
 export function renderPiStubSource({ finalText = PI_STUB_DEFAULT_FINAL_TEXT } = {}) {
   return [
-    "import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';",
+    "import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';",
     "import path from 'node:path';",
     `const finalText = ${JSON.stringify(finalText)};`,
     "const argv = process.argv.slice(2);",
@@ -76,6 +77,7 @@ export function renderPiStubSource({ finalText = PI_STUB_DEFAULT_FINAL_TEXT } = 
     "const sessionFile = flagValue('--session') || (sessionDir ? path.join(sessionDir, 'stub-session.jsonl') : undefined);",
     "if (process.env.PI_STUB_ARGV_OUT) { writeFileSync(process.env.PI_STUB_ARGV_OUT, JSON.stringify(argv, null, 2), 'utf8'); writeFileSync(process.env.PI_STUB_ARGV_OUT + '.recovery.json', JSON.stringify({ stallTimeoutMs: process.env.PI_RETRY_STALL_TIMEOUT_MS })); }",
     "if (process.env.PI_STUB_WORKER_ENV_OUT) writeFileSync(process.env.PI_STUB_WORKER_ENV_OUT, JSON.stringify({ path: process.env.PI_WORKER_TOOLS_PATH, inherit: process.env.PI_WORKER_INHERIT_TOOLS, identity: process.env.PI_WORKER_TASK_PACKAGE_PATH }));",
+    "if (process.env.PI_STUB_SCRATCH_OUT) { const scratch = process.env.PI_CONTROL_BASH_SCRATCH || null; writeFileSync(process.env.PI_STUB_SCRATCH_OUT, JSON.stringify({ scratch, existedAtStart: Boolean(scratch) && existsSync(scratch), writeDomain: process.env.PI_WRITE_DOMAIN ? JSON.parse(process.env.PI_WRITE_DOMAIN) : null })); if (scratch) { mkdirSync(scratch, { recursive: true }); writeFileSync(path.join(scratch, 'probe.txt'), 'temp'); } }",
     "if (sessionDir) { mkdirSync(sessionDir, { recursive: true }); appendFileSync(sessionFile, JSON.stringify({ role: 'stub', at: Date.now() }) + '\\n', 'utf8'); }",
     "if (process.env.PI_WRITE_DOMAIN) { const spec = JSON.parse(process.env.PI_WRITE_DOMAIN); mkdirSync(path.dirname(spec.log), { recursive: true }); appendFileSync(spec.log, JSON.stringify({ schema_version: 1, kind: 'guard_ready', profile: 'pi-child-write-domain/v1', at: new Date().toISOString(), task_id: spec.taskId || null }) + '\\n', 'utf8'); }",
     // boot_crash:收到第一条命令就退出,runner 的握手 get_state 永远等不到响应。
@@ -99,7 +101,7 @@ export function renderPiStubSource({ finalText = PI_STUB_DEFAULT_FINAL_TEXT } = 
     "let currentModel = mismatch ? { id: 'other-model', provider: 'other-provider' } : { id: modelId, provider };",
     "let currentThinking = mismatch ? 'off' : thinkingClamp ? 'high' : thinking;",
     "function modelEntry(p, id) { return { id, provider: p, name: id, api: 'stub-api', reasoning: true, contextWindow: 200000, maxTokens: 64000, cost: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 } }; }",
-    "const catalog = mode === 'fast_model_missing' ? [modelEntry(provider, 'grok-4.7')] : mode.startsWith('catalog_miss') ? [modelEntry('other-provider', 'other-model')] : [modelEntry(provider, modelId), modelEntry('other-provider', 'other-model')];",
+    "const catalog = mode === 'fast_model_missing' ? [modelEntry(provider, 'grok-4.7')] : mode.startsWith('catalog_miss') ? [modelEntry('other-provider', 'other-model')] : mode === 'pi_level_unsupported' ? [{ ...modelEntry(provider, modelId), thinkingLevelMap: { low: null } }] : [modelEntry(provider, modelId), modelEntry('other-provider', 'other-model')];",
     "const usage = { input: 123, output: 45, cacheRead: 6, cacheWrite: 7, reasoning: 3, totalTokens: 181, cost: { input: 0.1, output: 0.2, cacheRead: 0, cacheWrite: 0, total: 0.3 } };",
     "function out(obj) { process.stdout.write(JSON.stringify(obj) + '\\n'); }",
     "function raw(line) { process.stdout.write(line + '\\n'); }",
@@ -379,6 +381,9 @@ export async function runSelfTest(scriptPathForSelf) {
         PI_STUB_MODE: mode,
         PI_STUB_STATS_DELAY_MS: String(statsDelayMs),
         PI_STUB_ARGV_OUT: argvOut,
+        // 临时目录建在本次自测根下，不碰真实 scratch。
+        PI_CONTROL_BASH_SCRATCH: path.join(root, "bash-scratch"),
+        PI_STUB_SCRATCH_OUT: path.join(root, `scratch-${name}.json`),
         ...(cancelRequest ? { PI_STUB_BASH_CLEANUP_PATH: path.join(outDir, `bash-tree-cleanup.${cancelRequest.attemptId}.jsonl`) } : {}),
         ...(commandsOut ? { PI_STUB_COMMANDS_OUT: commandsOut } : {}),
       });
@@ -456,6 +461,12 @@ export async function runSelfTest(scriptPathForSelf) {
     // 档位：不在模型可选档位内直接拒发；冻结选型越出行范围且没有 effort_range 授权时拒发，有授权时放行。
     const outsideModel = await scenario("effort-outside-model", { mode: "ok", extraArgs: ["--effort", "high"] });
     selfTestCheck(outsideModel.result.failure_type === "invalid_model_effort", `effort_outside_model: 实得 ${outsideModel.result.failure_type}`);
+    // 笔记允许 low、Pi 目录不支持 low：握手取目录后按交集拒发，不发送任务。
+    const piUnsupportedCommands = path.join(root, "pi-level-unsupported.commands");
+    const piUnsupported = await scenario("pi-level-unsupported", { mode: "pi_level_unsupported", commandsOut: piUnsupportedCommands });
+    selfTestCheck(piUnsupported.result.failure_type === "invalid_model_effort" && /Pi 会改按 medium 运行/.test(piUnsupported.result.error || ""),
+      `pi_level_unsupported: 实得 ${piUnsupported.result.failure_type} ${piUnsupported.result.error}`);
+    selfTestCheck(!readFileSync(piUnsupportedCommands, "utf8").split("\n").includes("prompt"), "pi_level_unsupported: 不得发送 prompt");
     const frozen = (applied) => {
       const file = path.join(root, `selection-${applied.length}.json`);
       writeFileSync(file, JSON.stringify({
@@ -517,6 +528,18 @@ export async function runSelfTest(scriptPathForSelf) {
     selfTestCheck(Boolean(loadedWriteDomainExtension) && existsSync(loadedWriteDomainExtension), "write_domain: 同目录独立扩展缺失");
     const guardedArgv = JSON.parse(readFileSync(guarded.argvOut, "utf8"));
     selfTestCheck(guardedArgv.includes(loadedWriteDomainExtension), "write_domain: 独立扩展未传给 pi -e");
+    if (process.platform === "win32") {
+      // 每个任务独享临时目录：首次用到才建、写域可写可删、基底是临时区、收尾连同内容一起清空。
+      const fold = (value) => String(value || "").toLowerCase();
+      const scratchBase = path.join(root, "bash-scratch");
+      const scratchSeen = JSON.parse(readFileSync(path.join(root, "scratch-write-domain.json"), "utf8"));
+      selfTestCheck(fold(path.dirname(scratchSeen.scratch)) === fold(scratchBase), `write_domain: 临时目录应建在 scratch 基底下,实得 ${scratchSeen.scratch}`);
+      selfTestCheck(scratchSeen.existedAtStart === false, "write_domain: runner 不应预建临时目录，提前退出的任务才不留空目录");
+      selfTestCheck((scratchSeen.writeDomain?.roots || []).map(fold).includes(fold(scratchSeen.scratch)), "write_domain: 临时目录应在写域可写根内");
+      selfTestCheck((scratchSeen.writeDomain?.transientRoots || []).map(fold).includes(fold(scratchBase)), "write_domain: scratch 基底应是临时区");
+      selfTestCheck(fold(scratchSeen.writeDomain?.gitRoot) === fold(targetCwd), "write_domain: gitRoot 应为目标仓");
+      selfTestCheck(!existsSync(scratchSeen.scratch), "write_domain: 收尾应清空临时目录");
+    }
 
     const blockedWrite = await scenario("write-domain-blocked", {
       mode: "write_domain_blocked",

@@ -22,6 +22,6 @@ id = "batch"
 when = "规则已定的批次"
 model = "openai-codex/gpt-6-luna"
 effort = "high"
-effort_min = "off"
+effort_min = "high"
 effort_max = "max"
 default = true

@@ -133,7 +133,8 @@ async function main() {
     return emit(data, args.format, text);
   }
   if (args.seed_template) {
-    process.stdout.write(`${renderTemplate(args.seed_template)}\n`);
+    const probed = probePiChildModelCatalog(ROOT);
+    process.stdout.write(`${renderTemplate(args.seed_template, { piDetails: probed.status === "ok" ? probed.model_details : null })}\n`);
     return 0;
   }
   if (args.card_check) {
@@ -166,7 +167,7 @@ async function main() {
       throw new ToolError(`完整模型目录读取失败：${probed.error || probed.status}`);
     }
     const catalog = projectCatalog(config, {
-      piModels: probed.status === "ok" ? probed.models : null,
+      piDetails: probed.status === "ok" ? probed.model_details : null,
       ...(role ? { role, capability } : {}),
     });
     const used = new Set(catalog.roles.flatMap((item) => item.picks.map((pick) => pick.model)));

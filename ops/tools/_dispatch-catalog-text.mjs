@@ -1,5 +1,6 @@
 // dispatch_prepare --list 的文本投影：只投影 projectCatalog 已算好的字段，不做选型判断。
 // JSON 目录（--format json）字段相同；本文件服务主代理 list 查询的默认返回。
+// 视觉取 Pi 目录详情的图像输入（projectCatalog 的 supports_vision）；不在 Pi 目录或取不到目录时为未知。
 import path from "node:path";
 
 const oneLine = (value) => String(value ?? "").replace(/\s+/g, " ").trim();

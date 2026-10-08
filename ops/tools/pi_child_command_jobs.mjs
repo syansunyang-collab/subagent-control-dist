@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { resolveChildBash, terminateChildProcessTree, waitForChildProcess } from './pi_child_bash_process_tree.mjs';
+import { childBashSpawnEnv, resolveChildBash, terminateChildProcessTree, waitForChildProcess } from './pi_child_bash_process_tree.mjs';
 
 export const COMMAND_JOBS_VERSION = 'pi-command-jobs/v1';
 export const COMMAND_JOB_TOOL = 'command_job';
@@ -103,7 +103,10 @@ export function createCommandJobs({ root, cwd, owner, waitForExit = waitForChild
     fs.writeFileSync(record.stdout_path, ''); fs.writeFileSync(record.stderr_path, '');
     const item = { record, child: null }; items.set(job_id, item); persist();
     try {
-      const child = spawnFn(shell, ['-c', command], { cwd, env: { ...env, PI_COMMAND_JOB_ID: job_id },
+      // 与前台 bash 同一个临时目录：TEMP/TMP 指向本任务 scratch。
+      const jobEnv = childBashSpawnEnv(env);
+      if (process.platform === 'win32' && jobEnv.TEMP) fs.mkdirSync(jobEnv.TEMP, { recursive: true });
+      const child = spawnFn(shell, ['-c', command], { cwd, env: { ...jobEnv, PI_COMMAND_JOB_ID: job_id },
         detached: process.platform !== 'win32', stdio: ['ignore','pipe','pipe'], windowsHide: true });
       item.child = child; record.pid = child.pid ?? null;
       let lastPersist = 0;

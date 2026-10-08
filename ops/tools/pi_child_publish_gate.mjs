@@ -3,9 +3,10 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import {
-  resolvePiAgentDir,
-  resolvePiChildCompactionExtensions,
+  PI_CHILD_COMPACTION_PACKAGES,
+  resolvePiChildCompactionPackages,
 } from "./pi_compaction_extension_profile.mjs";
+import { resolvePiAgentDir } from "./pi_settings_packages.mjs";
 
 export const PI_CHILD_PUBLISH_GATE = "pi-child-publish-gate/v2";
 export const PI_AGENT_SETTINGS_FILE = "settings.json";
@@ -18,10 +19,10 @@ export const EXPECTED_SHARED_SETTINGS = Object.freeze({
   "retry.provider.maxRetries": 0,
 });
 
-function readJsonObject(file, read = readFileSync) {
+function readJsonObject(file) {
   let parsed;
   try {
-    parsed = JSON.parse(read(file, "utf8"));
+    parsed = JSON.parse(readFileSync(file, "utf8"));
   } catch (error) {
     throw new Error(`${file}: ${error?.message ?? error}`);
   }
@@ -37,42 +38,8 @@ function readValue(source, dottedKey) {
   ), source);
 }
 
-function localPackageDirectory(file) {
-  const parts = path.resolve(String(file || "")).split(path.sep);
-  const index = parts.lastIndexOf("local-packages");
-  if (index < 0 || index + 1 >= parts.length) return null;
-  return parts.slice(0, index + 2).join(path.sep);
-}
-
-function packageNameFromPackageJson(packageDir, exists, read) {
-  const packageJson = path.join(packageDir, "package.json");
-  if (!exists(packageJson)) return null;
-  try {
-    const parsed = JSON.parse(read(packageJson, "utf8"));
-    const name = typeof parsed?.name === "string" ? parsed.name.trim() : "";
-    return name || null;
-  } catch {
-    return null;
-  }
-}
-
-function packageNameFromExtension(file, exists = existsSync, read = readFileSync) {
-  const packageDir = localPackageDirectory(file);
-  if (packageDir) return packageNameFromPackageJson(packageDir, exists, read);
-  const normalized = String(file || "").replaceAll("\\", "/");
-  const marker = "/npm/node_modules/";
-  const index = normalized.lastIndexOf(marker);
-  if (index < 0) return null;
-  const rest = normalized.slice(index + marker.length);
-  const [name] = rest.split("/");
-  // npm 路径只认 midrun；写手由本地恢复包的 package.json name 识别。
-  return name === "pi-midrun-compact" ? name : null;
-}
-
 export function runPiChildPublishGate(options = {}) {
   const env = options.env || process.env;
-  const exists = options.exists || existsSync;
-  const read = options.read || readFileSync;
   const mode = options.mode === "postflight" ? "postflight" : "preflight";
   const agentDir = path.resolve(options.agentDir || resolvePiAgentDir(env));
   const settingsPath = path.join(agentDir, PI_AGENT_SETTINGS_FILE);
@@ -89,15 +56,15 @@ export function runPiChildPublishGate(options = {}) {
     errors,
   };
 
-  if (!exists(settingsPath)) errors.push(`${settingsPath} is missing`);
-  if (!exists(trustPath)) errors.push(`${trustPath} is missing`);
+  if (!existsSync(settingsPath)) errors.push(`${settingsPath} is missing`);
+  if (!existsSync(trustPath)) errors.push(`${trustPath} is missing`);
   if (errors.length > 0) {
     return { ...result, ok: false };
   }
 
   let settings;
   try {
-    settings = readJsonObject(settingsPath, read);
+    settings = readJsonObject(settingsPath);
   } catch (error) {
     errors.push(String(error.message || error));
     return { ...result, ok: false };
@@ -110,10 +77,10 @@ export function runPiChildPublishGate(options = {}) {
     }
   }
 
-  const extensions = resolvePiChildCompactionExtensions({ agentDir, env, exists });
-  result.extensions = extensions;
-  const names = new Set(extensions.map((file) => packageNameFromExtension(file, exists, read)));
-  for (const required of ["pi-compaction-model", "pi-midrun-compact"]) {
+  const packages = resolvePiChildCompactionPackages({ agentDir, env });
+  result.extensions = packages.flatMap((item) => item.extensions);
+  const names = new Set(packages.map((item) => item.name));
+  for (const required of PI_CHILD_COMPACTION_PACKAGES) {
     if (!names.has(required)) errors.push(`missing compaction extension package ${required}`);
   }
 

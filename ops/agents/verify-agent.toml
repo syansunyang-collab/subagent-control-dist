@@ -35,6 +35,14 @@ capability = "functional-inspection"
 default = true
 
 [[picks]]
+id = "cross_check"
+when = "异构第二视角复核"
+model = "xai/grok-4.7"
+effort = "high"
+effort_min = "low"
+effort_max = "xhigh"
+
+[[picks]]
 id = "thinking"
 when = "深度推理复核"
 model = "openai-codex/gpt-6-astra"

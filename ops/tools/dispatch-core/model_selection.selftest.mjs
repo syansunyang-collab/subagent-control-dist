@@ -24,7 +24,6 @@ const NOTES = [
   "version = 1",
   '[notes."p/wide"]',
   'tag = "宽"',
-  "supports_vision = true",
   '[notes."p/narrow"]',
   'tag = "窄"',
   'efforts = ["low", "medium", "high", "xhigh"]',
@@ -135,7 +134,7 @@ check("picks keep file order and project the §7 shape", () => withFixture({}, (
   assert.deepEqual(role.capabilities.map(({ id, default_pick, inherit_role_picks }) => [id, default_pick, inherit_role_picks]),
     [["plan-execution", "plan", true], ["scoped-execution", "regular", true]]);
   const narrow = catalog.models.find((item) => item.model === "p/narrow");
-  assert.deepEqual(narrow, { model: "p/narrow", tag: "窄", supports_vision: null, efforts: ["low", "medium", "high", "xhigh"], effort_note: "给人看的备注", in_pi: null });
+  assert.deepEqual(narrow, { model: "p/narrow", tag: "窄", supports_vision: null, efforts: ["low", "medium", "high", "xhigh"], effort_note: "给人看的备注", in_pi: null, pi_levels: null, level_map: null });
   assert.deepEqual(catalog.warnings, []);
 }));
 
@@ -149,11 +148,22 @@ check("configuration fingerprints describe selection content, not deployment pat
   assert.notEqual(resolve(load(root), {}).config_source.config_fingerprint, before);
 }));
 
+// Pi 目录详情夹具：p/wide 不支持 off / xhigh / max，minimal 实际发送 low；q/other 不支持推理。
+const PI_DETAILS = Object.freeze({
+  "p/wide": { supports_vision: true, thinking_levels: ["minimal", "low", "medium", "high"], level_map: { minimal: "low" } },
+  "q/other": { supports_vision: false, thinking_levels: ["off"], level_map: {} },
+});
+
 check("models are the union of Pi list, notes and picks; picks outside Pi only warn", () => withFixture({}, (root) => {
-  const catalog = projectCatalog(load(root), { piModels: ["p/wide", "q/other"] });
+  const catalog = projectCatalog(load(root), { piDetails: PI_DETAILS });
   assert.deepEqual(catalog.models.map((item) => [item.model, item.in_pi]),
     [["p/wide", true], ["q/other", true], ["p/narrow", false], ["p/tiny", false]]);
-  assert.deepEqual(catalog.models.find((item) => item.model === "q/other").efforts, [...EFFORT_LEVELS]);
+  const pick = (model) => catalog.models.find((item) => item.model === model);
+  assert.deepEqual(pick("q/other").efforts, ["off"]);
+  assert.deepEqual([pick("p/wide").efforts, pick("p/wide").pi_levels, pick("p/wide").level_map, pick("p/wide").supports_vision],
+    [["minimal", "low", "medium", "high"], ["minimal", "low", "medium", "high"], { minimal: "low" }, true]);
+  assert.deepEqual([pick("p/narrow").efforts, pick("p/narrow").pi_levels, pick("p/narrow").level_map, pick("p/narrow").supports_vision],
+    [["low", "medium", "high", "xhigh"], null, null, null], "不在 Pi 目录的模型退回笔记 efforts，Pi 字段为 null");
   assert.deepEqual(catalog.warnings.map(({ code, field, pick_id }) => [code, field, pick_id]),
     [["model_not_in_pi", "picks[1].model", "backend"], ["model_not_in_pi", "picks[2].model", "plan"]]);
 }));
@@ -220,6 +230,21 @@ check("effort outside the row range needs effort_range; outside model efforts is
   }
   assert.deepEqual(modelEfforts(config, "p/narrow"), ["low", "medium", "high", "xhigh"]);
   assert.deepEqual(modelEfforts(config, "unknown/model"), [...EFFORT_LEVELS]);
+}));
+
+check("model efforts intersect notes with Pi levels; no notes means Pi levels; no Pi entry falls back to notes", () => withFixture({}, (root) => {
+  const config = load(root);
+  const pi = { ...PI_DETAILS, "p/narrow": { thinking_levels: ["medium", "high", "xhigh", "max"], level_map: {} } };
+  assert.deepEqual(modelEfforts(config, "p/narrow", pi), ["medium", "high", "xhigh"]);
+  assert.deepEqual(modelEfforts(config, "p/wide", pi), ["minimal", "low", "medium", "high"], "笔记未写 efforts 时取 Pi 支持档");
+  assert.deepEqual(modelEfforts(config, "p/tiny", pi), ["off", "minimal", "low", "medium"], "模型不在 Pi 目录时退回笔记");
+  assert.deepEqual(modelEfforts(config, "unknown/model", pi), [...EFFORT_LEVELS]);
+  assert.deepEqual(modelEfforts(config, "p/wide", null), [...EFFORT_LEVELS], "取不到 Pi 目录时退回笔记，再无则七档");
+  const picked = resolve(config, { pi_details: pi });
+  assert.deepEqual([picked.resolved_effort, picked.efforts], ["high", ["minimal", "low", "medium", "high"]]);
+  assert.throws(() => resolve(config, { effort: "xhigh", pi_details: pi }), /xhigh 不在 p\/wide 的可选档位（minimal\/low\/medium\/high）内；Pi 不支持 xhigh，会改按 high 运行，授权不能解除/);
+  assert.throws(() => resolve(config, { effort: "off", pi_details: pi, authorization: { quote: "要 off", overrides: ["effort_range"] } }), /Pi 不支持 off，会改按 minimal 运行/);
+  assert.equal(resolve(config, { effort: "xhigh" }).resolved_effort, "xhigh", "没有 Pi 详情时只按笔记校验");
 }));
 
 check("invalid pick rows fail with code, file, field, role and pick_id", () => {
@@ -293,7 +318,7 @@ check("model notes: efforts must be a non-empty ordered subset; removed keys nam
     ['tag = "宽"', 'tag = "宽"\nmax_effort = "high"', "field_removed", 'notes."p/wide".max_effort'],
     ['tag = "宽"', 'tag = "宽"\nstatus = "retired"', "field_removed", 'notes."p/wide".status'],
     ['tag = "宽"', 'tag = "宽"\neffort_levels = []', "field_removed", 'notes."p/wide".effort_levels'],
-    ["supports_vision = true", 'supports_vision = "yes"', "value_invalid", 'notes."p/wide".supports_vision'],
+    ['tag = "宽"', 'tag = "宽"\nsupports_vision = true', "field_removed", 'notes."p/wide".supports_vision'],
   ];
   for (const [from, to, code, field] of cases) {
     withFixture({ notes: NOTES.replace(from, to) }, (root) => rejects(root, { code, field, file: path.join(root, "ops", "model-notes.toml") }));

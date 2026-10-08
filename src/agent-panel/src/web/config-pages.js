@@ -14,6 +14,7 @@ const SECTIONS = { extensions: '插件', tools: '工具', skills: '技能' };
 const PICK_TEXT = { id: '标识', when: '适用场景', model: '模型', effort_min: '最低档位', effort: '默认档位', effort_max: '最高档位', capability: '任务类型', default: '默认' };
 const RESOURCE_TEXT = { tools: '工具', extensions: '插件', skills: '技能', project_skills: '项目技能' };
 const IMPORT_TEXT = { access: '开放方式', label: '显示名', group: '分组' };
+const NOTE_TEXT = { efforts: '可选档位', tag: '标签', description: '用途说明', effort_note: '备注' };
 const PHRASES = [[/ ?effort_min/g, '最低档位'], [/ ?effort_max/g, '最高档位'], [/不带 capability 的推荐/g, '任务类型为「全部任务」的推荐'], [/设为 default/g, '设为默认']];
 // 编译器把默认开启的工具无条件并入角色选择；唯一的条件依赖是后台长命令需要最终工具面含命令行（ops/tools/pi_worker_resources.mjs 的 workerSpawnTools）。
 const TOOL_NEEDS = { command_job: 'bash' };
@@ -31,11 +32,12 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
   const resResults = {};
   let loaded = false;
   let dragging = null;
-  const drafts = { picks: {}, efforts: {}, res: {}, imports: {} };
+  const drafts = { picks: {}, efforts: {}, notes: {}, res: {}, imports: {} };
   const pages = Object.fromEntries(Object.keys(roots).map((page) => [page, { busy: false, errors: [], notice: '' }]));
   const expanded = new Set();
   const narrowing = new Map();
   const openGroups = new Set();
+  const openDescriptions = new Set();
   let selectedPickRole = 'executor-agent';
   let pickDetailsOpen = false;
   const missingNames = new Set();
@@ -75,7 +77,7 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
     let match;
     if ((match = /^picks\[\d+\]\.(\w+)$/.exec(field))) return PICK_TEXT[match[1]] || '';
     if ((match = /^capabilities\.([^.]+)(?:\.(\w+))?$/.exec(field))) return `「${capText(item.role, match[1]) || match[1]}」${match[2] ? `的${RESOURCE_TEXT[match[2]]}` : ''}`;
-    if ((match = /^notes\."(.+)"\.efforts$/.exec(field))) return `${match[1]} 的可选档位`;
+    if ((match = /^notes\."(.+)"\.(efforts|tag|description|effort_note)$/.exec(field))) return `${match[1]} 的${NOTE_TEXT[match[2]]}`;
     if ((match = /^(tools|extensions|skills)\.(.+)\.(access|label|group)$/.exec(field))) return `${SECTIONS[match[1]]} ${match[2]} 的${IMPORT_TEXT[match[3]]}`;
     return RESOURCE_TEXT[field] || '';
   }
@@ -99,7 +101,8 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
 
   // ── 角色与模型 ──
   const effortLevels = () => sel.effort_levels;
-  const levelsOf = (model) => sel.editable.efforts[model] ?? effortLevels();
+  // 模型的有效可选档位（笔记 efforts ∩ Pi 支持档），由服务端投影给出。
+  const levelsOf = (model) => sel.catalog.models.find((entry) => entry.model === model)?.efforts ?? effortLevels();
   const piReady = () => sel.pi_catalog.available;
   const inPi = (model) => !piReady() || sel.pi_catalog.models.some((entry) => entry.value === model);
   function modelChoices(current) {
@@ -432,6 +435,20 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
 
   // ── 模型档位 ──
   const modelLevels = (model) => drafts.efforts[model] ?? levelsOf(model);
+  const noteBase = (model, field) => sel.editable.notes?.[model]?.[field] ?? '';
+  const noteValue = (model, field) => drafts.notes[model]?.[field] ?? noteBase(model, field);
+  const modelsDirty = () => Object.keys(drafts.efforts).length > 0 || Object.keys(drafts.notes).length > 0;
+  // Pi 收到不支持的档位时先向上找最近的支持档，找不到再向下。
+  function clampLevel(levels, level) {
+    const all = effortLevels();
+    const index = all.indexOf(level);
+    return all.slice(index + 1).find((item) => levels.includes(item)) ?? all.slice(0, index).reverse().find((item) => levels.includes(item)) ?? 'off';
+  }
+  function setNote(model, field, value) {
+    const entry = { ...(drafts.notes[model] || {}) };
+    if (value === noteBase(model, field) && !pages.models.busy) delete entry[field]; else entry[field] = value;
+    if (Object.keys(entry).length) drafts.notes[model] = entry; else delete drafts.notes[model];
+  }
   function renderModels() {
     const models = sel.catalog.models;
     const pi = sel.pi_catalog;
@@ -439,19 +456,34 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
     const status = pi.available ? '' : pi.loading || !failure ? '<div class="cfg-msg">正在读取 Pi 模型清单…</div>'
       : `<div class="cfg-msg is-warn">Pi 模型清单读取失败：${html(failure)}<button type="button" class="secondary-button" data-act="retry-catalog">重试</button></div>`;
     const row = (entry) => {
-      const levels = modelLevels(entry.model);
-      const bad = invalid('models', (item) => item.field === `notes."${entry.model}".efforts`);
-      return `<tr${bad ? ' class="is-invalid"' : ''}><td class="mono">${html(entry.model)}${entry.in_pi === false ? ' <span class="tag">不在 Pi 清单</span>' : ''}</td>
-        <td><div class="lv">${effortLevels().map((level) => `<button type="button" class="${levels.includes(level) ? 'on' : ''}" data-act="level" data-model="${html(entry.model)}" data-v="${level}">${level}</button>`).join('')}</div></td>
-        <td>${entry.supports_vision === null ? '<span class="soft">未填写</span>' : entry.supports_vision ? '是' : '否'}</td><td class="soft">${html(entry.effort_note)}</td></tr>`;
+      const { model } = entry;
+      const levels = modelLevels(model);
+      const bad = (field) => invalid('models', (item) => item.field === `notes."${model}".${field}`);
+      const attrs = (field) => `data-model="${html(model)}" data-note="${field}" aria-label="${html(`${model} ${NOTE_TEXT[field]}`)}"${bad(field) ? ' class="is-invalid"' : ''}`;
+      const toggles = entry.in_pi === false ? `<span class="soft">${html(levels.join(' / '))}</span>`
+        : `<div class="lv">${effortLevels().map((level) => {
+          const on = levels.includes(level);
+          const blocked = entry.pi_levels && !entry.pi_levels.includes(level) ? ` disabled title="Pi 会改按 ${clampLevel(entry.pi_levels, level)} 运行"` : '';
+          return `<button type="button" class="${on ? 'on' : ''}" data-act="level" data-model="${html(model)}" data-v="${level}" aria-pressed="${on}"${blocked}>${level}</button>`;
+        }).join('')}</div>`;
+      const vision = entry.in_pi && entry.supports_vision !== null ? (entry.supports_vision ? '支持' : '不支持') : '<span class="soft">—</span>';
+      const mapped = Object.entries(entry.level_map || {}).map(([level, sent]) => `<div>${html(level)} 实际发送 ${html(sent)}</div>`).join('') || '<span class="soft">—</span>';
+      const description = noteValue(model, 'description');
+      const invalidRow = invalid('models', (item) => item.field?.startsWith(`notes."${model}".`));
+      return `<tr${invalidRow ? ' class="is-invalid"' : ''}><td class="mono model-name">${html(model)}${entry.in_pi === false ? ' <span class="tag">不在 Pi 清单</span>' : ''}</td>
+        <td>${toggles}</td><td>${vision}</td><td class="mapped">${mapped}</td>
+        <td><input type="text" ${attrs('tag')} value="${html(noteValue(model, 'tag'))}"></td>
+        <td><input type="text" ${attrs('effort_note')} value="${html(noteValue(model, 'effort_note'))}"></td>
+        <td><details class="desc" data-model="${html(model)}"${openDescriptions.has(model) ? ' open' : ''}><summary>${description ? html(description) : '<span class="soft">未填写</span>'}</summary>
+          <textarea rows="5" ${attrs('description')}>${html(description)}</textarea></details></td></tr>`;
     };
     const providers = [...new Set(models.map((entry) => provider(entry.model)))];
-    return `${header('models', '模型档位', '设定各模型可选的档位。「角色与模型」中的档位下拉仅列出此处勾选的档位，避免派发失败。', Object.keys(drafts.efforts).length > 0)}
+    return `${header('models', '模型档位', '勾选各模型可选的档位，「角色与模型」的档位下拉只列出这里勾选的档位；置灰的档位 Pi 不支持。', modelsDirty())}
       ${status}
       <article class="role"><div class="role-body">
-      <table class="imp models"><colgroup><col style="width:330px"><col><col style="width:90px"><col style="width:30%"></colgroup>
-      <thead><tr><th>模型</th><th>可选档位</th><th>支持图像</th><th>备注</th></tr></thead><tbody>
-      ${providers.map((name) => `<tr class="prov"><td colspan="4">${html(name)}</td></tr>${models.filter((entry) => provider(entry.model) === name).map(row).join('')}`).join('')}
+      <table class="imp models"><colgroup><col style="width:15%"><col style="width:30%"><col style="width:5%"><col style="width:11%"><col style="width:10%"><col style="width:11%"><col></colgroup>
+      <thead><tr><th>模型</th><th>可选档位</th><th>图像</th><th>实际映射</th><th>标签</th><th>备注</th><th>用途说明</th></tr></thead><tbody>
+      ${providers.map((name) => `<tr class="prov"><td colspan="7">${html(name)}</td></tr>${models.filter((entry) => provider(entry.model) === name).map(row).join('')}`).join('')}
       </tbody></table></div></article>`;
   }
 
@@ -460,7 +492,7 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
   function focusKey(root) {
     const el = document.activeElement;
     if (!el || !root.contains(el)) return null;
-    const keys = ['role', 'i', 'f', 'section', 'key', 'field', 'name', 'act', 'model', 'v', 'mode'].filter((key) => el.dataset[key] !== undefined);
+    const keys = ['role', 'i', 'f', 'section', 'key', 'field', 'name', 'act', 'model', 'note', 'v', 'mode'].filter((key) => el.dataset[key] !== undefined);
     return keys.length ? keys.map((key) => `[data-${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}="${CSS.escape(el.dataset[key])}"]`).join('') : null;
   }
   function render(page) {
@@ -533,16 +565,22 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
     } catch (error) { catalogError = error.message; }
     renderAll();
   }
-  const draftOf = (page) => ({ picks: drafts.picks, models: drafts.efforts, res: drafts.res, import: drafts.imports })[page];
+  const draftOf = (page) => ({ picks: drafts.picks, models: { efforts: drafts.efforts, notes: drafts.notes }, res: drafts.res, import: drafts.imports })[page];
   function resetPage(page) {
     if (page === 'picks') drafts.picks = copy(sel.editable.roles);
-    if (page === 'models') drafts.efforts = {};
+    if (page === 'models') { drafts.efforts = {}; drafts.notes = {}; }
     if (page === 'res') { drafts.res = {}; for (const role of Object.keys(resResults)) delete resResults[role]; }
     if (page === 'import') drafts.imports = {};
   }
   // 回读后去掉与新基线一致的草稿；保存期间的新编辑（包括改回旧值）保留。推荐行草稿由 load 按角色处理。
   function prune(page, savedRoles = null) {
-    if (page === 'models') for (const [model, levels] of Object.entries(drafts.efforts)) if (same(levels, levelsOf(model))) delete drafts.efforts[model];
+    if (page === 'models') {
+      for (const [model, levels] of Object.entries(drafts.efforts)) if (same(levels, levelsOf(model))) delete drafts.efforts[model];
+      for (const [model, entry] of Object.entries(drafts.notes)) {
+        for (const [field, value] of Object.entries(entry)) if (value === noteBase(model, field)) delete entry[field];
+        if (!Object.keys(entry).length) delete drafts.notes[model];
+      }
+    }
     if (page === 'import') {
       for (const [section, entries] of Object.entries(drafts.imports)) {
         for (const row of importRows(section)) if (entries[row.key] && same(entries[row.key], importBase(section, row))) delete entries[row.key];
@@ -611,8 +649,8 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
     });
   }
   function saveModels() {
-    void save('models', async (efforts) => {
-      await request('/api/selection', { method: 'PUT', body: JSON.stringify({ draft: { efforts }, expected_revision: sel.revisions }) });
+    void save('models', async (draft) => {
+      await request('/api/selection', { method: 'PUT', body: JSON.stringify({ draft, expected_revision: sel.revisions }) });
       return [];
     });
   }
@@ -763,6 +801,7 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
         set(data.field, target.checked ? [...list, data.name] : list);
       }
     }
+    if (page === 'models' && data.note) setNote(data.model, data.note, target.value.trim());
     if (page === 'import' && data.f) setImport(data.section, importRows(data.section).find((row) => row.key === data.key), { [data.f]: target.value.trim() });
     if (page === 'res' && data.role && resResults[data.role] === 'saved') resResults[data.role] = 'unsaved';
     pages[page].errors = [];
@@ -790,6 +829,10 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
   }
   roots.picks.addEventListener('toggle', (event) => {
     if (event.target.matches?.('.pick-details')) pickDetailsOpen = event.target.open;
+  }, true);
+  roots.models.addEventListener('toggle', (event) => {
+    if (!event.target.matches?.('.desc')) return;
+    if (event.target.open) openDescriptions.add(event.target.dataset.model); else openDescriptions.delete(event.target.dataset.model);
   }, true);
   for (const type of ['mousedown', 'mouseup', 'dragstart', 'dragover', 'drop', 'dragend']) roots.picks.addEventListener(type, onDrag);
 

@@ -297,9 +297,19 @@ export function buildRunning({ deps } = {}) {
   return state?.status === "running" && resolved.isProcessAlive(state.pid);
 }
 
+// MCP 发布槽（runtime-root.json 指向的资产根）把发布清单放在槽根，仓库与 Pi 槽放在 ops/dist；两种布局都认。
+const BUILD_MANIFEST_LOCATIONS = Object.freeze([
+  ["subagent_service.manifest.json"],
+  ["ops", "dist", "subagent_service.manifest.json"],
+]);
+
 export function runtimeBuildId({ deps } = {}) {
   const resolved = resolveDeps(deps);
-  return resolved.readJson(path.join(resolved.paths.assetRoot, "ops", "dist", "subagent_service.manifest.json")).build_id ?? null;
+  for (const parts of BUILD_MANIFEST_LOCATIONS) {
+    const buildId = resolved.readJson(path.join(resolved.paths.assetRoot, ...parts))?.build_id;
+    if (buildId) return buildId;
+  }
+  return null;
 }
 
 export function validManifest({ deps } = {}) {

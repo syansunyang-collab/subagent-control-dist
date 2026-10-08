@@ -21,6 +21,8 @@ const OPTIONAL_PICK_FIELDS = ["when", "capability", "default"];
 // 分身工具按标识写死引用的推荐行（adapters/pi/src/delegate-work-extension.mjs 的 DELEGATE_PICKS），界面不提供删除与改名。
 const FIXED_PICKS = Object.freeze({ "delegate-work": ["luna_xhigh", "luna_max", "sol_high"] });
 const EFFORT_FIELDS = { effort_min: "最低档位", effort: "默认档位", effort_max: "最高档位" };
+// 模型笔记里面板可编辑的文字字段；草稿给空串表示删除该字段。
+const NOTE_TEXT_FIELDS = ["tag", "description", "effort_note"];
 
 export class SelectionError extends PanelError {
   constructor(code, message, details = null, status = 422) {
@@ -143,6 +145,27 @@ function effortsInUse(targets, roles) {
   }));
 }
 
+// Pi 目录可用时，可选档位必须是该模型 Pi 支持档的非空子集；不在目录的模型不受此限。
+function effortsUnsupported(targets, piDetails) {
+  return Object.entries(targets[NOTES]?.notes ?? {}).flatMap(([model, note]) => {
+    const levels = piDetails?.[model]?.thinking_levels;
+    if (!note.efforts || !Array.isArray(levels)) return [];
+    const extra = note.efforts.filter((level) => !levels.includes(level));
+    if (note.efforts.length && !extra.length) return [];
+    return [{ code: "EFFORT_NOT_SUPPORTED", file: NOTES, field: `notes."${model}".efforts`,
+      message: extra.length ? `Pi 不支持 ${extra.join("、")}；可选 ${levels.join("/")}` : `至少保留一个档位；可选 ${levels.join("/")}` }];
+  });
+}
+
+// 面板目录条目已带 Pi 详情（thinking_levels 等）；目录不可用时为 null。
+function piDetailsOf(pi) {
+  return pi?.available ? Object.fromEntries(pi.models.map((entry) => [entry.value, entry])) : null;
+}
+
+function plainRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value);
+}
+
 function fileOrder(a, b) {
   return (a === NOTES ? 0 : 1) - (b === NOTES ? 0 : 1) || a.localeCompare(b);
 }
@@ -173,6 +196,9 @@ export function createSelectionStore(options = {}) {
       const editable = {
         roles: Object.fromEntries(roleFiles.map((file) => [path.basename(file, ".toml"), editablePicks(parsed[file].picks || [])])),
         efforts: Object.fromEntries(Object.entries(parsed[NOTES].notes || {}).filter(([, note]) => note.efforts).map(([model, note]) => [model, note.efforts])),
+        notes: Object.fromEntries(Object.entries(parsed[NOTES].notes || {})
+          .map(([model, note]) => [model, Object.fromEntries(NOTE_TEXT_FIELDS.filter((field) => typeof note[field] === "string").map((field) => [field, note[field]]))])
+          .filter(([, fields]) => Object.keys(fields).length)),
       };
       let config;
       try { config = loadSelectionConfig(sources); }
@@ -193,40 +219,49 @@ export function createSelectionStore(options = {}) {
   function selectionState(configState = {}, monitorRoot = null) {
     const snapshot = readSnapshot();
     const pi = configState.catalogs?.pi ?? { available: false, error: "", models: [] };
-    // null 表示没取到 Pi 模型清单；失败刷新时沿用上次成功的清单。
-    const piModels = pi.available ? pi.models.map((entry) => entry.value) : null;
     let projectOverride = null;
     if (monitorRoot && path.resolve(monitorRoot) !== snapshot.root) {
       const monitoredSources = resolveModelConfigSources({ roots: [{ root: snapshot.root }], projectRoot: monitorRoot }).describe();
       if (monitoredSources.project_override) projectOverride = monitoredSources;
     }
-    const catalog = projectCatalog(snapshot.config, { piModels });
+    // 没取到 Pi 模型清单时 piDetails 为 null；失败刷新时沿用上次成功的清单。
+    const catalog = projectCatalog(snapshot.config, { piDetails: piDetailsOf(pi) });
     catalog.warnings = catalog.warnings.map((warning) => located({ code: "SELECTION_WARNING", ...warning }, snapshot.root, (role) => snapshot.editable.roles[role]));
     return { catalog, effort_levels: [...EFFORT_LEVELS], fixed_picks: FIXED_PICKS,
       labels: readLabels(snapshot.root), editable: snapshot.editable, revisions: snapshot.revisions, pi_catalog: pi,
       project_override: projectOverride, sync_status: configState.sync_status ?? sync.status() };
   }
 
-  // 草稿可只含 roles（角色 → 推荐行数组）或 efforts（模型 → 可选档位），按文件给出目标数据。
+  // 草稿可含 roles（角色 → 推荐行数组）、efforts（模型 → 可选档位）与 notes（模型 → 文字字段），按文件给出目标数据。
   function draftTargets(draft, snapshot) {
-    if (!draft || typeof draft !== "object" || Array.isArray(draft)) throw new SelectionError("SELECTION_DRAFT_INVALID", "草稿必须是对象");
+    if (!plainRecord(draft)) throw new SelectionError("SELECTION_DRAFT_INVALID", "草稿必须是对象");
     const targets = {};
     for (const [role, picks] of Object.entries(draft.roles || {})) {
       if (!Object.hasOwn(snapshot.editable.roles, role)) throw new SelectionError("SELECTION_ROLE_INVALID", `角色不存在：${role}`);
       const target = editablePicks(picks);
       if (!equalData(target, snapshot.editable.roles[role])) targets[roleFile(role)] = { picks: target };
     }
-    const efforts = Object.entries(draft.efforts || {}).filter(([model, levels]) => {
+    const notes = {};
+    for (const [model, levels] of Object.entries(draft.efforts || {})) {
       if (!Array.isArray(levels)) throw new SelectionError("SELECTION_DRAFT_INVALID", `可选档位必须是数组：${model}`);
-      return !equalData(levels, snapshot.editable.efforts[model] ?? EFFORT_LEVELS);
-    });
-    if (efforts.length) targets[NOTES] = { notes: Object.fromEntries(efforts.map(([model, levels]) => [model, { efforts: levels }])) };
+      if (!equalData(levels, snapshot.editable.efforts[model] ?? null)) (notes[model] ??= {}).efforts = levels;
+    }
+    for (const [model, fields] of Object.entries(draft.notes || {})) {
+      if (!plainRecord(fields)) throw new SelectionError("SELECTION_DRAFT_INVALID", `模型笔记必须是对象：${model}`);
+      for (const [field, value] of Object.entries(fields)) {
+        if (typeof value !== "string") throw new SelectionError("SELECTION_DRAFT_INVALID", `${model} 的 ${field} 必须是字符串`);
+        if (value.trim() !== (snapshot.editable.notes[model]?.[field] ?? "")) (notes[model] ??= {})[field] = value.trim();
+      }
+    }
+    if (Object.keys(notes).length) targets[NOTES] = { notes };
     return targets;
   }
 
   function written(file, data, target) {
     if (file !== NOTES) return equalData(editablePicks(data.picks || []), target.picks);
-    return Object.entries(target.notes).every(([model, note]) => equalData(data.notes?.[model]?.efforts, note.efforts));
+    return Object.entries(target.notes).every(([model, note]) => Object.entries(note).every(([field, value]) => (field === "efforts"
+      ? equalData(data.notes?.[model]?.efforts ?? null, value)
+      : (data.notes?.[model]?.[field] ?? "") === value)));
   }
 
   function validateCandidates(snapshot, candidates, picksOf) {
@@ -262,18 +297,33 @@ export function createSelectionStore(options = {}) {
     const unknown = Object.entries(draft?.roles || {}).flatMap(([role, picks]) => (Array.isArray(picks) ? picks : []).flatMap((pick, index) => Object.keys(pick || {})
       .filter((key) => !PICK_FIELDS.includes(key))
       .map((key) => ({ code: "PICK_FIELD_UNKNOWN", file: roleFile(role), field: `picks[${index}].${key}`, role, pick_id: pick.id, message: `含面板不支持的配置项「${key}」，保存已拒绝` }))));
-    if (unknown.length) return { state: "validation_error", errors: unknown };
+    const unknownNotes = Object.entries(plainRecord(draft?.notes) ? draft.notes : {}).flatMap(([model, fields]) => Object.keys(plainRecord(fields) ? fields : {})
+      .filter((key) => !NOTE_TEXT_FIELDS.includes(key))
+      .map((key) => ({ code: "NOTE_FIELD_UNKNOWN", file: NOTES, field: `notes."${model}".${key}`, message: `含面板不支持的配置项「${key}」，保存已拒绝` })));
+    if (unknown.length || unknownNotes.length) return { state: "validation_error", errors: [...unknown, ...unknownNotes] };
     const targets = draftTargets(draft, snapshot);
     const changed = Object.keys(targets).sort(fileOrder);
     const stale = changed.find((file) => expectedRevision?.[file] !== snapshot.revisions[file]);
     if (stale) return { state: "revision_conflict", file: stale, current_revision: snapshot.revisions[stale] };
     const inUse = effortsInUse(targets, snapshot.editable.roles);
     if (inUse.length) return { state: "validation_error", errors: inUse };
+    const piDetails = piDetailsOf(configState.catalogs?.pi);
+    const unsupported = effortsUnsupported(targets, piDetails);
+    if (unsupported.length) return { state: "validation_error", errors: unsupported };
+    // 勾满 Pi 支持档等于不收窄，删掉 efforts；字段删光的笔记整段删除。
+    for (const [model, note] of Object.entries(targets[NOTES]?.notes ?? {})) {
+      if (note.efforts && equalData(note.efforts, piDetails?.[model]?.thinking_levels)) note.efforts = null;
+    }
     const picksOf = (role) => targets[roleFile(role)]?.picks ?? snapshot.editable.roles[role];
     const candidates = {};
     for (const file of changed) {
       try {
-        candidates[file] = patchDocument(snapshot.texts[file], targets[file], { file: absolute(snapshot.root, file) });
+        const deletedPaths = file === NOTES ? Object.entries(targets[file].notes).flatMap(([model, note]) => {
+          const cleared = Object.keys(note).filter((field) => note[field] === "" || note[field] === null);
+          const kept = new Set([...Object.keys(snapshot.parsed[NOTES].notes?.[model] ?? {}), ...Object.keys(note)].filter((field) => !cleared.includes(field)));
+          return kept.size ? cleared.map((field) => ["notes", model, field]) : [["notes", model]];
+        }) : [];
+        candidates[file] = patchDocument(snapshot.texts[file], targets[file], { file: absolute(snapshot.root, file), deletedPaths });
       } catch (error) {
         if (!(error instanceof TomlWritebackError)) throw error;
         return { state: "validation_error", errors: [candidateError(error, snapshot.root, picksOf)] };

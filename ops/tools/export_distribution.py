@@ -15,7 +15,7 @@ import tarfile
 
 ROOT = Path(__file__).resolve().parents[2]
 INCLUDE = (
-    "AGENTS.md", "README.md", "SETUP.md", "COPY-INSTALL.ps1", ".gitattributes", ".gitignore",
+    "AGENTS.md", "README.md", "SETUP.md", "HANDOVER.md", "COPY-INSTALL.ps1", ".gitattributes", ".gitignore",
     ".runtime/cockpit/.gitkeep", ".pi/settings.json", ".pi/extensions/", ".pi/prompts/",
     ".pi/control-plane-model-config.json", "ops/", "adapters/pi/", "src/agent-panel/",
 )

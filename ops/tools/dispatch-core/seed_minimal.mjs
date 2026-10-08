@@ -685,7 +685,7 @@ export function expandSeed(seed) {
   return full;
 }
 
-export function renderTemplate(routeId) {
+export function renderTemplate(routeId, { piDetails = null } = {}) {
   const profile = profileFor(routeId);
   const card = pyGet(profile, "card");
   if (card === null || card === undefined) {
@@ -758,7 +758,7 @@ export function renderTemplate(routeId) {
     `# 有效默认: ${defaultPick || "未配置"}`,
     ...projectedRole.picks.map((pick) => `# 推荐 ${pick.id}${pick.id === defaultPick ? "（默认）" : ""}: ${pick.when} → `
       + `${pick.model}@${pick.effort} [${pick.effort_min}–${pick.effort_max}]；选择 ${JSON.stringify({ pick: pick.id })}；`
-      + `模型可选档位 ${modelEfforts(config, pick.model).join("/")}`),
+      + `模型可选档位 ${modelEfforts(config, pick.model, piDetails).join("/")}`),
     `# 配置来源: 角色=${sources.roleConfigPath(role)}；模型笔记=${sources.model_notes}`,
     ...(modelTier ? [`# 卡提示: ${modelTier}`] : []),
     ...(pyTruthy(pyGet(card, "model_requirements"))

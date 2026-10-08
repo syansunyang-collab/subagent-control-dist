@@ -8,11 +8,13 @@
 //     回到真实探测，不新增失败门。
 //   - 写入是 best-effort：任何 IO 失败都只返回 false，不影响调用方拿到的探测结果。
 //   - TTL 是内部常量，不提供用户开关；过期即 miss。
+//   - model_details 按模型键缓存 Pi 目录的选型事实（supports_vision、thinking_levels、level_map、
+//     context_window）；字段形状变化时提升 schema，旧条目按 miss 处理。
 import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import path from "node:path";
 
-export const CATALOG_CACHE_SCHEMA = 1;
+export const CATALOG_CACHE_SCHEMA = 2;
 export const CATALOG_CACHE_TTL_MS = 60 * 1000;
 export const CATALOG_CACHE_FILE_NAME = "pi-child-model-catalog.json";
 export const CATALOG_CACHE_MAX_ENTRIES = 8;

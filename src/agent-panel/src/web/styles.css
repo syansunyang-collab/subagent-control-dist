@@ -719,9 +719,17 @@ button.review-action:hover { background: color-mix(in srgb, var(--err) 80%, var(
 .cfg .seg.locked button.on { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--muted); }
 .cfg .fold-row td { color: var(--muted); }
 .cfg .lv { display: inline-flex; flex-wrap: wrap; gap: 4px; }
-.cfg .lv button { padding: 1px 8px; font-size: 12px; font-family: var(--mono); color: var(--c-soft); background: var(--c-field);
-  border: 1px solid var(--line); border-radius: 6px; }
-.cfg .lv button.on { background: var(--c-accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent); }
+.cfg .lv button { padding: 1px 6px; font-size: 12px; font-family: var(--mono); color: var(--muted); background: transparent;
+  border: 1px solid color-mix(in srgb, var(--muted) 55%, transparent); border-radius: 6px; }
+.cfg .lv button.on { background: var(--action-bg); border-color: var(--action-bg); color: var(--action-ink); font-weight: 600; }
+.cfg .lv button:disabled { opacity: 0.4; border-style: dashed; cursor: not-allowed; }
+.cfg .models td { vertical-align: top; }
+.cfg .models .model-name { overflow-wrap: anywhere; }
+.cfg .models .mapped { font-size: 12px; color: var(--muted); }
+.cfg .desc summary { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 30px; }
+.cfg .desc textarea { font: inherit; font-size: 13px; width: 100%; min-height: 96px; margin-top: 4px; padding: 6px 8px; resize: vertical;
+  border: 1px solid var(--line); background: var(--c-field); border-radius: 6px; color: var(--text); }
+.cfg textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .cfg tr.is-invalid td { background: color-mix(in srgb, var(--err) 8%, transparent); }
 .cfg tr.prov td { font-weight: 600; color: var(--muted); font-size: 12px; padding-top: 12px; }
 

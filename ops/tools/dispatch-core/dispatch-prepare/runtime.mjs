@@ -15,7 +15,7 @@ import {
   isStaticReview,
 } from "../review_evidence.mjs";
 import { truthyText } from "../task_package_build.mjs";
-import { requirePiChildModel } from "./catalog.mjs";
+import { probePiChildModelCatalog, requireAllowedChildModel, requirePiChildModel } from "./catalog.mjs";
 import {
   ACCEPTANCE_SYNTHESIS_PROFILE,
   CROSS_REPO_RESULT_MODES,
@@ -32,6 +32,7 @@ function resolveFromPicks(agentType, capability, options = {}) {
     model: options.model || null,
     effort: options.effort || null,
     authorization: options.authorization || null,
+    pi_details: options.piDetails || null,
   });
   return {
     agent_type: agentType,
@@ -55,6 +56,7 @@ export function resolveRoleModelSelection(agentTypeRaw, modelOverride, effortOve
     effort: effortOverride,
     pick: options.pick,
     authorization: options.authorization,
+    piDetails: options.piDetails,
   });
 }
 
@@ -164,7 +166,15 @@ export function resolveAsyncRuntimeOptions(taskPackage, options = {}) {
     }
     simulationProfile = { role, persona: structuredClone(persona) };
   }
-  const modelSelection = resolveAsyncModelSelection(taskPackage, model, effort, { pick, authorization });
+  // Production dispatch uses the bare sentinel and is always checked. Explicit runner paths are
+  // custom/test seams; their model catalog belongs to that runner and is not inferred here.
+  const usesDefaultPiRunner = requestedRunnerPath === PI_ASYNC_RUNNER_SENTINEL;
+  // 文件层只由 prepare/submit 落盘；preview、list 与直接调用保持只读。
+  const catalogProbeOptions = { cacheWrite: Boolean(catalogCacheWrite) };
+  // 先取 Pi 目录：选型按「笔记 efforts ∩ Pi 支持档」校验，Pi 不支持的档位在派发前拒绝。
+  const childCatalog = usesDefaultPiRunner ? probePiChildModelCatalog(String(resolveLikePython(effectiveTargetCwd)), catalogProbeOptions) : null;
+  const piDetails = childCatalog?.status === "ok" ? childCatalog.model_details : null;
+  const modelSelection = resolveAsyncModelSelection(taskPackage, model, effort, { pick, authorization, piDetails });
   if (modelSelection.selection && extensions.resource_config_fingerprint) {
     modelSelection.selection.config_source = {
       ...modelSelection.selection.config_source,
@@ -172,12 +182,9 @@ export function resolveAsyncRuntimeOptions(taskPackage, options = {}) {
     };
   }
   // 最终请求已在本次解析中校验；此后不得改 effort。
-  // Production dispatch uses the bare sentinel and is always checked. Explicit runner paths are
-  // custom/test seams; their model catalog belongs to that runner and is not inferred here.
-  const usesDefaultPiRunner = requestedRunnerPath === PI_ASYNC_RUNNER_SENTINEL;
-  // 文件层只由 prepare/submit 落盘；preview、list 与直接调用保持只读。
-  const catalogProbeOptions = { cacheWrite: Boolean(catalogCacheWrite) };
   const webExtension = { status: "configured_resources", source: "Pi user configuration" };
+  // Custom runners skip the catalog check below; the Fable refusal applies to every runner.
+  requireAllowedChildModel(pyStr(pyTruthy(modelSelection.primary_model) ? modelSelection.primary_model : ""));
   if (usesDefaultPiRunner) {
     modelSelection.child_model = requirePiChildModel(
       pyStr(pyTruthy(modelSelection.primary_model) ? modelSelection.primary_model : ""),

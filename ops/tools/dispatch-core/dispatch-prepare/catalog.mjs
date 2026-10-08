@@ -2,7 +2,7 @@ import path from "node:path";
 import process from "node:process";
 
 import { ToolError, isAbsoluteLikePython, resolveLikePython, ROOT } from "../_tool_common.mjs";
-import { pySpawnSync, pySplitLines, pyStr, pyStrip, pyTruthy } from "../_py.mjs";
+import { pySpawnSync, pyStr, pyStrip, pyTruthy } from "../_py.mjs";
 import {
   CATALOG_CACHE_FILE_NAME,
   CATALOG_CACHE_SCHEMA,
@@ -13,11 +13,12 @@ import {
 } from "../model_catalog_cache.mjs";
 import {
   PI_CHILD_MODEL_EXTENSION_PROFILE,
-  resolvePiAgentDir,
   resolvePiChildModelExtensions,
 } from "../../pi_model_extension_profile.mjs";
+import { piModelDetails, probePiModelsSync } from "../../pi_model_catalog.mjs";
+import { resolvePiAgentDir } from "../../pi_settings_packages.mjs";
 import { deps } from "./deps.mjs";
-import { PY_SPLIT_RE, isFile, pySlice, shutilWhich, sortedStrings } from "./py-utils.mjs";
+import { isFile, pySlice, shutilWhich, sortedStrings } from "./py-utils.mjs";
 import { caches } from "./state.mjs";
 
 function piChildCatalogCommandImpl() {
@@ -57,6 +58,20 @@ function piChildModelExtensionProfileImpl() {
   return { profile: PI_CHILD_MODEL_EXTENSION_PROFILE, extensions, error: null };
 }
 
+// The user's global rule forbids Fable as a subagent model. Model providers reach it on the
+// Pi rail (pi-claude-code-provider, cursor-host), so the child catalog never lists it and an
+// explicit request is refused even when the catalog probe is unavailable.
+const DENIED_CHILD_MODEL = /fable/i;
+
+export function requireAllowedChildModel(model) {
+  if (DENIED_CHILD_MODEL.test(String(model))) {
+    throw new ToolError(
+      `model ${model} is a Fable model, which is not allowed for subagents; nothing was dispatched. `
+      + "Choose a non-Fable model and retry.",
+    );
+  }
+}
+
 export function piChildModelExtensionProfile() {
   if (!caches.piChildModelExtensionProfile.has("value")) {
     caches.piChildModelExtensionProfile.set("value", deps.piChildModelExtensionProfile());
@@ -68,79 +83,32 @@ export function piChildModelExtensionProfile() {
 function probePiChildModelCatalogUncachedImpl(targetCwd) {
   const command = piChildCatalogCommand();
   const extensionProfile = piChildModelExtensionProfile();
+  const source = `pi rpc get_available_models (${extensionProfile.profile})`;
+  const unavailable = (error) => ({ status: "unavailable", models: [], model_count: 0, source, error });
   if (!command.length || pyTruthy(extensionProfile.error)) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: "pi --list-models (child model profile)",
-      error: pyTruthy(extensionProfile.error) ? extensionProfile.error : "Pi executable not found",
-    };
+    return unavailable(pyTruthy(extensionProfile.error) ? extensionProfile.error : "Pi executable not found");
   }
-  const argv = [...command.slice(1), "-ne", "-ns", "-np", "--no-themes", "-nc", "--no-approve"];
-  for (const extensionPath of extensionProfile.extensions) argv.push("-e", extensionPath);
-  argv.push("--list-models");
-  const completed = pySpawnSync(command[0], argv, {
-    cwd: String(targetCwd),
-    encoding: "utf8",
-    timeout: 30000,
-    windowsHide: true,
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  if (completed.error) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: pySlice(String(completed.error.message ?? completed.error), 500),
-    };
+  let raw;
+  try {
+    raw = probePiModelsSync({
+      cwd: String(targetCwd),
+      command,
+      args: ["--no-extensions", "--no-approve", ...extensionProfile.extensions.flatMap((extensionPath) => ["-e", extensionPath])],
+      runSync: pySpawnSync,
+    });
+  } catch (error) {
+    return unavailable(pySlice(String(error?.message ?? error), 500));
   }
-  const stdout = String(completed.stdout ?? "");
-  const stderr = String(completed.stderr ?? "");
-  if (completed.status !== 0) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: pySlice(pyStrip(stderr || stdout), 500),
-    };
-  }
-  const models = new Set();
-  // 目录的 6 列是 provider / model / context / max-out / thinking / images；
-  // context 与 images 是选型事实的真源，按模型键旁挂 model_details，缺列时留 null。
-  const details = {};
-  for (const line of pySplitLines(stdout)) {
-    const columns = line.split(PY_SPLIT_RE).filter((item) => item !== "");
-    if (columns.length < 2 || columns[0].toLowerCase() === "provider") continue;
-    const provider = pyStrip(columns[0]);
-    const modelId = pyStrip(columns[1]);
-    if (!provider || !modelId) continue;
-    const key = `${provider}/${modelId}`;
-    models.add(key);
-    const images = columns.length >= 6 ? pyStrip(columns[5]).toLowerCase() : "";
-    details[key] = {
-      context_window: columns.length >= 3 ? pyStrip(columns[2]) || null : null,
-      supports_vision: images === "yes" ? true : images === "no" ? false : null,
-    };
-  }
-  if (!models.size) {
-    return {
-      status: "unavailable",
-      models: [],
-      model_count: 0,
-      source: `pi --list-models (${extensionProfile.profile})`,
-      error: "Pi returned no parseable child models",
-    };
-  }
-  const ordered = sortedStrings(models);
+  // model_details 是选型事实的真源：图像输入、Pi 支持档位与实际发送值、上下文窗口。
+  const details = Object.fromEntries(Object.entries(piModelDetails(raw)).filter(([key]) => !DENIED_CHILD_MODEL.test(key)));
+  const ordered = sortedStrings(Object.keys(details));
+  if (!ordered.length) return unavailable("Pi returned no child models");
   return {
     status: "ok",
     models: ordered,
     model_details: Object.fromEntries(ordered.map((key) => [key, details[key]])),
     model_count: ordered.length,
-    source: `pi --list-models (${extensionProfile.profile})`,
+    source,
     error: null,
   };
 }
@@ -268,6 +236,7 @@ export function probePiChildModelCatalog(targetCwd, options = {}) {
 }
 
 export function requirePiChildModel(model, targetCwd, options = {}) {
+  requireAllowedChildModel(model);
   const resolvedCwd = String(resolveLikePython(targetCwd));
   let catalog = probePiChildModelCatalog(resolvedCwd, options);
   // 文件层命中但缺所请求模型：只强制复探一次，再按原合同裁决（不新增失败门）。

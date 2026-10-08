@@ -195,7 +195,7 @@ graph LR
 | `ops/hooks/prompts/main/post-tool-dispatch-reminder.md` | 提供工具后子代理派发提醒正文。 | 0 | 1 |
 | `ops/hooks/prompts/main/stop-state-check.md` | 提供主代理停止前状态自检提醒正文。 | 0 | 2 |
 | `ops/workflows/incident-containment.md` | 规定生产事故与阻塞性故障的受控止血通道：准入、止血循环和转正式跟进。 | 1 | 2 |
-| `ops/workflows/task-card.md` | 规定任务卡道的卡片结构、一次确认、校验、执行、升级与收口。 | 2 | 4 |
+| `ops/workflows/task-card.md` | 规定任务卡道的卡片结构、一次确认、校验、执行、升级与收口。 | 2 | 5 |
 
 ### planning
 

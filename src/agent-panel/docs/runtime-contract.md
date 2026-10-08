@@ -45,7 +45,7 @@ url    = http://127.0.0.1:<port>/
 - 控制仓 `.runtime` 默认只读；
 - 单任务取消只通过公共 `AsyncTaskService.cancel` 的 `expected_revision` CAS；
 - Fleet 运行级结束只通过既有 `fleet_cancel`：`run_id` 必须匹配既有任务标识格式，且该 run 的 `state_root` 必须是当前监控项目的 fleet 目录；不接受调用方路径或命令，不删除 state、失败记录或任务报告；
-- 配置真源是控制仓（生产取 `deployment.json` 的 `source.source_root`，浏览器开发模式取启动控制仓），监控工程不改变真源。写入闭集为角色 TOML 的 `[[picks]]` 与资源白名单四键（含 `[capabilities.<id>]` 收窄）、模型笔记的 `efforts`、`ops/templates/worker-resources.json` 各条目的 `access` / `label` / `group`；
+- 配置真源是控制仓（生产取 `deployment.json` 的 `source.source_root`，浏览器开发模式取启动控制仓），监控工程不改变真源。写入闭集为角色 TOML 的 `[[picks]]` 与资源白名单四键（含 `[capabilities.<id>]` 收窄）、模型笔记的 `efforts`、`tag`、`description`、`effort_note`、`ops/templates/worker-resources.json` 各条目的 `access` / `label` / `group`；
 - `GET /api/projects` 列出 `allowed_projects`；`PUT /api/monitor-root` 在列表内切换监控仓的 `.runtime/cockpit`。目标缺少运行态则失败，不猜其他目录。切仓不改变配置资产路径；
 - 不在面板模块内保存任务业务数据；
 - 面板日志写用户级 `.subagent-control/agent-panel/logs`，隔离测试可通过 `AGENT_PANEL_STATE_ROOT` 指定状态目录；`server.jsonl` 每个请求完成后异步写一行，必含 ISO 8601 `timestamp`、整数 `durationMs`、HTTP `status` 与 `path`，可选字段为 `task_id`、`run_id`。`durationMs` 从 HTTP handler 开始计时，排队延迟由客户端端到端计时覆盖；
@@ -63,15 +63,15 @@ url    = http://127.0.0.1:<port>/
 
 ## 配置域
 
-- `GET /api/selection`：推荐行与模型档位的投影（`projectCatalog`）、可编辑数据（各角色推荐行、各模型 `efforts`）、各受管 TOML 的 revision、档位闭集与 `ops/panel-labels.toml` 显示名；Pi 模型清单未取得时模型的 `in_pi` 为 null。
-- `PUT /api/selection`：请求体 `{ draft: { roles?, efforts? }, expected_revision }`。推荐行含可编辑字段以外的键时返回 `PICK_FIELD_UNKNOWN` 并拒写。只对有变化的文件做 CAS；候选文件与其余受管文件整体经 `loadSelectionConfig` 与 Python `tomllib` 复验后多文件原子换入，任一文件失败即恢复。去掉仍被推荐行引用的档位时列出全部受影响的行并拒写。校验错误统一为 `{ code, file, field, role?, pick_id?, message }`。
+- `GET /api/selection`：推荐行与模型档位的投影（`projectCatalog`）、可编辑数据（各角色推荐行、各模型 `efforts` 与笔记文字字段 `tag` / `description` / `effort_note`）、各受管 TOML 的 revision、档位闭集与 `ops/panel-labels.toml` 显示名。投影的模型条目带 `efforts`（笔记 `efforts` ∩ Pi 支持档）、`pi_levels`、`level_map`（支持档里实际发送值不同的项）与 `supports_vision`，后三者来自 Pi 目录；Pi 模型清单未取得时 `in_pi` 为 null，模型不在 Pi 清单时 `pi_levels`、`level_map`、`supports_vision` 为 null。
+- `PUT /api/selection`：请求体 `{ draft: { roles?, efforts?, notes? }, expected_revision }`；`notes` 为模型 → `{ tag?, description?, effort_note? }`，空串删除该字段。推荐行含可编辑字段以外的键时返回 `PICK_FIELD_UNKNOWN`，笔记含其它字段时返回 `NOTE_FIELD_UNKNOWN`，均拒写。Pi 目录可用时，`efforts` 必须是该模型 Pi 支持档的非空子集，否则返回 `EFFORT_NOT_SUPPORTED`。只对有变化的文件做 CAS；候选文件与其余受管文件整体经 `loadSelectionConfig` 与 Python `tomllib` 复验后多文件原子换入，任一文件失败即恢复。去掉仍被推荐行引用的档位时列出全部受影响的行并拒写。校验错误统一为 `{ code, file, field, role?, pick_id?, message }`。
 - `GET /api/config`：各角色资源白名单与 revision（`delegate-work` 不参与）、导入范围文件 revision 与运行槽同步状态；不等待资源注册探测。
 - `GET /api/config/resources`：按需读取资源候选（`resolveWorkerResourceCatalog`，读控制仓导入范围文件，项目技能按监控工程解析）；目录发现可启动 Pi RPC 子进程探测已安装扩展注册的工具。资源页与导入范围页先显示加载状态，失败时给出重试入口；基础配置读取不依赖此调用。
 - `GET /api/config/catalogs`：异步读取正常 Pi RPC 模型目录；成功结果缓存 60 秒，并发请求共享一次查询。`?refresh=1` 跳过成功缓存，仍共享在途查询。失败保留上次成功目录，返回 `error` / `error_code` / `stale`；失败后可立即重试。`checked_at` 为上次成功查询时间，`loading` 为查询在途状态。
 - `PUT /api/config/roles/<role>`：请求体 `{ updates, expected_revision }`。`updates` 为 `tools` / `extensions` / `skills` / `project_skills` 与 `capabilities.<id>` 同名键；任务类型值只能收窄角色值，放宽返回 `CONFIG_CAPABILITY_WIDENS` 与字段位置；未开放或未安装的名字照常保存，并返回 `{ code, field, message }` 形式的警告。
 - `PUT /api/config/imports`：请求体 `{ updates: { tools | extensions | skills: { <键>: { access?, label?, group? } } }, expected_revision }`。插件与技能的键可含 `*`，工具键不可；未记录的资源按本次提交的字段建条目（须带合法 `access`）；空显示名删除该键；`required_tools` 中的工具只改 `label`。候选文件经 `loadWorkerResourcesConfig` 整份校验后才换入与同步，不通过返回 `{ code, file, field, message }`。资源目录读取失败时 `resource_catalog.error` 为固定提示文字，原始异常只写服务 stderr。
 - revision 为目标文件内容 SHA-256 前 12 位；不匹配返回 409 且不落盘。
-- Pi 模型选择来源：正常 Pi RPC `get_available_models` 返回 Model 数组，再由同一 SDK 的 SettingsManager 读取有效 enabledModels，交 resolveModelScopeWithDiagnostics 解析白名单；不复制白名单或自行实现模式匹配。空白名单或零命中时返回空目录；读取失败显示目录错误并可重试。清单只决定推荐行的模型下拉与「不在 Pi 清单」提示；不在清单中的模型只记警告，保存不依赖目录。此界面过滤不改变派发工具权限。
+- Pi 模型选择来源：正常 Pi RPC `get_available_models` 返回 Model 数组，再由同一 SDK 的 SettingsManager 读取有效 enabledModels，交 resolveModelScopeWithDiagnostics 解析白名单；不复制白名单或自行实现模式匹配。空白名单或零命中时返回空目录；读取失败显示目录错误并可重试。探针与归一化（图像输入、Pi 支持档、实际发送值、上下文窗口）在 `ops/tools/pi_model_catalog.mjs`，与 `dispatch_prepare` 共用。清单决定推荐行的模型下拉、「不在 Pi 清单」提示与模型档位页的图像、支持档和实际映射；不在清单中的模型只记警告，目录不可用时保存不校验 Pi 支持档。此界面过滤不改变派发工具权限。
 - 配置操作在独立 worker 执行，同步文件操作与 Python 子进程不占 HTTP 主线程。模型目录与资源目录独立异步加载；模型查询超时为 30 秒，收到对应 RPC 响应或失败后回收；本地配置可在目录查询期间读取。资源目录请求按目录等待预算处理，不延长普通配置读取的 8 秒上限。
 - TOML 读取与候选校验经 Python `tomllib` 一次性子进程（解释器解析顺序：`AGENT_PANEL_PYTHON` → 控制仓 `.venv` → PATH 中的 `python`）；写入经 `@decimalturn/toml-patch` 保留注释与未编辑的键，备份后临时文件原子换入，回读复验失败即回滚，结果状态闭集为 `saved` / `revision_conflict` / `validation_error` / `save_error_restored` / `save_error_restore_failed`。
 - 保存成功后把写入的文件同步到运行槽：`~/.subagent-control/releases/subagent` 下含 `ops/model-notes.toml` 的正式目录、Pi 扩展槽与 `consumer/current.json` 的 `runtime_root`。受管文件为 `ops/agents/*.toml`、`ops/model-notes.toml` 与 `ops/templates/worker-resources.json`；`ops/panel-labels.toml` 不同步。

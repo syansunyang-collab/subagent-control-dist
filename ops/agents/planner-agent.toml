@@ -26,7 +26,7 @@ id = "topology"
 when = "拓扑与汇总编排"
 model = "openai-codex/gpt-6-astra"
 effort = "medium"
-effort_min = "off"
+effort_min = "low"
 effort_max = "medium"
 default = true
 

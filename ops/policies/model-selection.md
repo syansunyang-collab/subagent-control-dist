@@ -1,7 +1,7 @@
 # 子代理选型与配置维护
 
 > 职责：区分日常选型与角色配置维护，说明配置来源异常的处理入口。
-> 真源：日常选型使用派发工具返回；角色推荐行由有效角色配置 `[[picks]]` 提供，模型可选档位由有效 `ops/model-notes.toml` 的 `efforts` 提供。
+> 真源：日常选型使用派发工具返回；角色推荐行由有效角色配置 `[[picks]]` 提供，模型可选档位取有效 `ops/model-notes.toml` 的 `efforts` 与 Pi 模型目录支持档的交集（推导规则见 `docs/operations/model-maintenance.md`）。
 > 读取：维护读取
 
 ## 日常选型
