@@ -15,6 +15,7 @@ const PICK_TEXT = { id: '标识', when: '适用场景', model: '模型', effort_
 const RESOURCE_TEXT = { tools: '工具', extensions: '插件', skills: '技能', project_skills: '项目技能' };
 const IMPORT_TEXT = { access: '开放方式', label: '显示名', group: '分组' };
 const NOTE_TEXT = { efforts: '可选档位', tag: '标签', description: '用途说明', effort_note: '备注' };
+const NOTE_FIELDS = [['tag', '标签'], ['effort_note', '备注（给人看）'], ['description', '用途说明（给模型看）']];
 const PHRASES = [[/ ?effort_min/g, '最低档位'], [/ ?effort_max/g, '最高档位'], [/不带 capability 的推荐/g, '任务类型为「全部任务」的推荐'], [/设为 default/g, '设为默认']];
 // 编译器把默认开启的工具无条件并入角色选择；唯一的条件依赖是后台长命令需要最终工具面含命令行（ops/tools/pi_worker_resources.mjs 的 workerSpawnTools）。
 const TOOL_NEEDS = { command_job: 'bash' };
@@ -37,7 +38,8 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
   const expanded = new Set();
   const narrowing = new Map();
   const openGroups = new Set();
-  const openDescriptions = new Set();
+  const openNotes = new Set();
+  let usedOnly = false;
   let selectedPickRole = 'executor-agent';
   let pickDetailsOpen = false;
   const missingNames = new Set();
@@ -449,41 +451,55 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
     if (value === noteBase(model, field) && !pages.models.busy) delete entry[field]; else entry[field] = value;
     if (Object.keys(entry).length) drafts.notes[model] = entry; else delete drafts.notes[model];
   }
+  // 各模型被推荐行引用的次数；推荐行有草稿时按草稿计。
+  function usage() {
+    const counts = {};
+    for (const picks of Object.values({ ...sel.editable.roles, ...drafts.picks })) for (const pick of picks) counts[pick.model] = (counts[pick.model] || 0) + 1;
+    return counts;
+  }
   function renderModels() {
     const models = sel.catalog.models;
     const pi = sel.pi_catalog;
     const failure = catalogError || pi.error;
     const status = pi.available ? '' : pi.loading || !failure ? '<div class="cfg-msg">正在读取 Pi 模型清单…</div>'
       : `<div class="cfg-msg is-warn">Pi 模型清单读取失败：${html(failure)}<button type="button" class="secondary-button" data-act="retry-catalog">重试</button></div>`;
+    const uses = usage();
+    const invalidRow = (model) => invalid('models', (item) => item.field?.startsWith(`notes."${model}".`));
     const row = (entry) => {
       const { model } = entry;
       const levels = modelLevels(model);
-      const bad = (field) => invalid('models', (item) => item.field === `notes."${model}".${field}`);
-      const attrs = (field) => `data-model="${html(model)}" data-note="${field}" aria-label="${html(`${model} ${NOTE_TEXT[field]}`)}"${bad(field) ? ' class="is-invalid"' : ''}`;
-      const toggles = entry.in_pi === false ? `<span class="soft">${html(levels.join(' / '))}</span>`
+      const open = openNotes.has(model);
+      const attrs = (field, label) => `data-model="${html(model)}" data-note="${field}" aria-label="${html(`${model} ${label}`)}"${invalid('models', (item) => item.field === `notes."${model}".${field}`) ? ' class="is-invalid"' : ''}`;
+      const toggles = entry.in_pi === false ? `<span class="soft">${html(levels.join(' / '))}</span> <span class="tag">不在 Pi 清单</span>`
         : `<div class="lv">${effortLevels().map((level) => {
           const on = levels.includes(level);
+          const sent = entry.level_map?.[level];
           const blocked = entry.pi_levels && !entry.pi_levels.includes(level) ? ` disabled title="Pi 会改按 ${clampLevel(entry.pi_levels, level)} 运行"` : '';
-          return `<button type="button" class="${on ? 'on' : ''}" data-act="level" data-model="${html(model)}" data-v="${level}" aria-pressed="${on}"${blocked}>${level}</button>`;
+          const mapped = sent ? ` title="Pi 实际发送 ${html(sent)}" aria-label="${level}，Pi 实际发送 ${html(sent)}"` : '';
+          return `<button type="button" class="${[on && 'on', sent && 'mapped'].filter(Boolean).join(' ')}" data-act="level" data-model="${html(model)}" data-v="${level}" aria-pressed="${on}"${blocked}${mapped}>${level}</button>`;
         }).join('')}</div>`;
-      const vision = entry.in_pi && entry.supports_vision !== null ? (entry.supports_vision ? '支持' : '不支持') : '<span class="soft">—</span>';
-      const mapped = Object.entries(entry.level_map || {}).map(([level, sent]) => `<div>${html(level)} 实际发送 ${html(sent)}</div>`).join('') || '<span class="soft">—</span>';
-      const description = noteValue(model, 'description');
-      const invalidRow = invalid('models', (item) => item.field?.startsWith(`notes."${model}".`));
-      return `<tr${invalidRow ? ' class="is-invalid"' : ''}><td class="mono model-name">${html(model)}${entry.in_pi === false ? ' <span class="tag">不在 Pi 清单</span>' : ''}</td>
-        <td>${toggles}</td><td>${vision}</td><td class="mapped">${mapped}</td>
-        <td><input type="text" ${attrs('tag')} value="${html(noteValue(model, 'tag'))}"></td>
-        <td><input type="text" ${attrs('effort_note')} value="${html(noteValue(model, 'effort_note'))}"></td>
-        <td><details class="desc" data-model="${html(model)}"${openDescriptions.has(model) ? ' open' : ''}><summary>${description ? html(description) : '<span class="soft">未填写</span>'}</summary>
-          <textarea rows="5" ${attrs('description')}>${html(description)}</textarea></details></td></tr>`;
+      const vision = entry.in_pi && entry.supports_vision !== null ? (entry.supports_vision ? '支持' : '<span class="muted">不支持</span>') : '<span class="soft">—</span>';
+      const brief = (field) => {
+        const text = noteValue(model, field);
+        return text ? `<td title="${html(text)}">${html(text)}</td>` : '<td><span class="soft">—</span></td>';
+      };
+      const editor = () => `<tr class="note-edit"><td colspan="6"><div class="note-fields">${NOTE_FIELDS.map(([field, label]) => `<label${field === 'description' ? ' class="wide"' : ''}><span>${label}</span>${field === 'description'
+        ? `<textarea rows="3" ${attrs(field, label)}>${html(noteValue(model, field))}</textarea>`
+        : `<input type="text" ${attrs(field, label)} value="${html(noteValue(model, field))}">`}</label>`).join('')}</div></td></tr>`;
+      return `<tr${invalidRow(model) ? ' class="is-invalid"' : ''}><td><div class="model-name"><span class="mono" title="${html(model)}">${html(short(model))}</span>${uses[model] ? `<span class="tag">在用 ${uses[model]}</span>` : ''}${drafts.efforts[model] || drafts.notes[model] ? '<span class="edited">已改</span>' : ''}</div></td>
+        <td>${toggles}</td><td>${vision}</td>${brief('tag')}${brief('description')}
+        <td class="c"><button type="button" class="link" data-act="edit-note" data-model="${html(model)}" aria-expanded="${open}">${open ? '收起' : '编辑'}</button></td></tr>${open ? editor() : ''}`;
     };
-    const providers = [...new Set(models.map((entry) => provider(entry.model)))];
-    return `${header('models', '模型档位', '勾选各模型可选的档位，「角色与模型」的档位下拉只列出这里勾选的档位；置灰的档位 Pi 不支持。', modelsDirty())}
+    const shown = models.filter((entry) => !usedOnly || uses[entry.model] || invalidRow(entry.model));
+    const providers = [...new Set(models.map((entry) => provider(entry.model)))].filter((name) => shown.some((entry) => provider(entry.model) === name));
+    const filter = [['all', '全部'], ['used', '只看在用']].map(([id, text]) => `<button type="button" class="${(id === 'used') === usedOnly ? 'on' : ''}" data-act="model-filter" data-v="${id}" aria-pressed="${(id === 'used') === usedOnly}">${text}</button>`).join('');
+    return `${header('models', '模型档位', '勾选各模型可选的档位，「角色与模型」的档位下拉只列出这里勾选的档位。虚线档位 Pi 不支持；带圆点的档位 Pi 实际发送其它档位，悬停可查看。「在用」为引用该模型的推荐行数；标签、备注与用途说明点「编辑」修改。', modelsDirty())}
       ${status}
-      <article class="role"><div class="role-body">
-      <table class="imp models"><colgroup><col style="width:15%"><col style="width:30%"><col style="width:5%"><col style="width:11%"><col style="width:10%"><col style="width:11%"><col></colgroup>
-      <thead><tr><th>模型</th><th>可选档位</th><th>图像</th><th>实际映射</th><th>标签</th><th>备注</th><th>用途说明</th></tr></thead><tbody>
-      ${providers.map((name) => `<tr class="prov"><td colspan="7">${html(name)}</td></tr>${models.filter((entry) => provider(entry.model) === name).map(row).join('')}`).join('')}
+      <div class="seg model-filter" role="group" aria-label="显示范围">${filter}</div>
+      <article class="role"><div class="role-body models-body">
+      <table class="imp models"><colgroup><col class="c-model"><col class="c-levels"><col class="c-vision"><col class="c-tag"><col><col class="c-act"></colgroup>
+      <thead><tr><th>模型</th><th>可选档位</th><th>图像</th><th>标签</th><th>用途说明</th><th class="c">操作</th></tr></thead><tbody>
+      ${providers.map((name) => `<tr class="prov"><td colspan="6">${html(name)}</td></tr>${shown.filter((entry) => provider(entry.model) === name).map(row).join('')}`).join('') || (usedOnly ? '<tr><td colspan="6" class="soft">没有在用的模型</td></tr>' : '')}
       </tbody></table></div></article>`;
   }
 
@@ -502,6 +518,8 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
     if (!loaded) root.innerHTML = `<div class="cfg-msg${loadError ? ' is-error' : ''}">${html(loadError || '读取中…')}${loadError ? '<button type="button" class="secondary-button" data-act="reload">重新读取</button>' : ''}</div>`;
     else root.innerHTML = renderers[page]();
     if (focus) root.querySelector(focus)?.focus();
+    // 模型档位页的「在用」次数取自推荐行草稿，推荐行变化时一并重绘。
+    if (page === 'picks') render('models');
   }
   const renderAll = () => Object.keys(roots).forEach(render);
 
@@ -781,8 +799,10 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
       if (!next.length) return;
       if (same(next, levelsOf(model)) && !pages.models.busy) delete drafts.efforts[model]; else drafts.efforts[model] = next;
     }
+    if (act === 'edit-note') { if (openNotes.has(target.dataset.model)) openNotes.delete(target.dataset.model); else openNotes.add(target.dataset.model); }
+    if (act === 'model-filter') usedOnly = target.dataset.v === 'used';
     if (page === 'res' && target.dataset.role && resResults[target.dataset.role] === 'saved') resResults[target.dataset.role] = 'unsaved';
-    if (!['fold', 'open-group', 'cap'].includes(act)) pages[page].errors = [];
+    if (!['fold', 'open-group', 'cap', 'edit-note', 'model-filter'].includes(act)) pages[page].errors = [];
     render(page);
   }
   function onChange(page, event) {
@@ -829,10 +849,6 @@ export function createConfigPages({ roots, request, notify, updateSync }) {
   }
   roots.picks.addEventListener('toggle', (event) => {
     if (event.target.matches?.('.pick-details')) pickDetailsOpen = event.target.open;
-  }, true);
-  roots.models.addEventListener('toggle', (event) => {
-    if (!event.target.matches?.('.desc')) return;
-    if (event.target.open) openDescriptions.add(event.target.dataset.model); else openDescriptions.delete(event.target.dataset.model);
   }, true);
   for (const type of ['mousedown', 'mouseup', 'dragstart', 'dragover', 'drop', 'dragend']) roots.picks.addEventListener(type, onDrag);
 
