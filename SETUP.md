@@ -1,6 +1,6 @@
 # 本机安装与升级（Claude Code + Pi）
 
-本仓装好后，Claude Code 通过 MCP 工具 `mcp__asyncSubagent__*`、Pi 通过扩展工具 `dispatch_prepare` / `delegate_work` / `subagent_*` / `fleet_*` 把任务派给 Pi 子代理执行；技能、面板和异步监听一并安装。安装与升级共用 `python -B ops/tools/bootstrap.py`：默认只预览，加 `--apply` 执行，本机已满足的步骤自动跳过。安装不包含模型账号凭据与搜索服务密钥；插件以本仓快照为准，本机副本不同时先备份到 `~/.pi/agent/backups/` 再覆盖；其它已有配置只追加缺失项，同 id 模型或已有设置项内容不同时跳过并标为 `conflict`。
+本仓装好后，Claude Code 通过 MCP 工具 `mcp__asyncSubagent__*`、Pi 通过扩展工具 `dispatch_prepare` / `delegate_work` / `subagent_*` / `fleet_*` 把任务派给 Pi 子代理执行；技能、面板和异步监听一并安装。安装与升级共用 `python -B ops/tools/bootstrap.py`：默认只预览，加 `--apply` 执行。依赖、登记、插件与配置已满足的步骤自动跳过；发布步骤每次都重新构建并部署（`ops/dist` 随之变化），并恢复全仓启用，完成后仍需重启 Claude Code 与 Pi。安装不包含模型账号凭据与搜索服务密钥；插件以本仓快照为准，本机副本不同时先备份到 `~/.pi/agent/backups/` 再覆盖；其它已有配置只追加缺失项，同 id 模型或已有设置项内容不同时跳过并标为 `conflict`。
 
 ## 前置条件
 
@@ -66,8 +66,8 @@
 
 1. Claude Code 新会话：调用 `mcp__asyncSubagent__subagent_server_info`，`build_id` 与 `~/.pi/agent/extensions/subagent-control/deployment.json` 的 `build_id` 相同；再用 `mcp__asyncSubagent__subagent_prepare` 的 `list` 动作，返回角色与型号的逐行目录。
 2. Pi 新会话：调用 `dispatch_prepare` 的 `list` 动作，返回同一目录。
-3. 真实派发：按技能 `pi-rail-dispatch` 派一单只读小任务，等到终态 `completed`。
-4. 面板：双击桌面快捷方式 `Agent Panel`，窗口显示任务列表与「选型」「模型档位」「导入范围」等配置页。
+3. 真实派发：按技能 `pi-rail-dispatch` 派一单只读小任务，等任务状态到 `done`，再用 `subagent_result` 核对 `business_state` 为 `completed` 且报告与交接路径存在；状态为 `failed` 或 `cancelled` 时用 `subagent_get` 读诊断。
+4. 面板：双击桌面快捷方式 `Agent Panel`，窗口显示任务列表与「角色与模型」「角色资源」「导入范围」「模型档位」四个配置页。
 
 ## 适配本机模型
 
@@ -82,7 +82,7 @@
 1. 找出本机缺的型号：`list` 输出的「警告」段逐条列出 `model_not_in_pi`（角色卡文件、`picks` 序号、型号）；本机可用型号用 `pi --list-models` 查看。
 2. 把这些 `model` 换成可用型号；换成的新型号在 `ops/model-notes.toml` 补一节说明，直到 `list` 不再报 `model_not_in_pi`。
    Pi 侧另有两处用户级设置写了型号，本机没有时直接改：`~/.pi/agent/settings.json` 的 `compactionModel.model`、`~/.pi/web-search.json` 的 `openaiSearchModel` 与 `pageAnswer.model`。改过之后 bootstrap 对这几项报 `conflict` 并保留本机值。
-3. 两种生效方式：在面板「选型」「模型档位」「导入范围」页修改，面板同时写本仓与各发布槽；或直接改文件后重跑 `python -B ops/tools/bootstrap.py --apply`。
+3. 两种生效方式：在面板「角色与模型」「角色资源」「导入范围」「模型档位」页修改，面板同时写本仓与各发布槽；或直接改文件后重跑 `python -B ops/tools/bootstrap.py --apply`。
 4. 在 `local` 分支提交。
 
 代码改动同样提交在 `local` 分支，改完重跑 bootstrap 生效。
@@ -107,7 +107,7 @@
 
 | 位置 | 问题 | 改法 |
 | --- | --- | --- |
-| `ops/tools/run-pi-task.mjs` 的 `DEFAULT_PI_CLI`；`ops/tools/pi_worker_resources.mjs` 的 `PI_CLI` | 按 Windows 全局 npm 布局（`%APPDATA%/npm/node_modules/@earendil-works/pi-coding-agent/dist/cli.js`）拼 Pi CLI 路径，macOS 上不存在。任务开放 bash 时先在定位同目录 bash 模块处以 `transport_failed` 失败；未开放 bash 时在导入范围发现处以 `worker_resources_unavailable` 失败 | 两处都改为 `npm root -g` 下的 `@earendil-works/pi-coding-agent/dist/cli.js`。环境变量 `PI_CONTROL_PI` 不能替代：设置后子代理跳过插件与导入范围加载 |
+| `ops/tools/run-pi-task/protocol.mjs` 的 `DEFAULT_PI_CLI`；`ops/tools/pi_worker_resources.mjs` 的 `PI_CLI` | 按 Windows 全局 npm 布局（`%APPDATA%/npm/node_modules/@earendil-works/pi-coding-agent/dist/cli.js`）拼 Pi CLI 路径，macOS 上不存在。运行器启动子代理时无论任务是否开放 bash 都先准备同目录的 bash 模块，路径不存在即以 `transport_failed` 失败 | 两处都改为 `npm root -g` 下的 `@earendil-works/pi-coding-agent/dist/cli.js`，最好共用一个定位函数。环境变量 `PI_CONTROL_PI` 是测试用的覆盖口，不能替代：设置后子代理不装配 bash 模块，也跳过已装插件与技能的发现 |
 | `ops/tools/bootstrap.py` 的 `step_panel_build`、`step_panel_shortcut` | 只要有 `dotnet` 就构建 Windows 桌面壳（`net10.0-windows`），并调用 `powershell.exe` 建快捷方式，两步都会报错 | 非 Windows 平台跳过这两步，面板改用浏览器模式 |
 | 面板 | 桌面壳是 WinForms + WebView2，只能在 Windows 上运行 | 浏览器模式，在仓根执行 `node "<root>/ops/dist/agent_panel_server.bundle.mjs" --browser --control-repo "$PWD"`，`<root>` 取 `~/.subagent-control/agent-panel/runtime-root.json` 的 `root`，服务就绪后由它调用 `open` 自动打开浏览器。可写成桌面上的 `Agent Panel.command` |
 | 派发后自动拉起面板 | 启动器尝试构建 Windows 桌面壳并失败 | 只记诊断，不影响派发 |
