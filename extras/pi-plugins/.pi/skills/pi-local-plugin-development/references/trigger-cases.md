@@ -16,10 +16,10 @@
 
 1. 「帮我写一个教代理开发插件的 skill。」→ skill-authoring-governance；交付物是技能，不是插件。
 2. 「只审这几个工具的 description，看看模型什么时候会调用。」→ rule-authoring。
-3. 「写个程序通过 Pi RPC 驱动会话，不做扩展。」→ use-pi-rpc-safely。
+3. 「写个程序通过 Pi RPC 驱动会话，不做扩展。」→ 无本技能；交付物是 RPC 客户端，不是扩展。
 4. 「pi-web-access 搜索供应商配置怎么改？」→ pi-web-access-operations。
 5. 「核对裁剪候选包的自动接线，导入本机试用。」→ pi-context-prune-local-trial。
-6. 「重启 Pi Web，恢复刚才的会话。」→ restart-pi-web-windows。
+6. 「重启 Pi Web，恢复刚才的会话。」→ 无本技能；属于宿主重启。
 7. 「十分钟后提醒我看看构建结果。」→ 无本技能；使用可用的调度工具。
 8. 「给这个 WordPress 插件加一个菜单。」→ 无本技能；按目标产品开发流程处理。
 

@@ -4,7 +4,7 @@ layer: business
 domain: pi-extensions
 capability_group: web-access
 portability: repo-bound
-description: "维护pi-web-access（web_search/source_check/fetch_content/get_search_content）的工作原理、参数配置与调用故障：搜索供应商路由、curator、各用途模型与费用、页面问答推理、网页/PDF/视频提取、缓存和升级接线。适用于弄清整个插件、调整默认模型、查配置为何未生效。不用于普通资料检索、浏览器点击自动化、多搜索工具去重（audit-and-dedupe-pi-search-tools）、裁剪（pi-context-prune-local-trial）、通用SDK/RPC或Pi Web重启。"
+description: "维护pi-web-access（web_search/source_check/fetch_content/get_search_content）的工作原理、参数配置与调用故障：搜索供应商路由、curator、各用途模型与费用、页面问答推理、网页/PDF/视频提取、缓存和升级接线。适用于弄清整个插件、调整默认模型、查配置为何未生效。不用于普通资料检索、浏览器点击自动化、多搜索工具去重、裁剪（pi-context-prune-local-trial）、通用SDK/RPC或Pi Web重启。"
 ---
 
 # 网页插件机制与调节
@@ -18,7 +18,7 @@ description: "维护pi-web-access（web_search/source_check/fetch_content/get_se
 确认任务属于机制说明、配置调节、故障定位或升级接线。以下命令在本仓根目录执行；需要当前现场时运行只读检查：
 
 ```bash
-python -B ops/skills/pi-web-access-operations/scripts/inspect_web_access.py
+python -B .pi/skills/pi-web-access-operations/scripts/inspect_web_access.py
 ```
 
 读取版本、路径、脱敏字段和本仓补丁线索。该结果仅为磁盘快照；需要判断活动实例时，再核对实际工具清单、请求或日志。只解释源码时按已知版本入口阅读，不为讲解启动网络测试。
@@ -59,7 +59,7 @@ inspect_web_access.py只读安装元数据和非敏感配置，不解析凭据�
 修改脚本后运行：
 
 ```bash
-python -B ops/skills/pi-web-access-operations/scripts/test_inspect.py
+python -B .pi/skills/pi-web-access-operations/scripts/test_inspect.py
 ```
 
 测试检查敏感值不输出、凭据命令不执行、错误不回显配置和输入文件不变。该脚本检查不替代插件实际调用验证。

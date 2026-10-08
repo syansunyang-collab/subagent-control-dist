@@ -6,13 +6,14 @@ import { fileURLToPath } from "node:url";
 const toolRoot = dirname(fileURLToPath(import.meta.url));
 const canonicalPath = join(toolRoot, "transcript-compat.ts");
 const backupRoot = join(toolRoot, "..", "..", ".runtime", "pi-transcript-hydrate-backups");
+const npmRoot = join(process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent"), "npm", "node_modules");
 
 export const legacyTargets = [
   {
     id: "pi-claude-code-provider",
     legacy: true,
     canonicalPath: join(toolRoot, "claude-transcript-compat.ts"),
-    root: join(homedir(), ".pi", "agent", "npm", "node_modules", "pi-claude-code-provider"),
+    root: join(npmRoot, "pi-claude-code-provider"),
     compatRel: join("src", "transcript-compat.ts"),
     hookFiles: [join("src", "provider.ts"), join("src", "context-serializer.ts")],
   },
@@ -22,7 +23,7 @@ export const legacyTargets = [
 export const targets = [
   {
     id: "@tian.zuo/pi-antigravity",
-    root: join(homedir(), ".pi", "agent", "npm", "node_modules", "@tian.zuo", "pi-antigravity"),
+    root: join(npmRoot, "@tian.zuo", "pi-antigravity"),
     compatRel: join("src", "transcript-compat.ts"),
     hookFiles: [join("src", "provider.ts")],
   },

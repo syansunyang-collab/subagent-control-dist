@@ -186,10 +186,13 @@ function defaultTargets() {
     || join(process.env.APPDATA || join(homedir(), "AppData", "Roaming"), "npm", "node_modules");
   const piWebRoot = process.env.PI_WEB_APP_ROOT || "E:\\ControlPlane\\web\\app";
   const subagentRoot = process.env.PI_SUBAGENT_ADAPTER_ROOT
-    || join(homedir(), ".pi", "agent", "extensions", "subagent-control", "adapters", "pi");
+    || join(process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent"), "extensions", "subagent-control", "adapters", "pi");
   const globalPiRoot = join(npmRoot, "@earendil-works", "pi-coding-agent");
   const piWebAgentRoot = join(piWebRoot, "node_modules", "@earendil-works", "pi-coding-agent");
   const workerAgentRoot = join(subagentRoot, "node_modules", "@earendil-works", "pi-coding-agent");
+  // Pi Web and the subagent worker are optional when left at their built-in locations; a root set
+  // through its environment variable must exist.
+  const included = (configured, root) => Boolean(configured) || existsSync(root);
   return [
     {
       kind: "bundle",
@@ -201,7 +204,7 @@ function defaultTargets() {
       label: "global-terminal-pi-modular",
       packageDirectory: installedPiAiRoot(globalPiRoot),
     },
-    {
+    ...(included(process.env.PI_WEB_APP_ROOT, piWebRoot) ? [{
       kind: "pi-ai",
       label: "pi-web-root",
       packageDirectory: join(piWebRoot, "node_modules", "@earendil-works", "pi-ai"),
@@ -215,8 +218,8 @@ function defaultTargets() {
       kind: "bundle",
       label: "pi-web-rpc-bundle",
       packageDirectory: piWebAgentRoot,
-    },
-    {
+    }] : []),
+    ...(included(process.env.PI_SUBAGENT_ADAPTER_ROOT, subagentRoot) ? [{
       kind: "pi-ai",
       label: "subagent-worker-root",
       packageDirectory: join(subagentRoot, "node_modules", "@earendil-works", "pi-ai"),
@@ -230,7 +233,7 @@ function defaultTargets() {
       kind: "bundle",
       label: "subagent-worker-bundle",
       packageDirectory: workerAgentRoot,
-    }] : []),
+    }] : [])] : []),
   ];
 }
 

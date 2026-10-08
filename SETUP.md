@@ -8,7 +8,7 @@
 
 - Windows 10/11，已开启「开发者模式」（发布需要创建符号链接；bootstrap 会先检查）
 - Python 3.12+、Node.js 24+、Git，均在 PATH 上
-- Pi 0.87+：`npm i -g @earendil-works/pi-coding-agent`
+- Pi 0.87+，推荐 0.99.1（实测版本）：`npm i -g @earendil-works/pi-coding-agent@0.99.1`。`extras/pi-plugins/` 里的三个 Pi 本体补丁只随附 0.99.1 的载荷，其它版本上补丁管理器拒绝写入、Pi 本身不受影响，可选做法见 `extras/pi-plugins/EXTRAS.md`「版本不是 0.99.1 时」
 - Claude Code
 - .NET 10 SDK 与 Microsoft Edge WebView2 Runtime：面板桌面壳在本机构建并用 WebView2 显示；bootstrap 只检查 `dotnet`，缺少时面板两步标 `skipped`，WebView2 不做检查；缺哪一项都不影响派发
 - Pi 中至少登录一个模型服务商（`pi` 内执行 `/login`）；角色卡默认用 `openai-codex/gpt-6-*`（ChatGPT 订阅）与 `xai/grok-4.7`，没有的型号按「适配本机模型」替换

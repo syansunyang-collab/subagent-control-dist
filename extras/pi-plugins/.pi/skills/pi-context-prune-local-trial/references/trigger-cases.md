@@ -10,10 +10,10 @@
 
 ## 反判例
 
-1. 裁剪后缓存命中下降了，分析跨轮时序。应命中diagnose-pruning-cache-timing。
-2. 帮我实现一个通用Pi RPC客户端。应命中use-pi-rpc-safely。
+1. 裁剪后缓存命中下降了，分析跨轮时序。属于缓存时序分析，不触发本技能。
+2. 帮我实现一个通用Pi RPC客户端。属于通用RPC开发，不触发本技能。
 3. 只审一下ask_user_question的工具描述。应命中rule-authoring。
-4. 重启整个Pi Web并恢复会话。应命中restart-pi-web-windows。
+4. 重启整个Pi Web并恢复会话。属于宿主重启，不触发本技能。
 5. 新建一个仓库技能，检查frontmatter。应命中skill-authoring-governance。
 6. 将原生压缩阈值改为另一数值。属于压缩配置维护，不触发本技能。
 7. 把裁剪包发布到npm。属于包发布，不触发本地试用流程。

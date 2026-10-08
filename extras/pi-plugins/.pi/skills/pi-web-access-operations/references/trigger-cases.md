@@ -14,11 +14,11 @@
 
 ## 反判例
 
-1. 浏览器已有登录态，帮我在Edge中点按钮。命中use-personal-edge-devtools-windows。
+1. 浏览器已有登录态，帮我在Edge中点按钮。属于浏览器自动化，不命中本技能。
 2. 自动裁剪没有触发，检查工具结果水位。命中pi-context-prune-local-trial。
-3. Pi里同时有两个搜索工具，把重复工具隐藏。命中audit-and-dedupe-pi-search-tools。
-4. 重启Pi Web并恢复原会话。命中restart-pi-web-windows。
-5. 新建一个通用Pi RPC客户端。命中use-pi-rpc-safely。
+3. Pi里同时有两个搜索工具，把重复工具隐藏。属于多搜索工具去重，不命中本技能。
+4. 重启Pi Web并恢复原会话。属于宿主重启，不命中本技能。
+5. 新建一个通用Pi RPC客户端。属于通用RPC开发，不命中本技能。
 6. Claude provider拒绝system角色，修模型接入。属于provider适配，不命中本技能。
 7. 搜索今天的新闻并给结论。属于普通业务检索；使用工具本身即可，不先加载插件维护规程。
 8. 定时任务pending但不执行。属于scheduler维护，不命中本技能。

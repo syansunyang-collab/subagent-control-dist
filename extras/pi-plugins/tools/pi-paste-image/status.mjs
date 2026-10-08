@@ -10,7 +10,7 @@ if (process.argv.length > 2) {
   process.exitCode = 1;
 } else {
   const source = path.join(path.dirname(fileURLToPath(import.meta.url)), "paste-image.ts");
-  const installed = path.join(homedir(), ".pi", "agent", "extensions", "paste-image.ts");
+  const installed = path.join(process.env.PI_CODING_AGENT_DIR || path.join(homedir(), ".pi", "agent"), "extensions", "paste-image.ts");
   const sha256 = (file) => existsSync(file) ? createHash("sha256").update(readFileSync(file)).digest("hex") : null;
   const sourceHash = sha256(source);
   const installedHash = sha256(installed);

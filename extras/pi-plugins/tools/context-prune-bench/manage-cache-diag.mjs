@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const source = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(source, '../..');
-const target = path.join(homedir(), '.pi/agent/extensions');
+const target = path.join(process.env.PI_CODING_AGENT_DIR || path.join(homedir(), '.pi/agent'), 'extensions');
 const files = ['payload-cache-diag.ts', 'cache-wire-observer.mjs'];
 const recordFile = path.join(repo, 'runs/native-pi-runtime-20260813/cache-wire-xai-20260928.json');
 const digest = file => fs.existsSync(file) ? createHash('sha256').update(fs.readFileSync(file)).digest('hex') : null;
@@ -27,7 +27,9 @@ if (action === 'install') {
       tests: ['node --test tests/pi/cache_wire_observer.test.mjs', 'formal SDK reload test with --wire'],
       lifecycle: 'Requires extension reload; observer is a process singleton, existing observer code updates require host restart.' };
     // Inventory precedes the first user-level file change.
+    fs.mkdirSync(path.dirname(recordFile), { recursive: true });
     fs.writeFileSync(recordFile, JSON.stringify(record, null, 2) + '\n');
+    fs.mkdirSync(target, { recursive: true });
     for (const name of files) fs.copyFileSync(path.join(source, name), path.join(target, name));
     record.status = 'installed-awaiting-load';
     record.after = status();
@@ -56,7 +58,9 @@ if (action === 'install') {
     console.log(JSON.stringify({ status: record.status, files: status() }));
   }
 } else if (action === 'status') {
-  console.log(JSON.stringify({ files: status() }));
+  const rows = status();
+  console.log(JSON.stringify({ files: rows }));
+  if (rows.some(row => row.source !== row.installed)) process.exitCode = 1;
 } else {
   throw new Error('Usage: node manage-cache-diag.mjs status|install|rollback');
 }

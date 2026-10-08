@@ -101,15 +101,7 @@ function parseArgs(argv) {
 }
 
 function defaultTarget() {
-  return join(
-    homedir(),
-    ".pi",
-    "agent",
-    "npm",
-    "node_modules",
-    "@tian.zuo",
-    "pi-antigravity",
-  );
+  return join(process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent"), "npm", "node_modules", "@tian.zuo", "pi-antigravity");
 }
 
 function inspectTarget(packageDirectory) {

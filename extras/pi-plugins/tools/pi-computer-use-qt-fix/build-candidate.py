@@ -36,7 +36,8 @@ before = source_hashes()
 shutil.copytree(source, work, ignore=shutil.ignore_patterns('target', '.git'))
 env = dict(os.environ)
 env['GIT_CEILING_DIRECTORIES'] = str(work.parent)
-subprocess.run(['git', 'apply', '--no-index', str(patch)], cwd=work, env=env, check=True)
+# The stacked patches after window-root.patch carry CRLF context lines: the first apply has to write CRLF.
+subprocess.run(['git', '-c', 'core.autocrlf=true', 'apply', '--no-index', str(patch)], cwd=work, env=env, check=True)
 relative_paths = [line.split(' b/', 1)[1] for line in patch.read_text(encoding='utf-8').splitlines()
                   if line.startswith('diff --git ')]
 candidate_hashes = {relative: hashlib.sha256((work / relative).read_bytes()).hexdigest()

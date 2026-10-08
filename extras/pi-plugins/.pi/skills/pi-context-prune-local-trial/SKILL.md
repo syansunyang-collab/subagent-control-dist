@@ -4,7 +4,7 @@ layer: business
 domain: pi-extensions
 capability_group: context-pruning
 portability: repo-bound
-description: "维护自动裁剪接线、裁剪候选包浅测、本机导入试用与回退，核对实际加载内容、请求边界应用和宿主工具重开。Use for pi-context-prune automatic wiring and local trials. 不用于单独的提示词审查（rule-authoring）、缓存收益分析（diagnose-pruning-cache-timing）、通用SDK集成（use-pi-rpc-safely）、原生压缩配置、Pi Web重启或npm发布。"
+description: "维护自动裁剪接线、裁剪候选包浅测、本机导入试用与回退，核对实际加载内容、请求边界应用和宿主工具重开。Use for pi-context-prune automatic wiring and local trials. 不用于单独的提示词审查（rule-authoring）、缓存收益分析、通用SDK集成、原生压缩配置、Pi Web重启或npm发布。"
 ---
 
 # 裁剪接线与本机试用

@@ -35,9 +35,20 @@ node tools/pi-transcript-hydrate/apply.mjs apply --target pi-claude-code-provide
 node tools/pi-transcript-hydrate/apply.mjs verify --target pi-claude-code-provider
 ```
 
-`--target <id>` 可重复指定。默认目标目录是用户级 Pi npm 目录。`apply` 仅在目标已有 `hydrateContext` 引用时覆盖 `src/transcript-compat.ts`（Claude 检查 provider 与 serializer，Antigravity 检查 provider）。缺包或缺 hook 都非零退出，不跳过损坏的活跃目标；新版 Claude 缺 hook 时，显式 legacy apply 同样拒绝。覆盖前备份至 `.runtime/pi-transcript-hydrate-backups/`。
+`--target <id>` 可重复指定。默认目标目录是 Pi agent 目录（`PI_CODING_AGENT_DIR`，未设置时 `~/.pi/agent`）下的 `npm/node_modules`。`apply` 仅在目标已有 `hydrateContext` 引用时覆盖 `src/transcript-compat.ts`（Claude 检查 provider 与 serializer，Antigravity 检查 provider）。缺包或缺 hook 都非零退出，不跳过损坏的活跃目标；新版 Claude 缺 hook 时，显式 legacy apply 同样拒绝。覆盖前备份至 `.runtime/pi-transcript-hydrate-backups/`。
 
 Pi 0.99.1 的 `pi update` 可能覆盖未钉版本的 npm 包源码。升级后先 `status`：仍有 hook 则 `apply`；调用点发生变化时先移植适配；上游已原生恢复时从活跃目标中退役该消费者，不写入旧 helper。
+
+## 全新安装的 Antigravity
+
+npm 发布的 `@tian.zuo/pi-antigravity@0.10.3` 不含 hook，也没有 `src/transcript-compat.ts`，`apply` 因缺 hook 拒绝。本工具不写 hook，由人工在 `src/provider.ts` 加两行，各接在一处唯一的锚点之后：
+
+| 锚点（原文整行） | 其后新增的行 |
+| --- | --- |
+| `} from "./runtime.ts";` | `import { hydrateContext } from "./transcript-compat.ts";` |
+| `        stream.push({ type: "start", partial: output });` | `        context = hydrateContext(context);`（8 个空格缩进） |
+
+然后执行 `apply` 与 `verify`。改后的 `provider.ts` 与 `tools/pi-antigravity/pi-antigravity-0.10.3-native.patch` 的基底一致，原生接线的 `native-build` 以此为前提，见 `docs/operations/pi-antigravity-native.md`。重装或 `pi update` 会还原该文件，之后重做本节。
 
 ## 验证
 

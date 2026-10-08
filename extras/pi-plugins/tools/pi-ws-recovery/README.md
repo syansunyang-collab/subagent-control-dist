@@ -13,6 +13,8 @@
 5. 已部署 worker root 与内嵌 SDK 实际解析到的 `pi-ai`。
 6. worker 的 bundled runtime（存在该入口时纳入）。
 
+默认位置：全局 Pi 取 `PI_GLOBAL_NPM_ROOT`，未设置时 `%APPDATA%\npm\node_modules`；Pi Web 取 `PI_WEB_APP_ROOT`，未设置时为维护者本机的 `E:\ControlPlane\web\app`；worker 取 `PI_SUBAGENT_ADAPTER_ROOT`，未设置时 `<agent>\extensions\subagent-control\adapters\pi`（`<agent>` 为 `PI_CODING_AGENT_DIR`，未设置时 `~/.pi/agent`）。Pi Web 与 worker 的根目录在未设置环境变量且默认位置不存在时跳过；用环境变量指定的根目录不存在时报错。给出任一 `--target` / `--bundle-target` 时只处理给出的目标。
+
 依赖查找兼容 npm 嵌套与提升布局。版本是否受支持由固定版本/哈希画像判定，未支持版本仍拒绝；不以某个入口的旧版本号阻断同批滚动切换。
 
 bundle 与 modular 是不同代码副本。管理器分别验证和写入，不再用“modular 文件 patched”替代终端活动 bundle 的状态。
@@ -29,9 +31,9 @@ bundle 与 modular 是不同代码副本。管理器分别验证和写入，不�
 ## 使用
 
 ```powershell
-node E:\Pi_Coding_Agent\tools\pi-ws-recovery\manage-pi-ws-recovery.mjs status
-node E:\Pi_Coding_Agent\tools\pi-ws-recovery\manage-pi-ws-recovery.mjs apply
-node E:\Pi_Coding_Agent\tools\pi-ws-recovery\manage-pi-ws-recovery.mjs rollback
+node tools/pi-ws-recovery/manage-pi-ws-recovery.mjs status
+node tools/pi-ws-recovery/manage-pi-ws-recovery.mjs apply
+node tools/pi-ws-recovery/manage-pi-ws-recovery.mjs rollback
 ```
 
 `status` 仅当全部目标均为 patched 时返回 0。`apply` 和 `rollback` 幂等。自定义 modular 目标使用 `--target label=pi-ai-directory`；自定义 bundle 目标使用 `--bundle-target label=pi-coding-agent-directory`。
@@ -61,7 +63,7 @@ Pi Web 自动启动器会在每次启动前执行幂等 `apply`，并连带修�
 ## 验证
 
 ```powershell
-$env:PI_0991_TEST_ROOT = 'E:/Pi_Coding_Agent/tmp/pi-0991-upgrade/runtime/node_modules/@earendil-works/pi-coding-agent'
+$env:PI_0991_TEST_ROOT = (Resolve-Path 'tmp/pi-0991-upgrade/runtime/node_modules/@earendil-works/pi-coding-agent').Path
 $env:PI_WS_TEST_PI_AI_ROOT = "$env:PI_0991_TEST_ROOT/node_modules/@earendil-works/pi-ai"
 node --test tests/pi/pi_ws_recovery_state.test.mjs tests/pi/pi_0991_ws_runtime.test.mjs
 $env:PI_0991_WS_BUNDLE = '1'
@@ -69,6 +71,6 @@ node --test tests/pi/pi_0991_ws_runtime.test.mjs
 Remove-Item Env:PI_0991_WS_BUNDLE, Env:PI_WS_TEST_PI_AI_ROOT, Env:PI_0991_TEST_ROOT
 ```
 
-上述命令要求候选已应用 0.99.1 补丁。runtime 测试通过离线 WS/SSE 替身验证 SDK 与官方 bundle 的失败降级、冷却后恢复和 1009 请求缩小门槛；不设置 `PI_0991_TEST_ROOT` 会跳过安装测试。管理器的幂等 apply/rollback、逆序叠加回滚与未知哈希拒绝由 `tests/test_pi_codex_attribution.py` 覆盖，完整候选往返使用 [0.99.1 宿主操作说明](../pi-codex-attribution/README-0.99.1.md) 中的 runner，不在生产安装上运行往返。
+上述命令要求候选已应用 0.99.1 补丁。runtime 测试通过离线 WS/SSE 替身验证 SDK 与官方 bundle 的失败降级、冷却后恢复和 1009 请求缩小门槛；不设置 `PI_0991_TEST_ROOT` 会跳过安装测试。管理器的幂等 apply/rollback、逆序叠加回滚与未知哈希拒绝由 `tests/pi/test_pi_codex_attribution.py` 覆盖（同样需要 `PI_0991_TEST_ROOT`），完整候选往返使用 [0.99.1 宿主操作说明](../pi-codex-attribution/README-0.99.1.md) 中的 runner，不在生产安装上运行往返。
 
 `tests/pi/pi_ws_recovery_state.test.mjs` 从实际 patched provider 读取状态机函数，覆盖冷却、单探针、abort 释放、超大请求缩小阈值和独立模块共享状态。

@@ -37,7 +37,7 @@ CANDIDATE为实际候选目录，BASE为已确认的公共底座提交。核对�
 
 ## 设置隔离与导入
 
-同进程探测使用SDK和SettingsManager.inMemory。临时水位配置放到隔离agent目录，模型认证引用已有认证入口，设置文件前后校验哈希。进程级RPC隔离和持久化setter判断由use-pi-rpc-safely负责。
+同进程探测使用SDK和SettingsManager.inMemory。临时水位配置放到隔离agent目录，模型认证引用已有认证入口，设置文件前后校验哈希。进程级RPC隔离和持久化setter判断以Pi安装目录下`docs/rpc.md`、`docs/rpc-commands.md`为准，并用隔离的`PI_CODING_AGENT_DIR`运行。
 
 先记录私有备份位置，再从新鲜读取的设置中仅更新裁剪包选择和本次配置。将tarball解包到稳定本地目录，确认解包后的入口与已测入口哈希一致。保持包列表的其他项目和扩展过滤器不变。
 

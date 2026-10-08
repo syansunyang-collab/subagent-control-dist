@@ -48,6 +48,17 @@ test("native build copies a native source, links dependencies and seals the runt
   assert.equal(readFileSync(join(runtime, "index.ts"), "utf8"), readFileSync(join(f.runtime, "index.ts"), "utf8"));
 });
 
+test("native build refuses an upstream copy without the transcript-hydrate hooks", (t) => {
+  const base = mkdtempSync(join(tmpdir(), "pi-native-hydrate-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const source = join(base, "upstream"), runtime = join(base, "runtime");
+  mkdirSync(join(source, "src"), { recursive: true });
+  writeFileSync(join(source, "package.json"), JSON.stringify({ name: "@tian.zuo/pi-antigravity", version: "0.10.3" }));
+  writeFileSync(join(source, "src", "provider.ts"), "export {}\n");
+  assert.throws(() => buildNativePackage({ source, runtime }), /transcript-hydrate/);
+  assert.equal(existsSync(runtime), false);
+});
+
 test("committed native patch rebuilds the installed runtime and regenerates from it", {
   skip: !(existsSync(upstream) && existsSync(join(installedRuntime, "native-manifest.json"))) && "needs upstream 0.10.3 and a built .runtime/pi-antigravity-native",
 }, (t) => {

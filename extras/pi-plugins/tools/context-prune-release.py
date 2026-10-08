@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Release the self-maintained pi-context-prune build to the one global package path.
 
-Global Pi settings list a single prune package at ~/.pi/agent/local-packages/pi-context-prune.
-A release builds a committed revision of the fork, keeps a copy under
-~/.pi/agent/local-packages/pi-context-prune-releases/<version>-<commit>/, loads that copy in a
-headless Pi (no session, no model call), and only then copies it into the fixed path. Every
-project .pi/settings.json that references any prune package gets an explicit entry for the fixed
-path, so projects that disable pruning, or pin their own build, keep doing so.
+Global Pi settings list a single prune package at <agent>/local-packages/pi-context-prune, where
+<agent> is $PI_CODING_AGENT_DIR or ~/.pi/agent. A release builds a committed revision of the fork,
+keeps a copy under <agent>/local-packages/pi-context-prune-releases/<version>-<commit>/, loads that
+copy in a headless Pi (no session, no model call), and only then copies it into the fixed path.
+Every project .pi/settings.json that references any prune package gets an explicit entry for the
+fixed path, so projects that disable pruning, or pin their own build, keep doing so.
+
+--source must be the root of its own Git work tree with no uncommitted changes, on the production
+branch unless --allow-branch is given. Global settings without any prune package get the fixed path
+appended; a different prune package must be switched once with --replace-global.
 
   python -B tools/context-prune-release.py status
   python -B tools/context-prune-release.py release [--source DIR] [--entry policy-lab|index] [--apply]
@@ -14,7 +18,7 @@ path, so projects that disable pruning, or pin their own build, keep doing so.
   python -B tools/context-prune-release.py rollback RELEASE_ID [--apply]
 
 Without --apply the build is staged in a temporary directory and load-checked; nothing under
-~/.pi/agent is written. Running Pi sessions keep the instance they loaded; new sessions and
+<agent> is written. Running Pi sessions keep the instance they loaded; new sessions and
 /reload pick up the release.
 """
 from __future__ import annotations
@@ -34,14 +38,14 @@ import tempfile
 import threading
 import time
 
-AGENT = os.path.join(os.path.expanduser("~"), ".pi", "agent")
+AGENT = os.path.abspath(os.path.expanduser(os.environ.get("PI_CODING_AGENT_DIR") or os.path.join("~", ".pi", "agent")))
 LOCAL_PACKAGES = os.path.join(AGENT, "local-packages")
 STABLE = os.path.join(LOCAL_PACKAGES, "pi-context-prune")
 STABLE_SETTING = STABLE.replace("\\", "/")
 RELEASES = os.path.join(LOCAL_PACKAGES, "pi-context-prune-releases")
 BACKUPS = os.path.join(AGENT, "backups")
 GLOBAL_SETTINGS = os.path.join(AGENT, "settings.json")
-DEFAULT_SOURCE = "E:/Pi_Coding_Agent/forks/pi-context-prune"
+DEFAULT_SOURCE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "forks", "pi-context-prune")
 PRODUCTION_BRANCH = "codex/restore-pruner-seen-state"
 PROJECT_ROOTS = ["E:/Pi_Coding_Agent", "E:/Workspace", "E:/ControlPlane"]
 SKIP_DIRS = {"node_modules", ".git", "target", "test-results", "__pycache__", "dist", ".runtime", "sessions"}
@@ -92,6 +96,17 @@ def read_text(path: str) -> str:
 
 def write_text(path: str, text: str) -> None:
     io.open(path, "w", encoding="utf-8", newline="").write(text)
+
+
+def dump_like(raw: str, data: dict) -> str:
+    """Serialize data with the indentation, final newline and line endings of the original text."""
+    indent = 2
+    for line in raw.splitlines()[1:]:
+        if line.strip():
+            indent = len(line) - len(line.lstrip(" ")) or 2
+            break
+    text = json.dumps(data, ensure_ascii=False, indent=indent) + ("\n" if raw.endswith("\n") else "")
+    return text.replace("\n", "\r\n") if "\r\n" in raw else text
 
 
 def project_settings() -> list[str]:
@@ -164,6 +179,12 @@ def load_check(package_dir: str, entry: str) -> dict:
 
 
 def build(src: str, entry: str, allow_branch: bool) -> dict:
+    try:
+        top = git(src, "rev-parse", "--show-toplevel")
+    except (subprocess.CalledProcessError, OSError):
+        top = ""
+    if norm(top) != norm(src):
+        fail(f"{src} 不是独立 Git 工作树的根目录；把源码复制出来单独 git init 并提交后再发布")
     if git(src, "status", "--porcelain"):
         fail(f"{src} 有未提交改动；只发布已提交的源码")
     commit, branch = git(src, "rev-parse", "HEAD"), git(src, "rev-parse", "--abbrev-ref", "HEAD")
@@ -238,6 +259,8 @@ def plan_global(replace: str | None) -> str | None:
     prune = [p for p in packages if is_prune(p)]
     if len(prune) == 1 and is_stable(prune[0]):
         return None
+    if not prune and not replace:
+        return dump_like(raw, dict(data, packages=packages + [STABLE_SETTING]))
     if not replace:
         fail(f"全局设置里的裁剪包是 {[source_of(p) for p in prune]}，不是固定路径；首次切换加 --replace-global <旧路径>")
     if [source_of(p) for p in packages].count(replace) != 1:
@@ -270,14 +293,7 @@ def isolate_projects(backup: str) -> list[str]:
             continue
         before = json.loads(raw)
         data["packages"].append({"source": STABLE_SETTING, "extensions": []})
-        indent = 2
-        for line in raw.splitlines()[1:]:
-            if line.strip():
-                indent = len(line) - len(line.lstrip(" ")) or 2
-                break
-        text = json.dumps(data, ensure_ascii=False, indent=indent) + ("\n" if raw.endswith("\n") else "")
-        if "\r\n" in raw:
-            text = text.replace("\n", "\r\n")
+        text = dump_like(raw, data)
         shutil.copy2(path, os.path.join(backup, re.sub(r"[^\w.-]+", "_", path) ))
         write_text(path, text)
         after = json.loads(read_text(path))
@@ -337,7 +353,7 @@ def cmd_release(args) -> None:
         print("全局设置已指向固定路径，未改动")
     else:
         write_global(global_text, backup)
-        print(f"全局设置：{args.replace_global} → {STABLE_SETTING}")
+        print(f"全局设置：{args.replace_global or '新增'} → {STABLE_SETTING}")
     print(f"备份：{backup}。已在运行的会话保留原实例，新会话或 /reload 后生效。")
 
 

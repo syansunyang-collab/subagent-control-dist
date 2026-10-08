@@ -20,7 +20,7 @@ node tools/pi-antigravity/manage-pi-antigravity.mjs native-install --json
 node tools/pi-antigravity/manage-pi-antigravity.mjs native-status --json
 ```
 
-`native-build` 从当前受管 0.10.3 基底应用固定差异，生成文件哈希清单。安装仅替换 `settings.json` 的 Antigravity package source，保留其他包、过滤项、认证和权限设置。修改后的生成包须重新构建，不能直接安装与清单不一致的文件。
+`native-build` 从当前受管 0.10.3 基底应用固定差异，生成文件哈希清单。基底是已安装的上游包加 Windows 补丁，并且须已带 transcript-hydrate 接线：`src/provider.ts` 中的两行 `hydrateContext` 钩子与内容等于 `tools/pi-transcript-hydrate/transcript-compat.ts` 的 `src/transcript-compat.ts`。固定差异删除后者、改写钩子所在行，基底缺任一项时 `git apply` 无法应用，`native-build` 在复制前检查并报错。npm 新装的 0.10.3 两项都没有，先按 `tools/pi-transcript-hydrate/README.md`「全新安装的 Antigravity」补钩子并执行其 `apply`，再 `native-build`。安装仅替换 `settings.json` 的 Antigravity package source，保留其他包、过滤项、认证和权限设置。修改后的生成包须重新构建，不能直接安装与清单不一致的文件。
 
 源码修改在本地开发副本 `packages/pi-antigravity-native/`（不提交）进行，改完先重新生成固定差异，再从上游基底构建：
 
@@ -29,7 +29,7 @@ node tools/pi-antigravity/manage-pi-antigravity.mjs native-patch --json
 node tools/pi-antigravity/manage-pi-antigravity.mjs native-build --json
 ```
 
-`native-patch` 以上游 0.10.3 加 Windows 补丁为基底，对比开发副本写出 `pi-antigravity-0.10.3-native.patch`；`--source` 与 `--patch` 可改来源与输出。`tests/pi/antigravity_native_install.test.mjs` 核对固定差异能重建出 `.runtime/pi-antigravity-native`，开发副本的改动没进补丁就直接构建时该测试失败。
+`native-patch` 以已安装的上游 0.10.3（含上述 hydrate 接线）加 Windows 补丁为基底，对比开发副本写出 `pi-antigravity-0.10.3-native.patch`；`--source` 与 `--patch` 可改来源与输出。`tests/pi/antigravity_native_install.test.mjs` 核对固定差异能重建出 `.runtime/pi-antigravity-native`，开发副本的改动没进补丁就直接构建时该测试失败。
 
 原有 `status/apply/rollback` 继续管理上游 Windows 补丁；原生接线使用 `native-*` 命令。安装后重启活动 Pi 宿主，磁盘配置变更不会替换旧进程里的扩展实例。
 

@@ -4,7 +4,7 @@ layer: business
 domain: pi-extensions
 capability_group: plugin-development
 portability: repo-bound
-description: "用于开发、重构和本地交付 Pi 插件或扩展：写本地插件、把 node_modules 临时补丁做成自维护包、设计模型工具、适配 Windows/Pi Web、安装替换及端到端验收。Use for local Pi extension development and refactoring. 不用于编写技能（skill-authoring-governance）、单独审工具文案（rule-authoring）、独立 RPC 客户端（use-pi-rpc-safely）、已有网页搜索或裁剪插件的专项维护（pi-web-access-operations / pi-context-prune-local-trial）、单纯重启宿主或使用现有工具。"
+description: "用于开发、重构和本地交付 Pi 插件或扩展：写本地插件、把 node_modules 临时补丁做成自维护包、设计模型工具、适配 Windows/Pi Web、安装替换及端到端验收。Use for local Pi extension development and refactoring. 不用于编写技能（skill-authoring-governance）、单独审工具文案（rule-authoring）、独立 RPC 客户端、已有网页搜索或裁剪插件的专项维护（pi-web-access-operations / pi-context-prune-local-trial）、单纯重启宿主或使用现有工具。"
 ---
 
 # 本地 Pi 插件开发

@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-export const agentDir = join(homedir(), '.pi/agent');
+export const agentDir = process.env.PI_CODING_AGENT_DIR || join(homedir(), '.pi/agent');
 const here = dirname(fileURLToPath(import.meta.url));
 const hash = s => createHash('sha256').update(s).digest('hex');
 export function patchPage(source) {

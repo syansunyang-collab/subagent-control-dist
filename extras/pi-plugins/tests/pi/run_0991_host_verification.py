@@ -10,7 +10,7 @@ import subprocess
 PROJECT = Path(__file__).resolve().parents[2]
 EVIDENCE = PROJECT / "test-results/pi-0991-upgrade/host"
 REQUIRED_TESTS = [
-    "tests/test_pi_codex_attribution.py",
+    "tests/pi/test_pi_codex_attribution.py",
     "tools/pi-codex-attribution/test_verification_runner.py",
     "tests/pi/pi_0991_ws_runtime.test.mjs",
     "tests/pi/pi_ws_recovery_state.test.mjs",
@@ -94,7 +94,7 @@ def main():
         run("verification-gates", ["python", "-B", "tools/pi-codex-attribution/test_verification_runner.py"], core="python")
         run("overlay-rollback", prompt + ["rollback"] + root_args + ["--host-only"])
         run("attribution-rollback", attr + ["rollback"] + root_args)
-        run("managers", ["python", "-B", "tests/test_pi_codex_attribution.py"], core="python")
+        run("managers", ["python", "-B", "tests/pi/test_pi_codex_attribution.py"], core="python")
         run("identity", ["node", "tools/pi-codex-attribution/verify-installed.mjs"] + root_args + ["--agent-dir", str(EVIDENCE / "agent")])
         for bundled in [False, True]:
             for outcome in ["success", "failure", "cancel"]:

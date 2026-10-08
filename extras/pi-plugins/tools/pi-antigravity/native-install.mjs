@@ -4,13 +4,15 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdir
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { inspectTarget as inspectHydrate, targets as hydrateTargets } from "../pi-transcript-hydrate/apply.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const packageName = "@local/pi-antigravity-native";
 const upstreamName = "@tian.zuo/pi-antigravity";
 const defaultRuntime = join(root, ".runtime", "pi-antigravity-native");
-const defaultSettings = join(homedir(), ".pi", "agent", "settings.json");
-const defaultSource = join(homedir(), ".pi", "agent", "npm", "node_modules", "@tian.zuo", "pi-antigravity");
+const agentDir = process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent");
+const defaultSettings = join(agentDir, "settings.json");
+const defaultSource = join(agentDir, "npm", "node_modules", "@tian.zuo", "pi-antigravity");
 const defaultDevelopmentSource = join(root, "packages", "pi-antigravity-native");
 const backupPath = join(root, ".runtime", "pi-antigravity-native-install.json");
 const patchPath = join(root, "tools", "pi-antigravity", "pi-antigravity-0.10.3-native.patch");
@@ -66,7 +68,7 @@ export function inspectNativePackage(runtime) {
 
 export function linkNativeDependencies(runtime) {
   const pkg = readJson(join(runtime, "package.json"));
-  const shared = join(homedir(), ".pi", "agent", "npm", "node_modules");
+  const shared = join(agentDir, "npm", "node_modules");
   const host = join(process.env.APPDATA, "npm", "node_modules", "@earendil-works", "pi-coding-agent");
   const moduleRoot = join(runtime, "node_modules");
   for (const name of [...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.peerDependencies ?? {})]) {
@@ -97,7 +99,12 @@ export function buildNativePackage({ source = defaultSource, runtime = defaultRu
   source = resolve(source); runtime = resolve(runtime);
   if (normalized(source) === normalized(runtime)) throw new Error("Source and runtime must differ");
   const pkg = readJson(join(source, "package.json"));
-  if (pkg.name !== packageName) requireUpstream(source);
+  if (pkg.name !== packageName) {
+    requireUpstream(source);
+    // The native patch is cut against an upstream copy that already carries the transcript-hydrate hooks and helper.
+    const hydrate = inspectHydrate(hydrateTargets[0], source);
+    if (hydrate.missingHooks.length || !hydrate.compatMatches) throw new Error(`${source} lacks the transcript-hydrate hooks or helper; see tools/pi-transcript-hydrate/README.md and run its apply first`);
+  }
   if (existsSync(runtime)) {
     const oldPackage = join(runtime, "package.json");
     if (!existsSync(oldPackage) || ![packageName, upstreamName].includes(readJson(oldPackage).name)) throw new Error(`Refusing to replace a non-Antigravity directory: ${runtime}`);

@@ -17,8 +17,8 @@ test('diagnostic manager rolls back planned partial installs and normal installs
     const target = path.join(dir, 'home/.pi/agent/extensions');
     const names = ['payload-cache-diag.ts', 'cache-wire-observer.mjs'];
     try {
+      // The record directory is not distributed; install creates it.
       fs.mkdirSync(source, { recursive: true }); fs.mkdirSync(target, { recursive: true });
-      fs.mkdirSync(path.join(dir, 'runs/native-pi-runtime-20260813'), { recursive: true });
       for (const name of names) {
         fs.writeFileSync(path.join(source, name), `new-${name}`);
         if (scenario !== 'new-file') fs.writeFileSync(path.join(target, name), `old-${name}`);
@@ -29,13 +29,18 @@ test('diagnostic manager rolls back planned partial installs and normal installs
         }
         fs.copyFileSync(from, to);
       } };
-      const run = action => runInNewContext(script.replace(/^import .*;\r?\n/gm, '').replaceAll('import.meta.url', 'scriptUrl'), {
-        fs: fakeFs, path, homedir: () => path.join(dir, 'home'), createHash,
-        fileURLToPath: () => path.join(source, 'manage-cache-diag.mjs'), scriptUrl: 'unused',
-        process: { argv: ['node', 'manager', action] }, console: { log() {} },
-      });
+      const run = action => {
+        const process = { argv: ['node', 'manager', action], env: {} };
+        runInNewContext(script.replace(/^import .*;\r?\n/gm, '').replaceAll('import.meta.url', 'scriptUrl'), {
+          fs: fakeFs, path, homedir: () => path.join(dir, 'home'), createHash,
+          fileURLToPath: () => path.join(source, 'manage-cache-diag.mjs'), scriptUrl: 'unused',
+          process, console: { log() {} },
+        });
+        return process.exitCode ?? 0;
+      };
       if (scenario === 'partial' || scenario === 'new-file') assert.throws(() => run('install'), e => e.code === 'EPERM');
       else run('install');
+      assert.equal(run('status'), scenario === 'partial' || scenario === 'new-file' ? 1 : 0);
       const record = JSON.parse(fs.readFileSync(path.join(dir, 'runs/native-pi-runtime-20260813/cache-wire-xai-20260928.json')));
       assert(record.files.every(row => row.source && (scenario === 'new-file' ? row.installed === null : row.installed)));
       if (scenario === 'third-party') {

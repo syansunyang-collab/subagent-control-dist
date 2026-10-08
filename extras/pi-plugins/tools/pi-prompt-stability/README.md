@@ -2,7 +2,7 @@
 
 0.99.1 的宿主隔离移植、版本化载荷与验收步骤见 [0.99.1 宿主操作说明](../pi-codex-attribution/README-0.99.1.md)。`--host-only` 跳过用户扩展的读取和写入。
 
-修复 Pi 0.87.1 在空闲时由自定义消息（子代理完成通知、定时唤醒）启动的运行不经过 `before_agent_start` 的问题，并把三个逐轮注入提示内容的扩展改为写入具名 section。上游问题：[earendil-works/pi#5581](https://github.com/earendil-works/pi/issues/5581)，截至 2026-09-27 未修复。
+修复 Pi 在空闲时由自定义消息（子代理完成通知、定时唤醒）启动的运行不经过 `before_agent_start` 的问题，有 0.87.1 与 0.99.1 两套清单。0.87.1 清单另把两个逐轮注入提示内容的扩展改为写入具名 section；0.99.1 清单只含宿主补丁。上游问题：[earendil-works/pi#5581](https://github.com/earendil-works/pi/issues/5581)，截至 2026-09-27 未修复。
 
 ## 问题
 
@@ -14,23 +14,31 @@
 
 ## 组成
 
-| 部分 | 内容 |
-| --- | --- |
-| 宿主 | `pi-0.87.1-custom-run-preparation.patch`：自定义消息启动的运行先执行 `before_agent_start` 并应用提示增量；`event.trigger` 区分 `prompt` 与 `custom`；准备期间会话已标记为运行中，同时到达的通知进入该运行的队列。含上游格式回归测试 `5581-custom-message-run-preparation.test.ts`。 |
-| 扩展 | `extensions/memory-index.ts`（pi-hermes-memory 0.9.8）改为写 `hermes_memory` section。日期扩展的真源是 `artifacts/templates/pi-global-system-tail/local-time.ts`。 |
-| 原件 | `extensions/original/`：三个扩展的原始内容，用于回滚。 |
+| 版本 | 部分 | 内容 |
+| --- | --- | --- |
+| 0.99.1 | 宿主 | `pi-0.99.1-custom-run-preparation.patch`：自定义消息启动的运行先执行 `before_agent_start` 并应用提示增量；`event.trigger` 区分 `prompt` 与 `custom`；准备期间会话已标记为运行中，同时到达的通知进入该运行的队列；含上游格式回归测试 `5581-custom-message-run-preparation.test.ts`。`pi-0.99.1-context-usage.patch`：上下文用量保留已测量前缀，只重新估算其后被编辑的消息。清单 `manifest-0.99.1.json` 共 20 个文件（替换 17 个，新增 3 个 bundle chunk）。 |
+| 0.99.1 | 扩展 | 无。`manifest-0.99.1.json` 的 `extensions` 为空，加不加 `--host-only` 结果相同。日期扩展写具名 section 的版本已是 `artifacts/templates/pi-global-system-tail/local-time.ts` 的源码。 |
+| 0.87.1 | 宿主 | `pi-0.87.1-custom-run-preparation.patch`，行为同上（不含上下文用量部分）。清单 `manifest.json` 共 17 个文件（替换 14 个，新增 3 个 bundle chunk）。 |
+| 0.87.1 | 扩展 | `extensions/memory-index.ts`（pi-hermes-memory 0.9.8）改为写 `hermes_memory` section；`artifacts/templates/pi-global-system-tail/local-time.ts` 写 `local_time` section。`extensions/original/` 存两者的原始内容，用于回滚。 |
 
-宿主补丁叠加在 `tools/pi-codex-attribution` 之上，替换其中 6 个输出并新增 3 个 bundle chunk。两个管理器及 `tools/pi-ws-recovery` 均识别该叠加状态。
+管理器按 `--root` 下 Pi 的版本选择清单。宿主补丁叠加在 `tools/pi-codex-attribution` 之上；两个管理器及 `tools/pi-ws-recovery` 均识别该叠加状态。
 
 ## 维护
 
 ```powershell
-python tools/pi-prompt-stability/manage.py status
-python tools/pi-prompt-stability/manage.py apply
-python tools/pi-prompt-stability/manage.py rollback
+python -B tools/pi-prompt-stability/manage.py status --host-only
+python -B tools/pi-prompt-stability/manage.py apply --host-only
+python -B tools/pi-prompt-stability/manage.py rollback --host-only
 ```
 
-`apply` 要求身份补丁处于 `patched`；完成后身份补丁状态为 `patched+prompt-stability`，需先回滚本补丁才能改动身份补丁。安装载荷位于 `.runtime/pi-prompt-stability/host-payload.json.gz`，宿主备份位于同目录 `backups/`。扩展按 LF 文本比较，工作区检出为 CRLF 不影响判定。管理器拒绝覆盖未知内容；npm 更新 hermes 后状态变为 `unknown`，需核对新版源码后重新生成补丁。
+`--root` 默认 `%APPDATA%\npm\node_modules\@earendil-works\pi-coding-agent`；`--agent-dir` 默认 `PI_CODING_AGENT_DIR`，未设置时 `~/.pi/agent`，只在 0.87.1 管理扩展时使用。`apply` 要求身份补丁处于 `patched`；完成后身份补丁状态为 `patched+prompt-stability`，需先回滚本补丁才能改动身份补丁。管理器拒绝覆盖未知内容。
+
+| 版本 | 宿主载荷 | 宿主备份 |
+| --- | --- | --- |
+| 0.99.1 | `.runtime/pi-prompt-stability/0.99.1/host-payload.json.gz` | `.runtime/pi-prompt-stability/0.99.1/backups/<安装路径哈希>/` |
+| 0.87.1 | `.runtime/pi-prompt-stability/host-payload.json.gz` | `.runtime/pi-prompt-stability/backups/host/` |
+
+0.87.1 的扩展按 LF 文本比较，工作区检出为 CRLF 不影响判定；npm 更新 hermes 后状态变为 `unknown`，需核对新版源码后重新生成补丁。
 
 变更后重启 Pi Web（`PiWeb` 计划任务）或相关 Pi 进程；`/reload` 不能替换已加载的 SDK 核心模块。
 
@@ -42,7 +50,7 @@ python tools/pi-prompt-stability/manage.py rollback
 
 ```powershell
 node --test tools/pi-prompt-stability/test.mjs
-$env:PI_0991_TEST_ROOT = 'E:/Pi_Coding_Agent/tmp/pi-0991-upgrade/runtime/node_modules/@earendil-works/pi-coding-agent'
+$env:PI_0991_TEST_ROOT = (Resolve-Path 'tmp/pi-0991-upgrade/runtime/node_modules/@earendil-works/pi-coding-agent').Path
 node --test tests/pi/prompt_stability_custom_run_abort.test.mjs
 Remove-Item Env:PI_0991_TEST_ROOT
 node tools/pi-prompt-stability/verify-installed.mjs

@@ -46,8 +46,8 @@ python -B tools/context-prune-release.py rollback <版本>-<提交> --apply
 ```
 
 1. 在已部署 `BUILD.json` 对应的源码工作副本修改，运行 `npm test`，更新版本与 `CHANGELOG.md`，连同 `dist/` 一起提交。构建产物与对应源码路径一并核对，不混用旧 fork 的输出。
-2. `release` 预演要求工作区干净；默认生产分支为 `codex/restore-pruner-seen-state`，其它分支需显式 `--allow-branch`。入口重新运行 `npm test` 并检查构建后仍干净，再以 `PI_OFFLINE=1` 的 RPC 宿主加载暂存包；无扩展错误且有启动事件才通过。
-3. `release --apply`：同样的检查通过后写入版本存档，先为引用了裁剪包但未登记固定路径的项目设置补上禁用项，再替换固定路径的内容，最后才改全局设置；任一步失败，项目仍隔离、全局设置指向的包仍在原位。替换目录中途失败会把旧包放回固定路径，上次中断遗留的旧包在下次发布开始时先复位。改动前的设置文件备份在 `~/.pi/agent/backups/context-prune-release-<时间>/`。全局设置里若登记的是别的裁剪包路径，需加 `--replace-global <旧路径>` 显式切换一次；`<旧路径>` 须与 `packages` 里某一项的 source 完全相同，校验在构建之前完成。
+2. `release` 预演要求 `--source`（默认本仓 `forks/pi-context-prune`）是独立 Git 工作树的根目录且工作区干净；默认生产分支为 `codex/restore-pruner-seen-state`，其它分支需显式 `--allow-branch`。入口重新运行 `npm test` 并检查构建后仍干净，再以 `PI_OFFLINE=1` 的 RPC 宿主加载暂存包；无扩展错误且有启动事件才通过。
+3. `release --apply`：同样的检查通过后写入版本存档，先为引用了裁剪包但未登记固定路径的项目设置补上禁用项，再替换固定路径的内容，最后才改全局设置；任一步失败，项目仍隔离、全局设置指向的包仍在原位。替换目录中途失败会把旧包放回固定路径，上次中断遗留的旧包在下次发布开始时先复位。改动前的设置文件备份在 `<agent>/backups/context-prune-release-<时间>/`（`<agent>` 为 `PI_CODING_AGENT_DIR`，未设置时 `~/.pi/agent`）。全局设置里没有任何裁剪包时直接追加固定路径；登记的是别的裁剪包路径时，需加 `--replace-global <旧路径>` 显式切换一次；`<旧路径>` 须与 `packages` 里某一项的 source 完全相同，校验在构建之前完成。
 4. 已在运行的会话保留原实例，新会话或 `/reload` 后生效。`rollback` 按同样的加载检查把存档版本放回固定路径。
 
 `tools/context-prune-bench/live_ab.py` 的 `production_pruner()` 从全局设置解析生产包，指向固定路径的 `dist/index.js`，无需随版本修改。

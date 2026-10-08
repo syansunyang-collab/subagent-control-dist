@@ -18,7 +18,7 @@
 
 ## 安装位置
 
-复制 `paste-image.ts` 到用户 Pi agent 目录：
+复制 `paste-image.ts` 到用户 Pi agent 目录（设置了 `PI_CODING_AGENT_DIR` 时为该目录，`status.mjs` 同样按它查找）：
 
 ```text
 %USERPROFILE%\.pi\agent\extensions\paste-image.ts

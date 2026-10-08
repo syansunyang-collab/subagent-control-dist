@@ -20,7 +20,7 @@
 
 | 占位 | 含义与确定方法 |
 | --- | --- |
-| `<Pi 用户目录>` | `%USERPROFILE%\.pi\agent`。设置了 `PI_CODING_AGENT_DIR` 时 Pi 改用该值，但本目录多数管理器固定使用 `%USERPROFILE%\.pi\agent`，例外逐单元注明 |
+| `<Pi 用户目录>` | 设置了 `PI_CODING_AGENT_DIR` 时为该值，否则 `%USERPROFILE%\.pi\agent`。本目录的管理器按同一规则取默认目录，仍固定使用 `%USERPROFILE%\.pi\agent` 的逐单元注明。命令示例用 `$agent = if ($env:PI_CODING_AGENT_DIR) { $env:PI_CODING_AGENT_DIR } else { Join-Path $env:USERPROFILE ".pi\agent" }` 取得 `$agent` |
 | `<全局 Pi 目录>` | `npm root -g` 输出目录下的 `@earendil-works\pi-coding-agent`，默认 `%APPDATA%\npm\node_modules\@earendil-works\pi-coding-agent`。管理器默认取后者；npm 全局前缀不同（nvm、volta 等）时用 `--root` / `--target` 显式指定 |
 | `<Pi npm 目录>` | `<Pi 用户目录>\npm\node_modules`，即 `pi install npm:...` 的安装位置 |
 | `<extras 目录>` | `extras/pi-plugins/` 的绝对路径；在该目录下执行 `(Resolve-Path .).Path` 取得 |
@@ -83,7 +83,7 @@ Pi Web：维护者个人部署，未随分发，需要时单独找维护者。
 **安装路线 A：部署已提交构建**（产物结构与发布器 `stage()` 相同，不跑测试）
 
 ```powershell
-$agent = Join-Path $env:USERPROFILE ".pi\agent"
+$agent = if ($env:PI_CODING_AGENT_DIR) { $env:PI_CODING_AGENT_DIR } else { Join-Path $env:USERPROFILE ".pi\agent" }
 $pkg = Join-Path $agent "local-packages\pi-context-prune"
 New-Item -ItemType Directory -Force (Join-Path $pkg "dist") | Out-Null
 Copy-Item forks/pi-context-prune/dist/policy-lab.js (Join-Path $pkg "dist\index.js")
@@ -107,9 +107,9 @@ node -e "require('fs').writeFileSync(process.argv[1], JSON.stringify({mode:'cold
 
 发布器的硬性条件（`tools/context-prune-release.py` 源码）：
 
-- `--source` 是独立 Git 工作树、无未提交改动、当前分支为 `codex/restore-pruner-seen-state`（其它分支需 `--allow-branch`）。快照无 Git 历史，需先复制到 `<extras 目录>` 之外初始化。
+- `--source` 是独立 Git 工作树的根目录、无未提交改动、当前分支为 `codex/restore-pruner-seen-state`（其它分支需 `--allow-branch`）。`--source` 默认为本目录的 `forks/pi-context-prune`，该快照无 Git 历史、位于分发仓工作树内，发布器会停止；需先复制到 `<extras 目录>` 之外初始化。
 - `npm test`（含 `build` 与 `build:lab`）全部通过，且重新构建后工作树仍干净，即本机构建出的 `dist/` 与快照逐字节一致。测试结果按 `ℹ pass N` 解析，维护者本机 Node 24.12.0 下通过。esbuild 解析到不同版本导致产物不同时在此停止，改用路线 A。
-- 全局 `settings.json` 的 `packages` 中恰有一个裁剪包条目：已是 `<Pi 用户目录正斜杠路径>/local-packages/pi-context-prune`，或用 `--replace-global <旧条目原文>` 切换。完全没有裁剪包条目时预演也会停止，先在 `packages` 加入该固定路径条目。
+- 全局 `settings.json` 的 `packages` 中没有裁剪包条目时，发布器在最后一步追加 `<Pi 用户目录正斜杠路径>/local-packages/pi-context-prune`；已有一个裁剪包条目时，它须已是该固定路径，或用 `--replace-global <旧条目原文>` 切换。
 - 加载检查调用 `%APPDATA%\npm\pi.cmd`，以 `PI_OFFLINE=1` 的 RPC 模式只加载暂存包。
 
 ```powershell
@@ -124,7 +124,7 @@ python -B tools/context-prune-release.py release --source $src
 python -B tools/context-prune-release.py release --source $src --apply
 ```
 
-`--apply` 依次：写版本存档 `<Pi 用户目录>\local-packages\pi-context-prune-releases\<版本>-<提交>\`；为引用裁剪包的项目级 `.pi\settings.json` 补禁用项（只扫描 `PROJECT_ROOTS` 中硬编码的三个维护者本机根目录，见 `tools/context-prune-release.py` 第 46 行；不存在的根目录跳过）；替换固定路径内容；最后改全局 settings。改动前的 settings 备份在 `<Pi 用户目录>\backups\context-prune-release-<时间>\`。版本号中的提交为 `$src` 新提交的哈希。
+`--apply` 依次：写版本存档 `<Pi 用户目录>\local-packages\pi-context-prune-releases\<版本>-<提交>\`；为引用裁剪包的项目级 `.pi\settings.json` 补禁用项（只扫描 `PROJECT_ROOTS` 中硬编码的三个维护者本机根目录，见 `tools/context-prune-release.py` 第 50 行；不存在的根目录跳过）；替换固定路径内容；最后改全局 settings。改动前的 settings 备份在 `<Pi 用户目录>\backups\context-prune-release-<时间>\`。版本号中的提交为 `$src` 新提交的哈希。
 
 **验证**
 
@@ -141,7 +141,7 @@ python -B tools/context-prune-release.py release --source $src --apply
 
 **风险与维护**：改变模型看到的历史；每次新增裁剪改写历史中段，造成一次前缀缓存失配（诊断用 3.2）。fork 需自行跟随 Pi 扩展接口变化，升级 Pi 后先跑 fork 测试。
 
-**维护者本机特有**：`tools/context-prune-release.py` 第 44 行的 `DEFAULT_SOURCE` 指向维护者插件仓内的 fork（用 `--source` 覆盖）；第 46 行的 `PROJECT_ROOTS` 为维护者本机目录，接收方含裁剪包条目的项目级 settings 不会被自动隔离，需手工处理或改该常量。`docs/operations/pi-context-prune.md` 与 fork `README.md` 中的部署路径、远端仓库地址属维护者本机配置。
+**维护者本机特有**：`tools/context-prune-release.py` 第 50 行的 `PROJECT_ROOTS` 为维护者本机目录，接收方含裁剪包条目的项目级 settings 不会被自动隔离，需手工处理或改该常量。`docs/operations/pi-context-prune.md` 与 fork `README.md` 中的部署路径、远端仓库地址属维护者本机配置。
 
 **取舍**：值得装：长会话、频繁读大文件或跑测试、按 token 计费或订阅额度紧张。不必装：短问答为主；需要模型逐字复用早期工具输出且不愿多一次回查；主要使用 `cursor-host` 模型（Cursor 侧常驻 agent 自持原文，Pi 侧裁剪不缩小其上下文，`tools/pi-cursor-host/README.md`「已知限制」）。
 
@@ -158,14 +158,13 @@ python -B tools/context-prune-release.py release --source $src --apply
 **安装**
 
 ```powershell
-New-Item -ItemType Directory -Force runs/native-pi-runtime-20260813 | Out-Null
 node tools/context-prune-bench/manage-cache-diag.mjs status
 node tools/context-prune-bench/manage-cache-diag.mjs install
 ```
 
-第一行必需：管理器把安装记录写在 `runs/native-pi-runtime-20260813/cache-wire-xai-20260928.json`，该目录不随分发，缺失时 `install` 报 `ENOENT` 且不复制文件。安装目标固定为 `%USERPROFILE%\.pi\agent\extensions\`（不读 `PI_CODING_AGENT_DIR`；目录须已存在，控制面 bootstrap 会创建），原有同名文件备份到 `.runtime/cache-wire-observer/<时间>/`。新会话或 `/reload` 后生效；观察器是进程级单例，更新观察器代码需重启宿主进程。
+管理器把安装记录写在 `runs/native-pi-runtime-20260813/cache-wire-xai-20260928.json`（目录不存在时创建；`rollback` 依据该记录）。安装目标为 `<Pi 用户目录>\extensions\`（不存在时创建），原有同名文件备份到 `.runtime/cache-wire-observer/<时间>/`。新会话或 `/reload` 后生效；观察器是进程级单例，更新观察器代码需重启宿主进程。
 
-**验证**：`status` 输出中两个文件的 `source` 与 `installed` 哈希相同（该命令总是退出 0，以哈希判断）；新会话发出一次请求后两份日志出现新行；`node --test tests/pi/cache_wire_observer.test.mjs`。日志分析脚本见 3.3 的 `cache-miss/diag_edit_hits.py`。
+**验证**：`status` 输出中两个文件的 `source` 与 `installed` 哈希相同，此时退出 0，未安装或不一致时退出 1；新会话发出一次请求后两份日志出现新行；`node --test tests/pi/cache_wire_observer.test.mjs`。日志分析脚本见 3.3 的 `cache-miss/diag_edit_hits.py`。
 
 **回滚**：`node tools/context-prune-bench/manage-cache-diag.mjs rollback`，按记录恢复原文件或删除新增文件；安装后文件被其它来源改过时拒绝。完成后重启宿主进程。
 
@@ -195,7 +194,7 @@ node tools/context-prune-bench/manage-cache-diag.mjs install
 
 **类型**：研究工具。
 
-**前提**：本地 Django 克隆与带 `asgiref`、`sqlparse` 的 venv（`--base-repo`、`--python`）；ripgrep-chain 另需 SWE-Milestone 官方仓与数据、离线 Rust 工具链、PyYAML；对应 provider 凭据。多数驱动器发出真实模型请求，产生费用。`live_ab.py` 的生产组从 `<Pi 用户目录>\settings.json` 解析当前裁剪包。
+**前提**：本地 Django 克隆与带 `asgiref`、`sqlparse` 的 venv（`--base-repo`、`--python`）；ripgrep-chain 另需 SWE-Milestone 官方仓与数据、离线 Rust 工具链、PyYAML；对应 provider 凭据。多数驱动器发出真实模型请求，产生费用。`live_ab.py` 的生产组从 `%USERPROFILE%\.pi\agent\settings.json` 解析当前裁剪包（固定路径）。
 
 **适用版本**：各脚本在 Pi 0.86.0–0.99.1 期间编写，未统一复验；`cache-replay-20260927/README.md` 标注运行条件为 Pi 0.87.1。
 
@@ -209,7 +208,7 @@ node tools/context-prune-bench/manage-cache-diag.mjs install
 
 ### 3.4 pi-cursor-host
 
-**作用**：Pi 模型 provider `cursor-host`，通过官方 `@cursor/sdk` 运行 Cursor local agent。工具执行与系统提示词归 Pi，Cursor 自带的文件、终端类工具全部关闭；每个 Pi 会话对应一个常驻 Cursor agent，工具调用交回 Pi 执行后在同一个 run 内续接。模型列表取自 `Cursor.models.list()`，缓存在 `<Pi 用户目录>\pi-cursor-host\catalog\`，无缓存时用 `src/models.ts` 的离线目录。命令：`/login cursor-host`、`/cursor-host-status`。
+**作用**：Pi 模型 provider `cursor-host`，通过官方 `@cursor/sdk` 运行 Cursor local agent。工具执行与系统提示词归 Pi，Cursor 自带的文件、终端类工具全部关闭；每个 Pi 会话对应一个常驻 Cursor agent，工具调用交回 Pi 执行后在同一个 run 内续接。模型列表取自 `Cursor.models.list()`，缓存在 `%USERPROFILE%\.pi\agent\pi-cursor-host\catalog\`（固定路径，不读 `PI_CODING_AGENT_DIR`），无缓存时用 `src/models.ts` 的离线目录。命令：`/login cursor-host`、`/cursor-host-status`。
 
 **类型**：独立插件（模型 provider）。
 
@@ -221,7 +220,7 @@ node tools/context-prune-bench/manage-cache-diag.mjs install
 
 ```powershell
 Push-Location tools/pi-cursor-host; npm ci; Pop-Location
-$agent = Join-Path $env:USERPROFILE ".pi\agent"
+$agent = if ($env:PI_CODING_AGENT_DIR) { $env:PI_CODING_AGENT_DIR } else { Join-Path $env:USERPROFILE ".pi\agent" }
 New-Item -ItemType Directory -Force (Join-Path $agent "local-packages") | Out-Null
 New-Item -ItemType Junction -Path (Join-Path $agent "local-packages\pi-cursor-host") -Target (Resolve-Path tools/pi-cursor-host).Path
 ```
@@ -230,9 +229,9 @@ New-Item -ItemType Junction -Path (Join-Path $agent "local-packages\pi-cursor-ho
 
 **验证**：`Push-Location tools/pi-cursor-host; npm test; Pop-Location`（离线单元测试）；Pi 内 `/cursor-host-status` 显示已登录；`/model cursor-host/composer-2.5` 后完成一轮带工具调用的对话。`npm run probe*` 系列探针发出真实请求、消耗 Cursor 额度。
 
-**回滚**：从 `packages` 与 `enabledModels` 删除对应条目；`cmd /c rmdir "%USERPROFILE%\.pi\agent\local-packages\pi-cursor-host"`（只删联接，不动目标目录）。
+**回滚**：从 `packages` 与 `enabledModels` 删除对应条目；`cmd /c rmdir (Join-Path $agent "local-packages\pi-cursor-host")`（`$agent` 见 1.2；只删联接，不动目标目录）。
 
-**风险与维护**：升级 `@cursor/sdk` 后用 `npm run probe:skills`、`npm run probe:rules` 复核；Cursor 新增模型需对照文档页补 `src/models.ts` 的上下文表；Cursor 运行框架每个模型步约占 5k 输入 token 且无法裁剪；断线重连后助手文字可能重复一遍；用量的费用字段为 0。系统槽未放行的账号上，Cursor 会读取工作目录的 `AGENTS.md`、`CLAUDE.md`、`CLAUDE.local.md`、`.cursor/rules`、技能目录名称与描述。调试变量：`PI_CURSOR_HOST_DEBUG=1`、`PI_CURSOR_HOST_IDLE_MS`、`PI_CURSOR_HOST_SYSTEM_PROMPT=0|1`、`PI_CURSOR_HOST_INSTR_DIR`；放行状态记在 `<Pi 用户目录>\cursor-host.json`。目录联接使分发仓更新直接改变运行代码。
+**风险与维护**：升级 `@cursor/sdk` 后用 `npm run probe:skills`、`npm run probe:rules` 复核；Cursor 新增模型需对照文档页补 `src/models.ts` 的上下文表；Cursor 运行框架每个模型步约占 5k 输入 token 且无法裁剪；断线重连后助手文字可能重复一遍；用量的费用字段为 0。系统槽未放行的账号上，Cursor 会读取工作目录的 `AGENTS.md`、`CLAUDE.md`、`CLAUDE.local.md`、`.cursor/rules`、技能目录名称与描述。调试变量：`PI_CURSOR_HOST_DEBUG=1`、`PI_CURSOR_HOST_IDLE_MS`、`PI_CURSOR_HOST_SYSTEM_PROMPT=0|1`、`PI_CURSOR_HOST_INSTR_DIR`；放行状态记在 `%USERPROFILE%\.pi\agent\cursor-host.json`（固定路径）。目录联接使分发仓更新直接改变运行代码。
 
 **维护者本机特有**：`README.md` 中 `pi -e` 示例使用维护者插件仓绝对路径，按上面的相对路径执行。
 
@@ -251,7 +250,7 @@ New-Item -ItemType Junction -Path (Join-Path $agent "local-packages\pi-cursor-ho
 **安装**
 
 ```powershell
-$agent = Join-Path $env:USERPROFILE ".pi\agent"
+$agent = if ($env:PI_CODING_AGENT_DIR) { $env:PI_CODING_AGENT_DIR } else { Join-Path $env:USERPROFILE ".pi\agent" }
 New-Item -ItemType Directory -Force (Join-Path $agent "local-packages") | Out-Null
 New-Item -ItemType Junction -Path (Join-Path $agent "local-packages\pi-read-symbol") -Target (Resolve-Path tools/pi-read-symbol).Path
 ```
@@ -260,7 +259,7 @@ New-Item -ItemType Junction -Path (Join-Path $agent "local-packages\pi-read-symb
 
 **验证**：`ast-grep --version`；`Push-Location tools/pi-read-symbol; npm test; Pop-Location`；新会话工具列表含 `read_symbol`。
 
-**回滚**：删除 `packages` 条目；`cmd /c rmdir "%USERPROFILE%\.pi\agent\local-packages\pi-read-symbol"`。
+**回滚**：删除 `packages` 条目；`cmd /c rmdir (Join-Path $agent "local-packages\pi-read-symbol")`。
 
 **风险与维护**：低；ast-grep 输出格式变化时测试会报红。
 
@@ -281,7 +280,8 @@ New-Item -ItemType Junction -Path (Join-Path $agent "local-packages\pi-read-symb
 **安装**（复制为独立副本，避免分发仓更新改动运行中的调度器）
 
 ```powershell
-$dst = Join-Path $env:USERPROFILE ".pi\agent\local-packages\pi-scheduler-native"
+$agent = if ($env:PI_CODING_AGENT_DIR) { $env:PI_CODING_AGENT_DIR } else { Join-Path $env:USERPROFILE ".pi\agent" }
+$dst = Join-Path $agent "local-packages\pi-scheduler-native"
 New-Item -ItemType Directory -Force $dst | Out-Null
 Copy-Item -Recurse -Force tools/pi-scheduler/native/* $dst
 Push-Location $dst; npm install --omit=peer --no-audit --no-fund; Pop-Location
@@ -314,7 +314,7 @@ Push-Location $dst; npm install --omit=peer --no-audit --no-fund; Pop-Location
 ```powershell
 # 先改写 artifacts/templates/pi-global-system-tail/global-style.md；其它时区改 local-time.ts
 node tools/render-pi-global-system-tail.mjs --write
-$agent = Join-Path $env:USERPROFILE ".pi\agent"
+$agent = if ($env:PI_CODING_AGENT_DIR) { $env:PI_CODING_AGENT_DIR } else { Join-Path $env:USERPROFILE ".pi\agent" }
 $pkg = Join-Path $agent "local-packages\pi-global-system-tail"
 New-Item -ItemType Directory -Force $pkg | Out-Null
 Copy-Item artifacts/templates/pi-global-system-tail/* $pkg -Force
@@ -324,7 +324,7 @@ Copy-Item artifacts/templates/pi-global-system-tail/APPEND_SYSTEM.md (Join-Path 
 
 在 `packages` 追加 `./local-packages/pi-global-system-tail`。只要日期注入时，跳过最后两行，并让 `APPEND_SYSTEM.md` 保持接收方自己的内容（此时 `--check` 会报 agent 根漂移）。
 
-**验证**：`node tools/render-pi-global-system-tail.mjs --check` 输出 `APPEND_SYSTEM_OK` 与 `DEPLOYMENT_OK`（比对模板、包目录 5 个文件与 agent 根的 `APPEND_SYSTEM.md`；`--agent-root` 可指定其它 agent 目录）；`node --test tests/pi/global_system_tail.test.mjs`（改过 `local-time.ts` 的时区后，测试中 UTC+8 的断言需同步）。
+**验证**：`node tools/render-pi-global-system-tail.mjs --check` 输出 `APPEND_SYSTEM_OK` 与 `DEPLOYMENT_OK`（比对模板、包目录 5 个文件与 agent 根的 `APPEND_SYSTEM.md`；`--agent-root` 默认 `%USERPROFILE%\.pi\agent`，不读 `PI_CODING_AGENT_DIR`，其它 agent 目录用它指定）；`node --test tests/pi/global_system_tail.test.mjs`（改过 `local-time.ts` 的时区后，测试中 UTC+8 的断言需同步）。
 
 **回滚**：用 `APPEND_SYSTEM.md.bak` 还原或删除 `<Pi 用户目录>\APPEND_SYSTEM.md`；删除 `packages` 条目。无回滚脚本。
 
@@ -344,9 +344,9 @@ Copy-Item artifacts/templates/pi-global-system-tail/APPEND_SYSTEM.md (Join-Path 
 
 **适用版本**：无版本校验。
 
-**安装**：`Copy-Item tools/pi-paste-image/paste-image.ts (Join-Path $env:USERPROFILE ".pi\agent\extensions\paste-image.ts")`，已有会话 `/reload`。
+**安装**：按 1.2 取得 `$agent` 后 `Copy-Item tools/pi-paste-image/paste-image.ts (Join-Path $agent "extensions\paste-image.ts")`，已有会话 `/reload`。
 
-**验证**：`node tools/pi-paste-image/status.mjs` 输出 `PASTE_IMAGE_OK` 并退出 0（比对源与安装副本哈希，固定读 `%USERPROFILE%\.pi\agent\extensions\paste-image.ts`）；截图后在 Pi 输入 `/img`。
+**验证**：`node tools/pi-paste-image/status.mjs` 输出 `PASTE_IMAGE_OK` 并退出 0（比对源与 `<Pi 用户目录>\extensions\paste-image.ts` 的哈希）；截图后在 Pi 输入 `/img`。
 
 **回滚**：删除 `<Pi 用户目录>\extensions\paste-image.ts` 后 `/reload`。
 
@@ -402,7 +402,7 @@ node tools/pi-ws-recovery/manage-pi-ws-recovery.mjs apply --bundle-target "globa
 
 独立 WS 不能与 attribution 叠加：attribution 以原版为基线，其载荷已含 WS。先装了独立 WS 又要 attribution 时，先用同样的目标执行 `rollback`。
 
-WS 管理器的默认目标除全局 Pi 外还包含 `<Pi Web 应用目录>`（环境变量 `PI_WEB_APP_ROOT`，未设置时取 `manage-pi-ws-recovery.mjs` 第 187 行写死的维护者本机路径）与控制面子代理 worker（`PI_SUBAGENT_ADAPTER_ROOT`，默认 `<Pi 用户目录>\extensions\subagent-control\adapters\pi`），任一不存在即报错。接收方始终用 `--target` / `--bundle-target` 显式指定。控制面 worker 目录下若有 `node_modules\@earendil-works\pi-coding-agent`，它是另一份独立安装，需要时对其单独执行 `manage.py ... --root <该目录>`；控制面重新部署会覆盖它。
+WS 管理器不给 `--target` / `--bundle-target` 时，默认目标为全局 Pi、`<Pi Web 应用目录>`（环境变量 `PI_WEB_APP_ROOT`，未设置时取 `manage-pi-ws-recovery.mjs` 第 187 行写死的维护者本机路径）与控制面子代理 worker（`PI_SUBAGENT_ADAPTER_ROOT`，默认 `<Pi 用户目录>\extensions\subagent-control\adapters\pi`）。后两者未设置环境变量且默认位置不存在时跳过，用环境变量指定却不存在时报错。给出任一显式目标时只处理给出的目标；本节的独立 WS 命令都显式给出全局 Pi 的两个目标。控制面 worker 目录下若有 `node_modules\@earendil-works\pi-coding-agent`，它是另一份独立安装，需要时对其单独执行 `manage.py ... --root <该目录>`；控制面重新部署会覆盖它。
 
 **验证**
 
@@ -415,7 +415,7 @@ node tools/pi-prompt-stability/verify-installed.mjs
 node --test tests/pi/projected_context_usage.test.mjs
 ```
 
-期望：attribution 为 `patched+prompt-stability`，prompt-stability 的 `host` 为 `patched`，WS 两个目标为 `patched`（全部 patched 时退出 0）。两个 `verify-installed.mjs` 用已安装的 SDK 与内存凭据、进程内 WebSocket 离线运行，检查同轮身份稳定、下一轮更新、提示段稳定与压缩窗口推进（prompt-stability 的临时目录默认 `test-results/pi-0991-upgrade/host/offline-agent`）。`projected_context_usage.test.mjs` 默认读取 `<全局 Pi 目录>`，`PI_TEST_PACKAGE_ROOT` 可改。隔离候选上的完整验收见 `README-0.99.1.md`「Offline acceptance」；其中 `tests/pi/run_0991_host_verification.py` 要求候选位于 `tmp/pi-0991-upgrade/runtime` 且需要未随分发的 `tests/test_pi_codex_attribution.py`，在本目录无法通过预检。
+期望：attribution 为 `patched+prompt-stability`，prompt-stability 的 `host` 为 `patched`，WS 两个目标为 `patched`（全部 patched 时退出 0）。两个 `verify-installed.mjs` 用已安装的 SDK 与内存凭据、进程内 WebSocket 离线运行，检查同轮身份稳定、下一轮更新、提示段稳定与压缩窗口推进（prompt-stability 的临时目录默认 `test-results/pi-0991-upgrade/host/offline-agent`）。`projected_context_usage.test.mjs` 默认读取 `<全局 Pi 目录>`，`PI_TEST_PACKAGE_ROOT` 可改。隔离候选上的完整验收见 `README-0.99.1.md`「Offline acceptance」；其中 `tests/pi/run_0991_host_verification.py` 要求候选位于 `tmp/pi-0991-upgrade/runtime`，它调用的 `tests/pi/test_pi_codex_attribution.py` 等测试均在本目录。
 
 **回滚**（逆序）
 
@@ -428,7 +428,7 @@ python -B tools/pi-codex-attribution/manage.py rollback
 
 **风险与维护**：直接改全局 Pi 程序文件；任何 npm 重装或升级都会覆盖，升级到新版本后管理器拒绝写入，需在新版本重新移植并重建载荷。磁盘 `patched` 不代表长驻进程已加载。改用新版本 Pi 前先回滚或确认补丁已被上游等价实现。
 
-**维护者本机特有**：`README-0.99.1.md` 第 12、20 行的构建路径；`tools/pi-ws-recovery/README.md` 第 32–34、64 行的命令与测试路径；`manage-pi-ws-recovery.mjs` 第 187 行的 Pi Web 默认路径；`tools/pi-prompt-stability/README.md` 第 45 行的候选路径；`tests/pi/pi_ws_recovery_state.test.mjs` 第 7 行的回退路径（设置 `PI_WS_TEST_PI_AI_ROOT` 覆盖）。
+**维护者本机特有**：`README-0.99.1.md` 第 12、20 行的构建路径；`manage-pi-ws-recovery.mjs` 第 187 行的 Pi Web 默认路径（默认位置不存在时跳过）；`tests/pi/pi_ws_recovery_state.test.mjs` 第 7 行的回退路径（设置 `PI_WS_TEST_PI_AI_ROOT` 覆盖）。
 
 **取舍**：attribution 与 WS 只作用于 `openai-codex` provider（ChatGPT / Codex 订阅登录），只用其它 provider 时对请求没有影响。重度使用 openai-codex、WS 经常断线或出现 1009 时值得装。prompt-stability 与 provider 无关，在装了控制面（子代理完成通知会触发自定义消息运行）且有扩展写入具名提示段（如 3.7 的日期段）时减少前缀失配；它只能叠加在 attribution 之上（`apply` 要求 attribution 处于 `patched`），单独需要它时也要先装 attribution。拿不到载荷又不愿重建时三件都不装。
 
@@ -442,9 +442,9 @@ python -B tools/pi-codex-attribution/manage.py rollback
 
 **适用版本**：README 写明适用 0.21.0。脚本不校验版本号，按源码锚点识别；锚点不匹配时报错且不写文件。
 
-**安装**：`node tools/pi-web-answer-alias/apply.mjs`（固定作用于 `%USERPROFILE%\.pi\agent`，不读 `PI_CODING_AGENT_DIR`；重复执行只写有变化的文件）。新会话或 `/reload` 后生效。
+**安装**：`node tools/pi-web-answer-alias/apply.mjs`（作用于 `<Pi 用户目录>`；重复执行只写有变化的文件）。新会话或 `/reload` 后生效。
 
-**验证**：再次执行 `apply.mjs` 输出 `"changed": false`；`node --test tests/pi/web_answer_alias.test.mjs`（需要已安装的控制面别名扩展与 `%USERPROFILE%\AppData\Roaming\npm` 下的全局 Pi；在临时副本上用模型回执替身，不发网络请求）。
+**验证**：再次执行 `apply.mjs` 输出 `"changed": false`；`node --test tests/pi/web_answer_alias.test.mjs`（固定读取 `%USERPROFILE%\.pi\agent` 下已安装的控制面别名扩展与 `pi-web-access`，以及 `%USERPROFILE%\AppData\Roaming\npm` 下的全局 Pi；在临时副本上用模型回执替身，不发网络请求）。
 
 **回滚**：无回滚入口，写入前不备份。恢复原版需重装该包（如先 `pi remove npm:pi-web-access@0.21.0` 再 `pi install npm:pi-web-access@0.21.0`；本目录未验证该流程）。
 
@@ -478,8 +478,8 @@ node tools/pi-antigravity/manage-pi-antigravity.mjs native-build --json
 node tools/pi-antigravity/manage-pi-antigravity.mjs native-install --json
 ```
 
-- 只用上游包时执行前两行即可，之后对运行中的 Pi `/reload`。默认目标 `%USERPROFILE%\.pi\agent\npm\node_modules\@tian.zuo\pi-antigravity`，`--target <包目录>` 可改；写入前备份到 `.runtime/pi-antigravity-backups/<版本>/<状态>/`。
-- 原生补丁删除上游的 `src/transcript-compat.ts`，其删除前像与 `tools/pi-transcript-hydrate/transcript-compat.ts` 一致，因此 `native-build` 前先执行 3.12 的 `apply`（推断，依据为补丁中该文件的前像内容与 blob `069fc2b`）。
+- 只用上游包时执行前两行（Windows 补丁）并按 3.12 接上 hydrate，之后对运行中的 Pi `/reload`。默认目标 `<Pi npm 目录>\@tian.zuo\pi-antigravity`，`--target <包目录>` 可改；写入前备份到 `.runtime/pi-antigravity-backups/<版本>/<状态>/`。
+- 原生补丁的基底是带 hydrate 接线的上游包：`src/provider.ts` 有两行 `hydrateContext` 钩子，`src/transcript-compat.ts` 等于 `tools/pi-transcript-hydrate/transcript-compat.ts`。npm 发布的 0.10.3 两项都没有，3.12 的 `apply` 也因缺钩子拒绝；先按 3.12 手工补钩子，再执行第 3、4 行，然后 `native-build`。基底不符时 `native-build` 在写生成目录前报错。按此顺序从 npm 原版构建出的生成包与维护者现役生成包的 36 个文件哈希一致。
 - `native-build` 把生成包写到 `.runtime/pi-antigravity-native/`，依赖链接到 `<Pi npm 目录>` 与 `%APPDATA%\npm` 下的全局 Pi SDK，并写 `native-manifest.json`。`native-install` 把 `packages` 中的 `npm:@tian.zuo/pi-antigravity[@版本]` 条目替换为该目录的绝对路径，原条目记在 `.runtime/pi-antigravity-native-install.json`；`--settings`、`--runtime`、`--source` 可改默认路径。安装后重启 Pi。
 
 **验证**
@@ -517,15 +517,15 @@ node tools/pi-antigravity/manage-pi-antigravity.mjs rollback
 
 **类型**：第三方包补丁。
 
-**前提**：目标包已安装且源码中存在 `hydrateContext` 调用点；Pi 0.99.1。
+**前提**：目标包已安装且源码中存在 `hydrateContext` 调用点（npm 发布的 Antigravity 0.10.3 没有，需手工补，见安装）；Pi 0.99.1。
 
 **适用版本**：不校验版本号，以调用点存在为条件。`apply` 与 `verify` 在缺包或缺调用点时非零退出；`status` 只输出报告、恒为退出 0，要读其中的 `present`、`missingHooks`、`compatMatches`，作为检查门时用 `verify`。
 
-**安装**：`node tools/pi-transcript-hydrate/apply.mjs status`，然后 `node tools/pi-transcript-hydrate/apply.mjs apply`（`--target <id>` 可重复，`<id>` 为 `@tian.zuo/pi-antigravity` 或 `pi-claude-code-provider`；目标目录固定在 `%USERPROFILE%\.pi\agent\npm\node_modules`）。覆盖前备份到 `.runtime/pi-transcript-hydrate-backups/`。之后 `/reload`。
+**安装**：npm 新装的 Antigravity 0.10.3 先在 `src/provider.ts` 两处锚点后各加一行钩子（锚点与新增行见 `tools/pi-transcript-hydrate/README.md`「全新安装的 Antigravity」）。然后 `node tools/pi-transcript-hydrate/apply.mjs status`、`node tools/pi-transcript-hydrate/apply.mjs apply`（`--target <id>` 可重复，`<id>` 为 `@tian.zuo/pi-antigravity` 或 `pi-claude-code-provider`；目标目录为 `<Pi npm 目录>`）。覆盖前备份到 `.runtime/pi-transcript-hydrate-backups/`。之后 `/reload`。
 
 **验证**：`node tools/pi-transcript-hydrate/apply.mjs verify`（全部目标存在、内容一致、调用点完整时退出 0）；`node --test tests/pi/transcript_hydrate.test.mjs tests/pi/claude_transcript_compat.test.mjs`（后者用全局 Pi SDK 与 Claude provider 源码，`PI_TEST_SDK_ROOT`、`PI_TEST_CLAUDE_PROVIDER_ROOT` 可改，不启动 Claude 进程）。
 
-**回滚**：无回滚命令；从 `.runtime/pi-transcript-hydrate-backups/<包名>/src/transcript-compat.ts` 复制回原位，或重装目标包。
+**回滚**：无回滚命令；从 `.runtime/pi-transcript-hydrate-backups/<包名>/src/transcript-compat.ts` 复制回原位，或重装目标包（同时还原手工钩子）。
 
 **风险与维护**：`pi update` 可能覆盖未钉版本的包；升级后先 `status`，调用点变化时先移植适配，上游原生恢复后停止维护该目标。
 
@@ -552,23 +552,24 @@ node tools/pi-antigravity/manage-pi-antigravity.mjs rollback
 
 **适用版本**：`manage-installed.py` 只接受包版本 0.5.1，并要求已安装源码的哈希等于候选构建记录的基线，否则拒绝写入。
 
-**安装**：单元无 README，以下步骤依据 `build-candidate.py` 与 `manage-installed.py` 源码。原生补丁每次构建一份候选并安装：
+**安装**：完整步骤见 `tools/pi-computer-use-qt-fix/README.md`。原生补丁每次构建一份候选并安装：
 
 ```powershell
-$cu = Join-Path $env:USERPROFILE ".pi\agent\npm\node_modules\@injaneity\pi-computer-use"
+$agent = if ($env:PI_CODING_AGENT_DIR) { $env:PI_CODING_AGENT_DIR } else { Join-Path $env:USERPROFILE ".pi\agent" }
+$cu = Join-Path $agent "npm\node_modules\@injaneity\pi-computer-use"
 python -B tools/pi-computer-use-qt-fix/build-candidate.py --source "$cu\native\windows\bridge-rs" --work-dir <新的空目录> --patch tools/pi-computer-use-qt-fix/native.patch
 python -B tools/pi-computer-use-qt-fix/manage-installed.py apply --candidate <同一目录> --record <新的记录文件.json>
 ```
 
-`build-candidate.py` 复制源码到 `--work-dir`（须在 `<Pi 用户目录>` 之外且不存在）、`git apply` 补丁、`cargo test`、`cargo build --release`，写 `candidate-build.json`。`manage-installed.py apply` 备份到 `<Pi 用户目录>\state\deploy\pi-computer-use-qt-<时间>\`，停止正在运行的 `windows-bridge.exe`，替换已安装源码、包内 `prebuilt\windows\windows-bridge.exe` 与 `<Pi 用户目录>\helpers\pi-computer-use\windows-bridge.exe`，不改 `settings.json`；`--record` 必须是新路径。原生补丁按 `native.patch`、`window-root.patch`、`visual-observation.patch`、`focused-input-foreground.patch` 的顺序逐个构建并安装，后一次以已安装（已含前一补丁）的源码为 `--source`（顺序依据维护者部署记录的时间推断，记录不随分发）。每一轮的 `build-candidate.py` 与 `manage-installed.py apply` 都传同一个 `--patch tools/pi-computer-use-qt-fix/<本轮补丁>`：管理器默认按 `native.patch` 核对候选记录里的补丁哈希，后续补丁不传 `--patch` 会被拒绝写入。
+`build-candidate.py` 复制源码到 `--work-dir`（须为新目录，且在 `%USERPROFILE%\.pi\agent` 之外）、以 `git -c core.autocrlf=true apply` 应用补丁、`cargo test`、`cargo build --release`，写 `candidate-build.json`。`manage-installed.py` 默认作用于 `%USERPROFILE%\.pi\agent`（不读 `PI_CODING_AGENT_DIR`，其它目录用 `--agent-home` 指定）；`apply` 备份到 `<agent 目录>\state\deploy\pi-computer-use-qt-<时间>\`，停止正在运行的 `windows-bridge.exe`，替换已安装源码、包内 `prebuilt\windows\windows-bridge.exe` 与 `<agent 目录>\helpers\pi-computer-use\windows-bridge.exe`，不改 `settings.json`；`--record` 必须是新路径。原生补丁按 `native.patch`、`window-root.patch`、`visual-observation.patch`、`focused-input-foreground.patch` 的顺序逐个构建并安装，后一次以已安装（已含前一补丁）的源码为 `--source`。在原版 0.5.1 源码上按此顺序应用，结果与维护者部署的源码逐字节一致；后三份补丁的上下文按 CRLF 生成，所以 `build-candidate.py` 固定 `core.autocrlf=true`，不受本机 Git 配置影响。每一轮的 `build-candidate.py` 与 `manage-installed.py apply` 都传同一个 `--patch tools/pi-computer-use-qt-fix/<本轮补丁>`：管理器默认按 `native.patch` 核对候选记录里的补丁哈希，后续补丁不传 `--patch` 会被拒绝写入。
 
-前端补丁用 `manage-installed.py apply --frontend-candidate <目录> --record <新记录>`：候选目录为包目录的副本并已应用 `frontend-focus.patch`、`visual-observation-frontend.patch`，且须有手写的 `frontend-build.json`，格式为 `{"sourceHashes": {"<相对路径>": "<已安装文件 SHA-256>"}, "candidateHashes": {"<相对路径>": "<候选文件 SHA-256>"}}`；仓内没有生成该文件的脚本。
+前端补丁先用 `python -B tools/pi-computer-use-qt-fix/build-frontend-candidate.py --package $cu --work-dir <新的空目录>` 生成候选：复制补丁涉及的四个文件，依次应用 `frontend-focus.patch`、`visual-observation-frontend.patch`，写 `frontend-build.json`（`sourceHashes` 与 `candidateHashes` 两组 SHA-256）。再 `manage-installed.py apply --frontend-candidate <同一目录> --record <新记录>`。从原版 0.5.1 生成的候选与维护者部署的前端文件逐字节一致。
 
 **验证**：`python -B tools/pi-computer-use-qt-fix/manage-installed.py status --record <记录文件>`（全部文件处于期望状态时退出 0）；`node --test tests/pi/computer_use_focused_input.test.mjs tests/pi/computer_use_visual_observation.test.mjs`（`CU_CANDIDATE_DIR` 可指向候选包）；隔离夹具 `test-isolated.py --helper <exe> --fixture-python <带 PyQt5 的 python> --output <目录>`、`test-capture-isolated.py --helper <exe> --output <目录>`。原生 helper 更新后重启宿主，前端更新后新会话生效。
 
 **回滚**：`python -B tools/pi-computer-use-qt-fix/manage-installed.py rollback --record <记录文件>`，按记录逆序逐份回滚；安装文件已有后续变更时拒绝。
 
-**风险与维护**：补丁顺序与前端清单需人工维护；npm 更新覆盖全部改动且 helper 二进制会被包内 prebuilt 还原；`manage-installed.py` 会结束运行中的 helper 进程。
+**风险与维护**：npm 更新覆盖全部改动且 helper 二进制会被包内 prebuilt 还原；`manage-installed.py` 会结束运行中的 helper 进程。
 
 **维护者本机特有**：`test-common-apps.py` 第 116 行写死维护者本机的 AutoCAD 模板路径，第 113 行使用 `AutoCAD.Application.26` COM 名；该脚本操作 AutoCAD 2027、记事本、资源管理器。
 
@@ -633,7 +634,7 @@ node tools/pi-claude-code-provider/manage.mjs apply
 | 脚本 | 作用 | 前提与限制 |
 | --- | --- | --- |
 | `tools/compaction-replay.mjs` | 在冻结的历史切点上回放 Pi 原生 `compact()`，比较压缩写手与档位：`prepare`（构造样本、核对切点）、`run`（调用模型）、`score`（机械记分）；`--out` 指定输出 | 切点样本 `CASES` 写死为维护者私有会话文件，需改成自有会话；`run` 产生模型费用；方法见 `docs/operations/pi-compaction-writer.md` 第 4 节 |
-| `tools/pi_compaction_fallback_smoke.py` | 隔离 agent 目录中让 OpenRouter 压缩预设故意失败，要求原生压缩经 OpenAI Codex 兜底成功 | 把 `<Pi 用户目录>\auth.json` 与 `models.json` 复制到临时目录；需要 OpenRouter 与 openai-codex 登录；默认主模型 `openai-codex/gpt-5.6-sol-500k` 依赖控制面别名扩展；现行压缩写手恢复由控制面 `pi-compaction-model-recovery` 承担，本脚本为历史验证 |
+| `tools/pi_compaction_fallback_smoke.py` | 隔离 agent 目录中让 OpenRouter 压缩预设故意失败，要求原生压缩经 OpenAI Codex 兜底成功 | 把 `--agent-dir`（默认 `%USERPROFILE%\.pi\agent`）下的 `auth.json` 与 `models.json` 复制到临时目录；需要 OpenRouter 与 openai-codex 登录；默认主模型 `openai-codex/gpt-5.6-sol-500k` 依赖控制面别名扩展；现行压缩写手恢复由控制面 `pi-compaction-model-recovery` 承担，本脚本为历史验证 |
 | `tools/prune-luna-context-replay.mjs`、`tools/prune-luna-context-score.mjs` | 让模型对历史检查点的工具结果做保留 / 替换 / 丢弃判定并计分 | 源会话路径写死为维护者私有会话，分词器从未随分发的 `tmp/context-prune-bench/...` 加载；本目录不能直接运行 |
 
 **类型**：研究工具。无安装与回滚。**取舍**：仅研究；复现前替换样本与路径。
@@ -654,11 +655,11 @@ node tools/pi-claude-code-provider/manage.mjs apply
 
 **类型**：技能（`portability: repo-bound`，正文引用 `tools/...` 等相对路径）。
 
-**前提**：正文引用控制面技能 `ops/skills/rule-authoring/SKILL.md`（经控制面全局技能入口可用）；还引用了当前不存在的技能名 `use-pi-rpc-safely`、`diagnose-pruning-cache-timing`、`audit-and-dedupe-pi-search-tools`。
+**前提**：正文引用控制面技能 `ops/skills/rule-authoring/SKILL.md`（经控制面全局技能入口可用）。
 
 **安装**：Pi 在工作目录为 `extras/pi-plugins/`（或其子目录）且项目受信任时自动发现 `.pi/skills/`。全局使用时把目录复制或联接到 `<Pi 用户目录>\skills\<名称>\`，或在 `settings.json` 的 `skills` 数组登记目录；Claude Code 侧放到 `%USERPROFILE%\.claude\skills\<名称>`。全局使用时正文中的 `tools/...` 相对路径仍以 `extras/pi-plugins/` 为根。
 
-**验证**：`python -B .pi/skills/pi-web-access-operations/scripts/test_inspect.py`；Pi 内 `/skill:<名称>` 能加载。`pi-web-access-operations/SKILL.md` 第 21、62 行写的 `ops/skills/pi-web-access-operations/scripts/...` 在本目录对应 `.pi/skills/pi-web-access-operations/scripts/...`。
+**验证**：`python -B .pi/skills/pi-web-access-operations/scripts/test_inspect.py`；Pi 内 `/skill:<名称>` 能加载。
 
 **回滚**：删除复制或联接的目录、`skills` 条目。
 

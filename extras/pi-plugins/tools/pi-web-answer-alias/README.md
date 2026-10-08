@@ -11,7 +11,7 @@ node tools/pi-web-answer-alias/apply.mjs
 node --test tests/pi/web_answer_alias.test.mjs
 ```
 
-目标是npm/node_modules/pi-web-access中的page-query.ts、feature-config.ts和index.ts；别名扩展缺失时直接报错。应用前识别页面问答接线片段；重复应用不写已一致的文件。未知源先核对差异。网页包通过当前安装布局的相对路径导入别名扩展，因此该补丁不作为可直接发布到npm的独立上游改动。
+目标是Pi agent目录（`PI_CODING_AGENT_DIR`，未设置时`~/.pi/agent`）下npm/node_modules/pi-web-access中的page-query.ts、feature-config.ts和index.ts；别名扩展缺失时直接报错。脚本原地改写，写入前不备份，没有回滚命令；恢复原版需重装该包（如`pi remove npm:pi-web-access@0.21.0`后再`pi install npm:pi-web-access@0.21.0`，该流程未验证）。重装或升级pi-web-access后补丁丢失，重新运行apply.mjs。应用前识别页面问答接线片段；重复应用不写已一致的文件。未知源先核对差异。网页包通过当前安装布局的相对路径导入别名扩展，因此该补丁不作为可直接发布到npm的独立上游改动。
 
 测试依赖本机Pi SDK和已安装的网页包源码，使用临时目录副本与模型回执替身。覆盖普通轮次/辅助调用一致性、Astra/Sol两种别名、其他provider不改写、模型对象不变、实际answerFromPage的onPayload、显式模型选择及允许模型限制。维护对象为上述两条请求路径；接口变化时维护对应测试，未发生变化的其他provider不扩大验证。
 
